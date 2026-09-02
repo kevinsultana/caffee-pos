@@ -1,0 +1,1020 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  RESIGNED
+}
+
+enum ProductType {
+  RECIPE
+  DIRECT_STOCK
+}
+
+enum ProductAvailability {
+  AVAILABLE
+  OUT_OF_STOCK
+}
+
+enum InventoryMovementType {
+  OPENING_STOCK
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  WASTE
+}
+
+enum PurchaseStatus {
+  DRAFT
+  CONFIRMED
+}
+
+enum StockOpnameStatus {
+  DRAFT
+  CONFIRMED
+}
+
+enum OrderSource {
+  POS
+  PUBLIC_QR
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  EXPIRED
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum PromotionStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PromotionConditionGroupOperator {
+  ALL
+  ANY
+}
+
+enum PromotionConditionType {
+  MINIMUM_PURCHASE
+  PRODUCT
+  VARIANT
+  MINIMUM_QUANTITY
+  PRODUCT_COMBINATION_MEMBER
+}
+
+enum DiscountActionType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum DiscountApplicationMode {
+  ONCE
+  MULTIPLE
+}
+
+enum DiscountScope {
+  PRODUCT
+  ORDER
+}
+
+model Store {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  settings StoreSettings?
+
+  users User[]
+  roles Role[]
+
+  productCategories ProductCategory[]
+  products          Product[]
+
+  inventoryCategories InventoryCategory[]
+  units               Unit[]
+  inventoryItems      InventoryItem[]
+
+  suppliers Supplier[]
+  purchases Purchase[]
+
+  customers Customer[]
+  orders    Order[]
+
+  shifts Shift[]
+
+  promotions Promotion[]
+
+  auditLogs      AuditLog[]
+  stockMovements StockMovement[]
+  stockOpnames   StockOpname[]
+  cashMovements  CashMovement[]
+}
+
+model StoreSettings {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @unique @db.Uuid
+
+  taxEnabled                   Boolean @default(false)
+  taxRate                      Decimal @db.Decimal(8, 4)
+  taxBaseIncludesServiceCharge Boolean @default(false)
+
+  serviceChargeEnabled Boolean @default(false)
+  serviceChargeRate    Decimal @db.Decimal(8, 4)
+
+  cashRoundingEnabled Boolean @default(false)
+  cashRoundingUnit    Decimal @db.Decimal(18, 2)
+
+  timezone String @default("Asia/Jakarta")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  roleId  String @db.Uuid
+
+  username String
+  email    String?
+  name     String
+
+  passwordHash String
+
+  status UserStatus @default(ACTIVE)
+
+  mustChangePassword Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  role  Role  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  sessions  UserSession[]
+  auditLogs AuditLog[]
+
+  purchasesCreated Purchase[]      @relation("PurchaseCreatedBy")
+  stockMovements   StockMovement[] @relation("StockMovementResponsibleUser")
+  stockOpnames     StockOpname[]   @relation("StockOpnameCreatedBy")
+  ordersCreated    Order[]         @relation("OrderCreatedBy")
+
+  shifts        Shift[]
+  cashMovements CashMovement[]
+
+  @@unique([storeId, username])
+  @@index([storeId])
+  @@index([roleId])
+}
+
+model Role {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  name        String
+  description String?
+  isSystem    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique
+  name        String
+  description String?
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+
+  sessionTokenHash String @unique
+
+  deviceId   String
+  deviceName String?
+
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  auditLogs AuditLog[]
+
+  @@index([userId])
+  @@index([deviceId])
+}
+
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId   String  @db.Uuid
+  userId    String? @db.Uuid
+  sessionId String? @db.Uuid
+
+  action String
+  module String
+
+  entityType String?
+  entityId   String?
+
+  changeSummary String?
+
+  beforeData Json?
+  afterData  Json?
+
+  success Boolean @default(true)
+
+  deviceId String?
+
+  createdAt DateTime @default(now())
+
+  store   Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  user    User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+  @@index([storeId, module])
+  @@index([storeId, entityType, entityId])
+}
+
+model ProductCategory {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  products Product[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+model Product {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  categoryId String @db.Uuid
+
+  name String
+  sku  String?
+
+  type  ProductType
+  price Decimal     @db.Decimal(18, 2)
+
+  availability ProductAvailability @default(AVAILABLE)
+  discontinued Boolean             @default(false)
+
+  inventoryItemId String? @unique @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  inventoryItem InventoryItem? @relation("ProductDirectStock", fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  variants            ProductVariant[]
+  recipes             Recipe[]
+  orderItems          OrderItem[]
+  promotionConditions PromotionCondition[]
+
+  @@unique([storeId, name])
+  @@unique([storeId, sku])
+  @@index([storeId])
+  @@index([categoryId])
+}
+
+model ProductVariant {
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @db.Uuid
+
+  name  String
+  sku   String?
+  price Decimal @db.Decimal(18, 2)
+
+  availability ProductAvailability @default(AVAILABLE)
+  discontinued Boolean             @default(false)
+
+  inventoryItemId String? @unique @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  inventoryItem InventoryItem? @relation("VariantDirectStock", fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  recipes             Recipe[]
+  orderItems          OrderItem[]
+  promotionConditions PromotionCondition[]
+
+  @@unique([productId, name])
+  @@unique([productId, sku])
+  @@index([productId])
+}
+
+model InventoryCategory {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  items InventoryItem[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+model Unit {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  code String
+  name String
+
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  baseInventoryItems  InventoryItem[]           @relation("BaseUnit")
+  purchaseConversions InventoryUnitConversion[] @relation("PurchaseUnit")
+  purchaseItems       PurchaseItem[]            @relation("PurchaseItemUnit")
+
+  @@unique([storeId, code])
+  @@index([storeId])
+}
+
+model InventoryItem {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  categoryId String @db.Uuid
+  baseUnitId String @db.Uuid
+
+  name         String
+  minimumStock Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store    Store             @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category InventoryCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  baseUnit Unit              @relation("BaseUnit", fields: [baseUnitId], references: [id], onDelete: Restrict)
+
+  balance InventoryBalance?
+
+  conversions InventoryUnitConversion[]
+
+  product Product?        @relation("ProductDirectStock")
+  variant ProductVariant? @relation("VariantDirectStock")
+
+  recipeIngredients RecipeIngredient[]
+  purchaseItems     PurchaseItem[]
+  stockMovements    StockMovement[]
+  stockOpnameItems  StockOpnameItem[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([baseUnitId])
+}
+
+model InventoryBalance {
+  inventoryItemId String @id @db.Uuid
+
+  quantity    Decimal @db.Decimal(18, 6)
+  averageCost Decimal @db.Decimal(18, 6)
+  stockValue  Decimal @db.Decimal(18, 2)
+
+  updatedAt DateTime @updatedAt
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+}
+
+model InventoryUnitConversion {
+  id String @id @default(uuid()) @db.Uuid
+
+  inventoryItemId String @db.Uuid
+  purchaseUnitId  String @db.Uuid
+
+  conversionFactor Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  purchaseUnit Unit @relation("PurchaseUnit", fields: [purchaseUnitId], references: [id], onDelete: Restrict)
+
+  @@unique([inventoryItemId, purchaseUnitId])
+  @@index([purchaseUnitId])
+}
+
+model Recipe {
+  id String @id @default(uuid()) @db.Uuid
+
+  productId String? @db.Uuid
+  variantId String? @db.Uuid
+
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product?        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  versions RecipeVersion[]
+
+  @@index([productId])
+  @@index([variantId])
+}
+
+model RecipeVersion {
+  id String @id @default(uuid()) @db.Uuid
+
+  recipeId      String  @db.Uuid
+  versionNumber Int
+  isActive      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  ingredients RecipeIngredient[]
+  orderItems  OrderItem[]
+
+  @@unique([recipeId, versionNumber])
+  @@index([recipeId])
+}
+
+model RecipeIngredient {
+  id String @id @default(uuid()) @db.Uuid
+
+  recipeVersionId String @db.Uuid
+  inventoryItemId String @db.Uuid
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+
+  recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([recipeVersionId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+model Supplier {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+
+  name    String
+  phone   String?
+  address String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  purchases Purchase[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+model Purchase {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId     String @db.Uuid
+  supplierId  String @db.Uuid
+  createdById String @db.Uuid
+
+  purchaseNumber String
+  status         PurchaseStatus @default(DRAFT)
+
+  totalAmount Decimal  @db.Decimal(18, 2)
+  purchasedAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  createdBy User @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items PurchaseItem[]
+
+  @@unique([storeId, purchaseNumber])
+  @@index([storeId, purchasedAt])
+  @@index([supplierId])
+  @@index([createdById])
+}
+
+model PurchaseItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  purchaseId      String @db.Uuid
+  inventoryItemId String @db.Uuid
+  purchaseUnitId  String @db.Uuid
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  unitPrice Decimal @db.Decimal(18, 2)
+
+  baseQuantity Decimal @db.Decimal(18, 6)
+  baseUnitCost Decimal @db.Decimal(18, 6)
+
+  subtotal Decimal @db.Decimal(18, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  purchaseUnit Unit @relation("PurchaseItemUnit", fields: [purchaseUnitId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseId])
+  @@index([inventoryItemId])
+  @@index([purchaseUnitId])
+}
+
+model StockMovement {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId         String @db.Uuid
+  inventoryItemId String @db.Uuid
+
+  type InventoryMovementType
+
+  quantityDelta Decimal @db.Decimal(18, 6)
+
+  unitCost  Decimal @db.Decimal(18, 6)
+  totalCost Decimal @db.Decimal(18, 2)
+
+  referenceType String?
+  referenceId   String?
+
+  reason String?
+
+  responsibleUserId String?
+
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  responsibleUser User? @relation("StockMovementResponsibleUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+  @@index([inventoryItemId, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([responsibleUserId])
+}
+
+model StockOpname {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId     String @db.Uuid
+  createdById String @db.Uuid
+
+  opnameNumber String
+  status       StockOpnameStatus @default(DRAFT)
+
+  reason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  createdBy User @relation("StockOpnameCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items StockOpnameItem[]
+
+  @@unique([storeId, opnameNumber])
+  @@index([storeId, createdAt])
+  @@index([createdById])
+}
+
+model StockOpnameItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  stockOpnameId   String @db.Uuid
+  inventoryItemId String @db.Uuid
+
+  systemQuantity     Decimal @db.Decimal(18, 6)
+  physicalQuantity   Decimal @db.Decimal(18, 6)
+  differenceQuantity Decimal @db.Decimal(18, 6)
+
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  stockOpname StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([stockOpnameId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId String @db.Uuid
+
+  name  String
+  phone String?
+  email String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  orders Order[]
+
+  @@index([storeId])
+  @@index([storeId, phone])
+}
+
+model Order {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId String @db.Uuid
+
+  customerId  String?
+  createdById String?
+
+  orderNumber String
+  queueNumber String?
+
+  source OrderSource
+  status OrderStatus @default(PENDING_PAYMENT)
+
+  publicQrToken String? @unique
+
+  customerNameSnapshot  String
+  customerPhoneSnapshot String?
+
+  productSubtotal   Decimal @db.Decimal(18, 2)
+  promotionDiscount Decimal @db.Decimal(18, 2)
+
+  taxableSubtotal Decimal @db.Decimal(18, 2)
+
+  serviceChargeRate   Decimal @db.Decimal(8, 4)
+  serviceChargeAmount Decimal @db.Decimal(18, 2)
+
+  taxRate   Decimal @db.Decimal(8, 4)
+  taxBase   Decimal @db.Decimal(18, 2)
+  taxAmount Decimal @db.Decimal(18, 2)
+
+  grandTotal Decimal @db.Decimal(18, 2)
+
+  roundingAmount Decimal @db.Decimal(18, 2)
+  cashPayable    Decimal @db.Decimal(18, 2)
+
+  expiresAt DateTime?
+  paidAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdBy User? @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  items      OrderItem[]
+  payment    Payment?
+  promotions OrderPromotion[]
+
+  @@unique([storeId, orderNumber])
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+  @@index([customerId])
+  @@index([createdById])
+}
+
+model OrderItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String @db.Uuid
+
+  productId String  @db.Uuid
+  variantId String?
+
+  productNameSnapshot String
+  variantNameSnapshot String?
+
+  quantity Int
+
+  unitPrice         Decimal @db.Decimal(18, 2)
+  promotionDiscount Decimal @db.Decimal(18, 2)
+  subtotal          Decimal @db.Decimal(18, 2)
+
+  hppUnit  Decimal @db.Decimal(18, 6)
+  hppTotal Decimal @db.Decimal(18, 2)
+
+  recipeVersionId String?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  recipeVersion RecipeVersion? @relation(fields: [recipeVersionId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([recipeVersionId])
+}
+
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String @unique @db.Uuid
+  shiftId String @db.Uuid
+
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
+
+  amount Decimal @db.Decimal(18, 2)
+
+  cashReceived Decimal? @db.Decimal(18, 2)
+  changeAmount Decimal? @db.Decimal(18, 2)
+
+  reference String?
+
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@index([shiftId])
+}
+
+model Shift {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId String @db.Uuid
+  userId  String @db.Uuid
+
+  status ShiftStatus @default(OPEN)
+
+  openingCash Decimal @db.Decimal(18, 2)
+
+  expectedCash Decimal? @db.Decimal(18, 2)
+  actualCash   Decimal? @db.Decimal(18, 2)
+  difference   Decimal? @db.Decimal(18, 2)
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  payments      Payment[]
+  cashMovements CashMovement[]
+
+  @@index([storeId, openedAt])
+  @@index([userId, status])
+}
+
+model CashMovement {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId String @db.Uuid
+  shiftId String @db.Uuid
+  userId  String @db.Uuid
+
+  type CashMovementType
+
+  amount Decimal @db.Decimal(18, 2)
+
+  reason String
+
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([storeId, createdAt])
+  @@index([shiftId, createdAt])
+  @@index([userId])
+}
+
+model Promotion {
+  id String @id @default(uuid()) @db.Uuid
+
+  storeId String @db.Uuid
+
+  name        String
+  code        String?
+  description String?
+
+  status PromotionStatus @default(INACTIVE)
+
+  priority  Int     @default(0)
+  stackable Boolean @default(false)
+
+  startAt DateTime
+  endAt   DateTime?
+
+  usageLimit Int?
+  usageCount Int  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  conditionGroup PromotionConditionGroup?
+  discountAction DiscountAction?
+
+  orderPromotions OrderPromotion[]
+
+  @@unique([storeId, code])
+  @@index([storeId, status])
+  @@index([storeId, startAt, endAt])
+}
+
+model PromotionConditionGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  promotionId String @unique @db.Uuid
+
+  operator PromotionConditionGroupOperator @default(ALL)
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  conditions PromotionCondition[]
+}
+
+model PromotionCondition {
+  id String @id @default(uuid()) @db.Uuid
+
+  groupId String @db.Uuid
+
+  type PromotionConditionType
+
+  minimumPurchase Decimal? @db.Decimal(18, 2)
+  minimumQuantity Int?
+
+  productId String? @db.Uuid
+  variantId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  group PromotionConditionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  product Product?        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([groupId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model DiscountAction {
+  id String @id @default(uuid()) @db.Uuid
+
+  promotionId String @unique @db.Uuid
+
+  type            DiscountActionType
+  applicationMode DiscountApplicationMode @default(ONCE)
+
+  scope DiscountScope
+
+  value       Decimal  @db.Decimal(18, 4)
+  maxDiscount Decimal? @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+}
+
+model OrderPromotion {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId     String @db.Uuid
+  promotionId String @db.Uuid
+
+  sequenceNo Int
+
+  promotionNameSnapshot String
+  promotionCodeSnapshot String?
+
+  discountTypeSnapshot  DiscountActionType
+  discountScopeSnapshot DiscountScope
+
+  valueSnapshot       Decimal  @db.Decimal(18, 4)
+  maxDiscountSnapshot Decimal? @db.Decimal(18, 2)
+
+  discountAmount Decimal @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, sequenceNo])
+  @@index([promotionId])
+}
