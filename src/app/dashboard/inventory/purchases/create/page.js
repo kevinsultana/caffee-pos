@@ -7,7 +7,8 @@ import toast from 'react-hot-toast';
 import { createPurchase } from '@/app/actions/purchasing';
 import { getSuppliers } from '@/app/actions/supplier';
 import { getInventoryItems, getUnits } from '@/app/actions/inventory';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, cn } from '@/lib/utils';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 
 export default function CreatePurchasePage() {
   const router = useRouter();
@@ -99,7 +100,7 @@ export default function CreatePurchasePage() {
     setItems(newItems);
   }
 
-  function addRow() {
+  function addItemRow() {
     setItems([
       ...items,
       {
@@ -113,50 +114,46 @@ export default function CreatePurchasePage() {
     ]);
   }
 
-  function removeRow(index) {
-    if (items.length === 1) {
-      toast.error('Minimal harus ada 1 barang dalam transaksi pembelian.');
+  function removeItemRow(index) {
+    if (items.length <= 1) {
+      toast.error('Minimal harus ada 1 barang dalam pesanan pembelian.');
       return;
     }
     setItems(items.filter((_, idx) => idx !== index));
   }
 
-  const grandTotal = items.reduce(
-    (sum, row) => sum + (Number(row.subtotal) || 0),
-    0
-  );
+  const grandTotal = items.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0);
 
   function handleSubmit(e) {
     e.preventDefault();
 
     if (!supplierId) {
-      toast.error('Silakan pilih supplier terlebih dahulu.');
+      toast.error('Pilih supplier terlebih dahulu.');
       return;
     }
 
-    // Validate rows
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (!it.inventoryItemId) {
-        toast.error(`Baris ke-${i + 1}: Silakan pilih barang inventaris.`);
+        toast.error(`Baris ke-${i + 1}: Pilih bahan baku.`);
         return;
       }
       if (!it.purchaseUnitId) {
-        toast.error(`Baris ke-${i + 1}: Silakan tentukan satuan beli.`);
+        toast.error(`Baris ke-${i + 1}: Pilih satuan beli.`);
         return;
       }
-      if (Number(it.quantity) <= 0) {
-        toast.error(`Baris ke-${i + 1}: Kuantitas beli harus lebih dari 0.`);
+      if (isNaN(Number(it.quantity)) || Number(it.quantity) <= 0) {
+        toast.error(`Baris ke-${i + 1}: Kuantitas harus lebih dari 0.`);
         return;
       }
-      if (Number(it.unitPrice) < 0) {
-        toast.error(`Baris ke-${i + 1}: Harga beli tidak boleh bernilai negatif.`);
+      if (isNaN(Number(it.unitPrice)) || Number(it.unitPrice) < 0) {
+        toast.error(`Baris ke-${i + 1}: Harga satuan tidak valid.`);
         return;
       }
     }
 
     startTransition(async () => {
-      const toastId = toast.loading('Menyimpan draft pembelian...');
+      const toastId = toast.loading('Menyimpan pesanan pembelian (PO)...');
       const res = await createPurchase({
         supplierId,
         purchasedAt,
@@ -166,7 +163,9 @@ export default function CreatePurchasePage() {
       if (res.error) {
         toast.error(res.error, { id: toastId, duration: 4500 });
       } else {
-        toast.success('Draft pembelian berhasil dibuat!', { id: toastId });
+        toast.success(`Draft PO #${res.data.purchaseNumber} berhasil dibuat!`, {
+          id: toastId,
+        });
         router.push(`/dashboard/inventory/purchases/${res.data.id}`);
       }
     });
@@ -174,54 +173,52 @@ export default function CreatePurchasePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-stone-500">
-        Memuat form pembelian...
+      <div className="p-12 text-center text-slate-400 text-xs">
+        Memuat formulir pembuatan pembelian...
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-amber-50">Catat Pembelian Baru</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Buat pesanan pembelian baru (Purchase Order) dalam status DRAFT.
-          </p>
+    <div className="space-y-6 max-w-5xl">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+          <Link href="/dashboard/inventory/purchases" className="hover:text-emerald-700 font-semibold transition-colors">
+            &larr; Riwayat Pembelian
+          </Link>
         </div>
-        <Link
-          href="/dashboard/inventory/purchases"
-          className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
-        >
-          Kembali
-        </Link>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          Buat Pembelian Bahan Baru (PO)
+        </h1>
+        <p className="text-xs text-slate-500 mt-1">
+          Pencatatan faktur pengadaan bahan baku dari supplier. Tersimpan sebagai Draft sebelum diposting.
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Top Details Card */}
-        <div className="p-6 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-4">
-          <h2 className="text-sm font-semibold text-amber-300 uppercase tracking-wider">
-            Informasi Faktur & Supplier
-          </h2>
+        {/* ─── SUPPLIER & DATE CARD ────────────────────────────────────────── */}
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-slate-900">Informasi Supplier & Faktur</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                Pilih Supplier / Vendor
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Pilih Supplier / Vendor *
               </label>
               {suppliers.length === 0 ? (
-                <div className="p-3 bg-red-950/30 border border-red-800/40 rounded-xl text-xs text-red-300">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
                   Belum ada supplier terdaftar.{' '}
-                  <Link href="/dashboard/inventory/suppliers" className="underline font-semibold">
-                    Tambah Supplier Terlebih Dahulu
-                  </Link>
+                  <Link href="/dashboard/inventory/suppliers" className="underline font-bold">
+                    Tambah supplier
+                  </Link>{' '}
+                  terlebih dahulu.
                 </div>
               ) : (
                 <select
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 >
                   {suppliers.map((s) => (
@@ -232,161 +229,150 @@ export default function CreatePurchasePage() {
                 </select>
               )}
             </div>
+
             <div>
-              <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                Tanggal Pembelian
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Tanggal Faktur / Pembelian *
               </label>
               <input
                 type="date"
                 value={purchasedAt}
                 onChange={(e) => setPurchasedAt(e.target.value)}
                 disabled={isPending}
-                className="w-full px-3.5 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
           </div>
         </div>
 
-        {/* Dynamic Items Card */}
-        <div className="p-6 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-4">
+        {/* ─── ITEMS LIST CARD ─────────────────────────────────────────────── */}
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-amber-300 uppercase tracking-wider">
-              Daftar Barang yang Dibeli
-            </h2>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Daftar Bahan Baku Dibeli *</h2>
+              <p className="text-xs text-slate-500">
+                Pilih bahan dan satuan beli yang digunakan pada nota/faktur supplier.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={addRow}
-              disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-400 rounded-xl text-xs font-semibold border border-stone-700 transition-colors"
+              onClick={addItemRow}
+              className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Tambah Baris
+              + Tambah Baris Bahan
             </button>
           </div>
 
           <div className="space-y-3">
-            {items.map((row, index) => {
-              const selectedItem = inventoryItems.find((inv) => inv.id === row.inventoryItemId);
-              const baseUnitCode = selectedItem?.baseUnit?.code || '';
+            {items.map((row, idx) => {
+              const selectedItem = inventoryItems.find(
+                (inv) => inv.id === row.inventoryItemId
+              );
+              const selectedUnit = units.find(
+                (u) => u.id === row.purchaseUnitId
+              );
 
               return (
                 <div
-                  key={index}
-                  className="p-4 bg-stone-950/60 border border-stone-800 rounded-2xl space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-3 sm:items-center"
+                  key={idx}
+                  className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row items-end gap-3"
                 >
                   {/* Select Inventory Item */}
-                  <div className="sm:col-span-4">
-                    <label className="block text-[11px] font-semibold text-stone-400 uppercase mb-1">
-                      Barang Bahan #{index + 1}
+                  <div className="flex-1 w-full md:w-auto">
+                    <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                      Bahan Baku #{idx + 1}
                     </label>
                     <select
                       value={row.inventoryItemId}
                       onChange={(e) =>
-                        handleItemChange(index, 'inventoryItemId', e.target.value)
+                        handleItemChange(idx, 'inventoryItemId', e.target.value)
                       }
                       disabled={isPending}
-                      className="w-full px-3 py-2 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       required
                     >
-                      <option value="" disabled>
-                        -- Pilih Bahan Baku --
-                      </option>
+                      <option value="" disabled>-- Pilih Bahan Baku --</option>
                       {inventoryItems.map((inv) => (
                         <option key={inv.id} value={inv.id}>
-                          {inv.name} (Base: {inv.baseUnit?.code})
+                          {inv.name} ({inv.category?.name || 'Bahan'}) — Base: {inv.baseUnit?.code}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Quantity & Purchase Unit */}
-                  <div className="sm:col-span-3 grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-stone-400 uppercase mb-1">
-                        Qty Beli
-                      </label>
-                      <input
-                        type="number"
-                        min="0.001"
-                        step="any"
-                        value={row.quantity}
-                        onChange={(e) =>
-                          handleItemChange(index, 'quantity', e.target.value)
-                        }
-                        disabled={isPending}
-                        className="w-full px-3 py-2 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-stone-400 uppercase mb-1">
-                        Satuan Beli
-                      </label>
-                      <select
-                        value={row.purchaseUnitId}
-                        onChange={(e) =>
-                          handleItemChange(index, 'purchaseUnitId', e.target.value)
-                        }
-                        disabled={isPending}
-                        className="w-full px-2.5 py-2 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                        required
-                      >
-                        <option value="" disabled>
-                          Pilih Satuan
+                  {/* Purchase Unit */}
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                      Satuan Beli
+                    </label>
+                    <select
+                      value={row.purchaseUnitId}
+                      onChange={(e) =>
+                        handleItemChange(idx, 'purchaseUnitId', e.target.value)
+                      }
+                      disabled={isPending}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    >
+                      <option value="" disabled>-- Satuan --</option>
+                      {units.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.code} ({u.name})
                         </option>
-                        {units.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.code}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Price per unit */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-stone-400 uppercase mb-1">
-                      Harga / Satuan (Rp)
+                  {/* Quantity */}
+                  <div className="w-full md:w-24">
+                    <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                      Kuantitas
                     </label>
                     <input
                       type="number"
-                      min="0"
-                      step="500"
-                      value={row.unitPrice}
+                      step="any"
+                      min="0.0001"
+                      value={row.quantity}
                       onChange={(e) =>
-                        handleItemChange(index, 'unitPrice', e.target.value)
+                        handleItemChange(idx, 'quantity', e.target.value)
                       }
                       disabled={isPending}
-                      className="w-full px-3 py-2 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       required
                     />
                   </div>
 
-                  {/* Subtotal & Conversion Preview */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-stone-400 uppercase mb-1">
-                      Subtotal
+                  {/* Price per Unit */}
+                  <div className="w-full md:w-36">
+                    <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                      Harga Satuan (Rp)
                     </label>
-                    <div className="font-mono text-xs font-bold text-amber-300 py-1.5">
-                      {formatRupiah(row.subtotal)}
-                    </div>
-                    {baseUnitCode && (
-                      <p className="text-[10px] text-stone-500">
-                        Masuk: {row.quantity * row.conversionFactor} {baseUnitCode}
-                      </p>
-                    )}
+                    <CurrencyInput
+                      placeholder="0"
+                      value={row.unitPrice}
+                      onChange={(val) => handleItemChange(idx, 'unitPrice', val)}
+                      disabled={isPending}
+                      required
+                    />
                   </div>
 
-                  {/* Delete row button */}
-                  <div className="sm:col-span-1 flex justify-end">
+                  {/* Subtotal */}
+                  <div className="w-full md:w-32 text-right font-mono">
+                    <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1 text-right">
+                      Subtotal
+                    </label>
+                    <p className="text-xs font-bold text-emerald-700 py-2">
+                      {formatRupiah(row.subtotal)}
+                    </p>
+                  </div>
+
+                  {/* Remove Button */}
+                  <div className="pt-2 md:pt-0">
                     <button
                       type="button"
-                      onClick={() => removeRow(index)}
-                      disabled={isPending || items.length === 1}
-                      className="p-2 text-stone-500 hover:text-red-400 hover:bg-red-950/30 rounded-xl transition-colors disabled:opacity-30"
+                      onClick={() => removeItemRow(idx)}
+                      className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
                       title="Hapus baris"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -398,31 +384,31 @@ export default function CreatePurchasePage() {
               );
             })}
           </div>
-        </div>
 
-        {/* Total & Action Bar */}
-        <div className="p-6 rounded-2xl border border-stone-800/80 bg-stone-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <p className="text-xs text-stone-400">Total Nilai Pembelian:</p>
-            <p className="text-2xl font-bold font-mono text-amber-400">
-              {formatRupiah(grandTotal)}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard/inventory/purchases"
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
-            >
-              Batal
-            </Link>
-            <button
-              id="btn-submit-purchase"
-              type="submit"
-              disabled={isPending || suppliers.length === 0 || inventoryItems.length === 0}
-              className="px-6 py-2.5 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-amber-950 transition-all disabled:opacity-50"
-            >
-              {isPending ? 'Menyimpan Draft...' : 'Simpan sebagai Draft PO'}
-            </button>
+          {/* Grand Total Footer */}
+          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
+            <div>
+              <span className="text-xs text-emerald-900 font-sans">Total Nilai Faktur Pembelian:</span>
+              <p className="text-xl font-extrabold text-emerald-700">
+                {formatRupiah(grandTotal)}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/inventory/purchases"
+                className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold"
+              >
+                Batal
+              </Link>
+              <button
+                type="submit"
+                disabled={isPending || suppliers.length === 0}
+                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+              >
+                {isPending ? 'Menyimpan PO...' : 'Simpan Draft Pembelian'}
+              </button>
+            </div>
           </div>
         </div>
       </form>

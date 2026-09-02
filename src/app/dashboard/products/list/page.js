@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -8,10 +8,12 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
   getProductCategories,
 } from '@/app/actions/product';
 import { getInventoryItems } from '@/app/actions/inventory';
 import { formatRupiah, cn } from '@/lib/utils';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 
 export default function ProductsListPage() {
   const [products, setProducts] = useState([]);
@@ -32,6 +34,9 @@ export default function ProductsListPage() {
   // Form fields
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
+  const [imageUrl, setImageUrl] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
   const [price, setPrice] = useState(0);
   const [categoryId, setCategoryId] = useState('');
   const [type, setType] = useState('RECIPE');
@@ -67,6 +72,7 @@ export default function ProductsListPage() {
     setEditingProduct(null);
     setName('');
     setSku('');
+    setImageUrl(null);
     setPrice(0);
     setCategoryId(categories[0]?.id || '');
     setType('RECIPE');
@@ -80,6 +86,7 @@ export default function ProductsListPage() {
     setEditingProduct(prod);
     setName(prod.name);
     setSku(prod.sku || '');
+    setImageUrl(prod.imageUrl || null);
     setPrice(prod.price || 0);
     setCategoryId(prod.categoryId);
     setType(prod.type);
@@ -87,6 +94,50 @@ export default function ProductsListPage() {
     setAvailability(prod.availability);
     setDiscontinued(Boolean(prod.discontinued));
     setModalOpen(true);
+  }
+
+  async function handleImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Format file harus berupa PNG, JPG, WEBP, atau SVG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    const toastId = toast.loading('Mengunggah foto produk...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await uploadProductImage(formData);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success('Foto produk berhasil diunggah!', { id: toastId });
+        setImageUrl(res.imageUrl);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunggah foto produk.', { id: toastId });
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }
+
+  function handleRemoveImage() {
+    setImageUrl(null);
   }
 
   function handleSave(e) {
@@ -98,26 +149,23 @@ export default function ProductsListPage() {
     }
 
     if (type === 'DIRECT_STOCK' && !inventoryItemId) {
-      toast.error('Produk DIRECT_STOCK wajib memilih barang inventaris pemotong stok.');
+      toast.error('Produk DIRECT_STOCK wajib memilih barang inventaris pengurang stok.');
       return;
     }
 
+    const payload = {
+      name: name.trim(),
+      sku: sku.trim() || null,
+      imageUrl: imageUrl || null,
+      price: Number(price),
+      categoryId,
+      type,
+      inventoryItemId: type === 'DIRECT_STOCK' ? inventoryItemId : null,
+      availability,
+      discontinued,
+    };
+
     startTransition(async () => {
-      const toastId = toast.loading(
-        editingProduct ? 'Memperbarui produk...' : 'Menambahkan produk...'
-      );
-
-      const payload = {
-        name,
-        sku,
-        price: Number(price),
-        type,
-        categoryId,
-        availability,
-        discontinued,
-        inventoryItemId: type === 'DIRECT_STOCK' ? inventoryItemId : null,
-      };
-
       let res;
       if (editingProduct) {
         res = await updateProduct(editingProduct.id, payload);
@@ -126,14 +174,9 @@ export default function ProductsListPage() {
       }
 
       if (res.error) {
-        toast.error(res.error, { id: toastId, duration: 4000 });
+        toast.error(res.error);
       } else {
-        toast.success(
-          editingProduct
-            ? 'Produk berhasil diperbarui!'
-            : 'Produk baru berhasil ditambahkan!',
-          { id: toastId }
-        );
+        toast.success(editingProduct ? 'Produk berhasil diperbarui!' : 'Produk baru berhasil dibuat!');
         setModalOpen(false);
         loadData();
       }
@@ -143,71 +186,62 @@ export default function ProductsListPage() {
   async function handleDelete(prod) {
     const Swal = (await import('sweetalert2')).default;
 
-    const confirm = await Swal.fire({
-      title: 'Hapus Produk?',
-      text: `Apakah Anda yakin ingin menghapus produk "${prod.name}"?`,
+    const result = await Swal.fire({
+      title: 'Hapus Produk Menu?',
+      text: `Menu "${prod.name}" akan dihapus. Jika menu sudah pernah ditransaksikan di POS, statusnya akan dialihkan ke "Dihentikan" (Discontinued) untuk melindungi riwayat laporan finansial.`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Ya, Hapus',
+      confirmButtonText: 'Ya, Hapus/Nonaktifkan',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
-    if (!confirm.isConfirmed) return;
+    if (!result.isConfirmed) return;
 
     startTransition(async () => {
-      const toastId = toast.loading('Menghapus produk...');
       const res = await deleteProduct(prod.id);
-
       if (res.error) {
-        toast.dismiss(toastId);
-        await Swal.fire({
-          icon: 'error',
-          title: 'Tidak Dapat Dihapus',
-          text: res.error,
-          confirmButtonColor: '#b45309',
-          background: '#1c1917',
-          color: '#fef3c7',
-        });
+        toast.error(res.error);
       } else {
-        toast.success('Produk berhasil dihapus.', { id: toastId });
+        toast.success(res.message || 'Produk berhasil diproses.');
         loadData();
       }
     });
   }
 
-  // Filtered List
+  // Filter products by category, type, and search
   const filteredProducts = products.filter((p) => {
-    const matchSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      p.category?.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchCategory =
-      selectedCategory === 'ALL' || p.categoryId === selectedCategory;
+    const matchCat = selectedCategory === 'ALL' || p.categoryId === selectedCategory;
     const matchType = selectedType === 'ALL' || p.type === selectedType;
-
-    return matchSearch && matchCategory && matchType;
+    const matchQuery =
+      !searchQuery.trim() ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.category?.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCat && matchType && matchQuery;
   });
 
   return (
     <div className="space-y-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Daftar Produk Menu (POS)</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Daftar menu jual yang dapat dipesan oleh kasir. Mendukung tipe Resep (Recipe) dan Stok Langsung (Direct Stock).
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Daftar Menu Produk (POS)
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Kelola daftar menu jual kasir, resep racikan, varian ukuran/rasa, dan stok langsung.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <Link
             href="/dashboard/products/categories"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-stone-300 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/60 transition-colors"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-2xs transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
             </svg>
             Kategori Menu
@@ -215,7 +249,7 @@ export default function ProductsListPage() {
           <button
             id="btn-add-product"
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -225,10 +259,10 @@ export default function ProductsListPage() {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/* ─── FILTERS & SEARCH BAR ─────────────────────────────────────────── */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <input
@@ -236,13 +270,13 @@ export default function ProductsListPage() {
             placeholder="Cari nama menu, SKU, atau kategori..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
           />
         </div>
         <select
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
         >
           <option value="ALL">Semua Kategori ({categories.length})</option>
           {categories.map((c) => (
@@ -254,39 +288,39 @@ export default function ProductsListPage() {
         <select
           value={selectedType}
           onChange={(e) => setSelectedType(e.target.value)}
-          className="px-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
         >
           <option value="ALL">Semua Tipe Produk</option>
-          <option value="RECIPE">RECIPE (Pakai Resep)</option>
+          <option value="RECIPE">RECIPE (Komposisi Resep)</option>
           <option value="DIRECT_STOCK">DIRECT_STOCK (Stok Langsung)</option>
         </select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
+      {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-stone-300">
-            <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4">Menu Produk</th>
-                <th className="py-3 px-4">Kategori</th>
-                <th className="py-3 px-4">Tipe Pemotongan</th>
-                <th className="py-3 px-4">Harga Jual</th>
-                <th className="py-3 px-4">Ketersediaan</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+                <th className="py-3.5 px-4">Menu Produk</th>
+                <th className="py-3.5 px-4">Kategori</th>
+                <th className="py-3.5 px-4">Tipe Pemotongan</th>
+                <th className="py-3.5 px-4 text-right">Harga Jual</th>
+                <th className="py-3.5 px-4">Ketersediaan</th>
+                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-800/60">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Memuat daftar menu produk...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     {searchQuery || selectedCategory !== 'ALL' || selectedType !== 'ALL'
                       ? 'Tidak ada produk menu yang cocok dengan filter.'
                       : 'Belum ada produk menu terdaftar. Klik "Tambah Produk" untuk membuat menu.'}
@@ -295,83 +329,101 @@ export default function ProductsListPage() {
               ) : (
                 filteredProducts.map((prod) => {
                   return (
-                    <tr key={prod.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-amber-50">{prod.name}</div>
-                        {prod.sku && (
-                          <div className="font-mono text-[11px] text-stone-400">
-                            SKU: {prod.sku}
+                    <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0">
+                            {prod.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={prod.imageUrl}
+                                alt={prod.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                              </svg>
+                            )}
                           </div>
-                        )}
+                          <div>
+                            <div className="font-bold text-slate-900">{prod.name}</div>
+                            {prod.sku && (
+                              <div className="font-mono text-[10px] text-slate-400 mt-0.5">
+                                SKU: {prod.sku}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex px-2 py-0.5 rounded-lg text-xs font-medium bg-stone-800 text-stone-300 border border-stone-700/60">
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
                           {prod.category?.name}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {prod.type === 'RECIPE' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-950/60 text-amber-300 border border-amber-800/40">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Recipe
                           </span>
                         ) : (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-950/60 text-blue-300 border border-blue-800/40">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                               Direct Stock
                             </span>
                             {prod.inventoryItem && (
-                              <p className="text-[11px] text-stone-400">
+                              <p className="text-[10px] text-slate-400 font-mono">
                                 Link: {prod.inventoryItem.name} ({prod.inventoryItem.balance?.quantity || 0} {prod.inventoryItem.baseUnit?.code})
                               </p>
                             )}
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-amber-300">
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
                         {formatRupiah(prod.price)}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {prod.availability === 'AVAILABLE' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             Tersedia
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-950/60 text-red-400 border border-red-800/50">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800 border border-rose-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             Habis
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {prod.discontinued ? (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-stone-800 text-stone-400 border border-stone-700">
+                          <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                             Dihentikan
                           </span>
                         ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950/30 text-emerald-300 border border-emerald-800/30">
+                          <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
                             Aktif
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                         <Link
                           href={`/dashboard/products/list/${prod.id}`}
-                          className="px-2.5 py-1 text-xs font-semibold text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 rounded-lg transition-colors inline-flex items-center gap-1"
+                          className="px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:text-white hover:bg-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg transition-colors inline-flex items-center gap-1"
                         >
                           {prod.type === 'RECIPE' ? 'Resep & Varian' : 'Kelola Varian'} &rarr;
                         </Link>
                         <button
                           onClick={() => openEditModal(prod)}
-                          className="px-2.5 py-1 text-xs font-medium text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(prod)}
-                          className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-colors"
                         >
                           Hapus
                         </button>
@@ -387,16 +439,77 @@ export default function ProductsListPage() {
 
       {/* ─── MODAL ADD / EDIT PRODUCT ────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingProduct ? 'Edit Produk Menu' : 'Tambah Produk Menu Baru'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingProduct ? 'Edit Produk Menu' : 'Tambah Produk Menu Baru'}
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSave} className="space-y-4">
+              {/* Foto Produk */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Foto Menu Produk (Opsional)
+                </label>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative">
+                    {imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                      </svg>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    onChange={handleImageUpload}
+                    disabled={isPending || isUploadingImage}
+                    className="hidden"
+                  />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isPending || isUploadingImage}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs transition-colors cursor-pointer"
+                      >
+                        {imageUrl ? 'Ganti Foto' : 'Pilih Foto'}
+                      </button>
+                      {imageUrl && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          disabled={isPending || isUploadingImage}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">Format PNG, JPG, WEBP maks 5MB.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Nama Produk */}
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Nama Menu Produk
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Menu Produk *
                 </label>
                 <input
                   type="text"
@@ -404,7 +517,7 @@ export default function ProductsListPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   required
                 />
               </div>
@@ -412,7 +525,7 @@ export default function ProductsListPage() {
               {/* SKU & Harga Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     SKU / Barcode (Opsional)
                   </label>
                   <input
@@ -421,22 +534,18 @@ export default function ProductsListPage() {
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
                     disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Harga Jual (Rp)
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Harga Jual (Rp) *
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="500"
-                    placeholder="25000"
+                  <CurrencyInput
+                    placeholder="25.000"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    onChange={(val) => setPrice(val)}
                     disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                     required
                   />
                 </div>
@@ -444,11 +553,11 @@ export default function ProductsListPage() {
 
               {/* Kategori Menu */}
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Kategori Menu Produk
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Kategori Menu Produk *
                 </label>
                 {categories.length === 0 ? (
-                  <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-xs text-amber-300">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
                     Belum ada kategori menu. Buat kategori terlebih dahulu di tab &quot;Kategori Menu&quot;.
                   </div>
                 ) : (
@@ -456,7 +565,7 @@ export default function ProductsListPage() {
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
                     disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     required
                   >
                     <option value="" disabled>
@@ -472,8 +581,8 @@ export default function ProductsListPage() {
               </div>
 
               {/* Tipe Produk: RECIPE vs DIRECT_STOCK */}
-              <div className="p-4 bg-stone-800/50 border border-stone-700/60 rounded-2xl space-y-3">
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-widest">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Metode Pemotongan Stok Bahan
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -483,12 +592,12 @@ export default function ProductsListPage() {
                     className={cn(
                       'p-3 rounded-xl border text-left transition-all',
                       type === 'RECIPE'
-                        ? 'bg-amber-950/50 border-amber-500 text-amber-200 shadow-sm'
-                        : 'bg-stone-800/60 border-stone-700 text-stone-400 hover:border-stone-600'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     )}
                   >
-                    <p className="text-sm font-semibold">RECIPE</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
+                    <p className="text-xs font-bold">RECIPE</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
                       Stok dipotong berdasarkan komposisi resep racikan.
                     </p>
                   </button>
@@ -498,12 +607,12 @@ export default function ProductsListPage() {
                     className={cn(
                       'p-3 rounded-xl border text-left transition-all',
                       type === 'DIRECT_STOCK'
-                        ? 'bg-amber-950/50 border-amber-500 text-amber-200 shadow-sm'
-                        : 'bg-stone-800/60 border-stone-700 text-stone-400 hover:border-stone-600'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     )}
                   >
-                    <p className="text-sm font-semibold">DIRECT_STOCK</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
+                    <p className="text-xs font-bold">DIRECT_STOCK</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
                       Potong langsung 1 barang inventaris per 1 penjualan.
                     </p>
                   </button>
@@ -512,11 +621,11 @@ export default function ProductsListPage() {
                 {/* Dropdown inventory item if DIRECT_STOCK */}
                 {type === 'DIRECT_STOCK' && (
                   <div className="pt-2">
-                    <label className="block text-xs font-semibold text-amber-400 uppercase tracking-widest mb-1.5">
+                    <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1.5">
                       Pilih Barang Inventaris Pemotong Stok
                     </label>
                     {inventoryItems.length === 0 ? (
-                      <div className="p-3 bg-red-950/30 border border-red-800/40 rounded-xl text-xs text-red-300">
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800">
                         Belum ada barang inventaris terdaftar. Tambahkan barang di modul Inventaris terlebih dahulu.
                       </div>
                     ) : (
@@ -524,7 +633,7 @@ export default function ProductsListPage() {
                         value={inventoryItemId}
                         onChange={(e) => setInventoryItemId(e.target.value)}
                         disabled={isPending}
-                        className="w-full px-3.5 py-2.5 bg-stone-900 border border-amber-600/60 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         required
                       >
                         <option value="" disabled>
@@ -544,41 +653,41 @@ export default function ProductsListPage() {
               {/* Status & Availability */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Ketersediaan Menu
                   </label>
                   <select
                     value={availability}
                     onChange={(e) => setAvailability(e.target.value)}
                     disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
                     <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-3 pt-6">
+                <div className="flex items-center gap-2.5 pt-6">
                   <input
                     id="chk-discontinued"
                     type="checkbox"
                     checked={discontinued}
                     onChange={(e) => setDiscontinued(e.target.checked)}
                     disabled={isPending}
-                    className="w-4 h-4 rounded border-stone-700 text-amber-600 focus:ring-amber-500 bg-stone-800"
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <label htmlFor="chk-discontinued" className="text-sm font-medium text-stone-300">
+                  <label htmlFor="chk-discontinued" className="text-xs font-semibold text-slate-700">
                     Menu Dihentikan (Discontinued)
                   </label>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
@@ -589,7 +698,7 @@ export default function ProductsListPage() {
                     categories.length === 0 ||
                     (type === 'DIRECT_STOCK' && inventoryItems.length === 0)
                   }
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50 shadow-md shadow-amber-950"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Produk'}
                 </button>

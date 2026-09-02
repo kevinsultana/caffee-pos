@@ -7,7 +7,6 @@ import { Toaster } from 'react-hot-toast';
 
 /**
  * Client shell yang mengelola state sidebar open/close.
- * Diperlukan karena Server Components tidak bisa menyimpan state.
  */
 export default function DashboardShell({ user, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -19,17 +18,19 @@ export default function DashboardShell({ user, children }) {
         position="top-right"
         toastOptions={{
           style: {
-            background: '#292524',
-            color: '#fef3c7',
-            border: '1px solid #44403c',
+            background: '#ffffff',
+            color: '#0f172a',
+            border: '1px solid #e2e8f0',
             borderRadius: '12px',
-            fontSize: '14px',
+            fontSize: '13px',
+            fontWeight: '500',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
           },
           success: {
-            iconTheme: { primary: '#34d399', secondary: '#1c1917' },
+            iconTheme: { primary: '#059669', secondary: '#ffffff' },
           },
           error: {
-            iconTheme: { primary: '#f87171', secondary: '#1c1917' },
+            iconTheme: { primary: '#e11d48', secondary: '#ffffff' },
           },
         }}
       />
@@ -42,12 +43,12 @@ export default function DashboardShell({ user, children }) {
       />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen">
         <DashboardHeader
           user={user}
           onMenuToggle={() => setSidebarOpen((v) => !v)}
         />
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-4 lg:p-8 overflow-auto">
           {children}
         </main>
       </div>

@@ -110,29 +110,41 @@ export default function InventorySetupPage() {
   async function handleDeleteUnit(unit) {
     const Swal = (await import('sweetalert2')).default;
 
-    if (unit.isSystem) {
+    if (unit.isBase) {
       await Swal.fire({
-        icon: 'warning',
-        title: 'Aksi Ditolak',
-        text: `Satuan "${unit.code}" adalah satuan standar sistem dan tidak boleh dihapus.`,
-        confirmButtonColor: '#b45309',
-        background: '#1c1917',
-        color: '#fef3c7',
+        icon: 'error',
+        title: 'Satuan Standar Sistem',
+        text: `Satuan "${unit.code}" adalah satuan standar bawaan sistem dan tidak dapat dihapus.`,
+        confirmButtonColor: '#e11d48',
+        background: '#ffffff',
+        color: '#0f172a',
+      });
+      return;
+    }
+
+    if (unit._count?.inventoryItems > 0 || unit._count?.purchaseConversions > 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Tidak Dapat Dihapus',
+        text: `Satuan "${unit.code}" masih digunakan pada ${unit._count.inventoryItems} barang inventaris atau konversi pembelian.`,
+        confirmButtonColor: '#e11d48',
+        background: '#ffffff',
+        color: '#0f172a',
       });
       return;
     }
 
     const confirm = await Swal.fire({
       title: 'Hapus Satuan?',
-      text: `Apakah Anda yakin ingin menghapus satuan "${unit.name} (${unit.code})"?`,
+      text: `Apakah Anda yakin ingin menghapus satuan "${unit.name}" (${unit.code})?`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (!confirm.isConfirmed) return;
@@ -179,9 +191,7 @@ export default function InventorySetupPage() {
 
       let res;
       if (editingCategory) {
-        res = await updateInventoryCategory(editingCategory.id, {
-          name: categoryName,
-        });
+        res = await updateInventoryCategory(editingCategory.id, { name: categoryName });
       } else {
         res = await createInventoryCategory({ name: categoryName });
       }
@@ -191,8 +201,8 @@ export default function InventorySetupPage() {
       } else {
         toast.success(
           editingCategory
-            ? 'Kategori berhasil diperbarui!'
-            : 'Kategori baru berhasil ditambahkan!',
+            ? 'Kategori inventaris berhasil diperbarui!'
+            : 'Kategori inventaris baru berhasil ditambahkan!',
           { id: toastId }
         );
         setCategoryModalOpen(false);
@@ -209,9 +219,9 @@ export default function InventorySetupPage() {
         icon: 'error',
         title: 'Tidak Dapat Dihapus',
         text: `Kategori "${category.name}" masih memiliki ${category._count.items} barang inventaris terkait. Pindahkan atau hapus barang terkait terlebih dahulu.`,
-        confirmButtonColor: '#b45309',
-        background: '#1c1917',
-        color: '#fef3c7',
+        confirmButtonColor: '#e11d48',
+        background: '#ffffff',
+        color: '#0f172a',
       });
       return;
     }
@@ -223,10 +233,10 @@ export default function InventorySetupPage() {
       showCancelButton: true,
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (!confirm.isConfirmed) return;
@@ -245,35 +255,33 @@ export default function InventorySetupPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      {/* Header & Sub-Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Pengaturan Inventaris</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Kelola unit satuan bahan (g, kg, ml, L, pcs) dan kategori bahan baku.
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+            <Link href="/dashboard/inventory/items" className="hover:text-emerald-700 font-semibold transition-colors">
+              &larr; Daftar Bahan Baku
+            </Link>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Pengaturan Satuan & Kategori Bahan
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Kelola unit satuan bahan (g, kg, ml, L, pcs, dus) dan kategori bahan baku gudang.
           </p>
         </div>
-        <Link
-          href="/dashboard/inventory/items"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-stone-300 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/60 transition-colors w-fit"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          Daftar Stok Bahan
-        </Link>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-stone-800">
+      {/* ─── TABS ─────────────────────────────────────────────────────────── */}
+      <div className="flex border-b border-slate-200">
         <button
           id="tab-units"
           onClick={() => setActiveTab('units')}
           className={cn(
-            'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 -mb-px transition-all',
+            'flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 -mb-px transition-all',
             activeTab === 'units'
-              ? 'border-amber-500 text-amber-400 bg-amber-950/20'
-              : 'border-transparent text-stone-400 hover:text-stone-200'
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           )}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -285,10 +293,10 @@ export default function InventorySetupPage() {
           id="tab-categories"
           onClick={() => setActiveTab('categories')}
           className={cn(
-            'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 -mb-px transition-all',
+            'flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 -mb-px transition-all',
             activeTab === 'categories'
-              ? 'border-amber-500 text-amber-400 bg-amber-950/20'
-              : 'border-transparent text-stone-400 hover:text-stone-200'
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           )}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -298,17 +306,17 @@ export default function InventorySetupPage() {
         </button>
       </div>
 
-      {/* Tab 1: Unit Satuan */}
+      {/* ─── TAB 1: UNIT SATUAN ────────────────────────────────────────────── */}
       {activeTab === 'units' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-stone-400">
+            <p className="text-xs text-slate-500">
               Satuan dasar digunakan untuk mencatat kuantitas bahan baku pada resep dan opname.
             </p>
             <button
               id="btn-add-unit"
               onClick={openCreateUnitModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -317,62 +325,62 @@ export default function InventorySetupPage() {
             </button>
           </div>
 
-          <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
-            <table className="w-full text-left text-sm text-stone-300">
-              <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Kode Satuan</th>
-                  <th className="py-3 px-4">Nama Lengkap</th>
-                  <th className="py-3 px-4">Tipe</th>
-                  <th className="py-3 px-4">Digunakan</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
+                  <th className="py-3.5 px-4">Kode Satuan</th>
+                  <th className="py-3.5 px-4">Nama Lengkap</th>
+                  <th className="py-3.5 px-4">Tipe Satuan</th>
+                  <th className="py-3.5 px-4">Digunakan</th>
+                  <th className="py-3.5 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-800/60">
+              <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-stone-500">
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
                       Memuat data satuan...
                     </td>
                   </tr>
                 ) : units.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-stone-500">
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
                       Belum ada satuan. Klik &quot;Tambah Satuan&quot; untuk menambahkan.
                     </td>
                   </tr>
                 ) : (
                   units.map((unit) => (
-                    <tr key={unit.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-amber-300">
+                    <tr key={unit.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
                         {unit.code}
                       </td>
-                      <td className="py-3 px-4 font-medium text-amber-50">{unit.name}</td>
-                      <td className="py-3 px-4">
-                        {unit.isSystem ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-950/60 text-amber-400 border border-amber-800/40">
-                            Sistem
+                      <td className="py-3.5 px-4 font-semibold text-slate-800">{unit.name}</td>
+                      <td className="py-3.5 px-4">
+                        {unit.isBase ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                            Base Default
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-stone-800 text-stone-300 border border-stone-700">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
                             Kustom
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-xs text-stone-400">
-                        {unit._count?.baseInventoryItems || 0} barang
+                      <td className="py-3.5 px-4 font-mono text-slate-500">
+                        {unit._count?.inventoryItems || 0} bahan &bull; {unit._count?.purchaseConversions || 0} konversi
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
+                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                         <button
                           onClick={() => openEditUnitModal(unit)}
-                          className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
                         >
                           Edit
                         </button>
-                        {!unit.isSystem && (
+                        {!unit.isBase && (
                           <button
                             onClick={() => handleDeleteUnit(unit)}
-                            className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
+                            className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
                           >
                             Hapus
                           </button>
@@ -387,17 +395,17 @@ export default function InventorySetupPage() {
         </div>
       )}
 
-      {/* Tab 2: Kategori Inventaris */}
+      {/* ─── TAB 2: KATEGORI BAHAN ─────────────────────────────────────────── */}
       {activeTab === 'categories' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-stone-400">
-              Kategori untuk mengelompokkan bahan mentah (contoh: Coffee Beans, Dairy, Syrup, Packaging).
+            <p className="text-xs text-slate-500">
+              Kategori bahan baku gudang terpisah secara murni dari kategori produk menu POS.
             </p>
             <button
-              id="btn-add-inv-cat"
+              id="btn-add-category"
               onClick={openCreateCategoryModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -406,45 +414,49 @@ export default function InventorySetupPage() {
             </button>
           </div>
 
-          <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
-            <table className="w-full text-left text-sm text-stone-300">
-              <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Nama Kategori</th>
-                  <th className="py-3 px-4">Jumlah Barang Terdaftar</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
+                  <th className="py-3.5 px-4">Nama Kategori Bahan</th>
+                  <th className="py-3.5 px-4">Jumlah Barang Inventaris</th>
+                  <th className="py-3.5 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-800/60">
+              <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-stone-500">
-                      Memuat data kategori...
+                    <td colSpan={3} className="py-12 text-center text-slate-400">
+                      Memuat data kategori bahan...
                     </td>
                   </tr>
                 ) : categories.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-stone-500">
-                      Belum ada kategori inventaris. Tambahkan kategori baru sekarang.
+                    <td colSpan={3} className="py-12 text-center text-slate-400">
+                      Belum ada kategori inventaris. Klik &quot;Tambah Kategori&quot; untuk menambahkan.
                     </td>
                   </tr>
                 ) : (
                   categories.map((cat) => (
-                    <tr key={cat.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-3 px-4 font-medium text-amber-50">{cat.name}</td>
-                      <td className="py-3 px-4 text-xs text-stone-400">
-                        {cat._count?.items || 0} barang
+                    <tr key={cat.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {cat.name}
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
+                      <td className="py-3.5 px-4 font-mono text-slate-600">
+                        <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {cat._count?.items || 0} Barang
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                         <button
                           onClick={() => openEditCategoryModal(cat)}
-                          className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeleteCategory(cat)}
-                          className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
                         >
                           Hapus
                         </button>
@@ -458,62 +470,70 @@ export default function InventorySetupPage() {
         </div>
       )}
 
-      {/* ─── MODAL UNIT ──────────────────────────────────────────────────────── */}
+      {/* ─── MODAL ADD/EDIT UNIT ────────────────────────────────────────────── */}
       {unitModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingUnit ? 'Edit Nama Satuan' : 'Tambah Unit Satuan'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingUnit ? 'Edit Nama Satuan' : 'Tambah Satuan Baru'}
+              </h3>
+              <button
+                onClick={() => setUnitModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSaveUnit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Kode Satuan (Singkatan)
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Kode Satuan (Simbol) *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: pack, botol, sachet"
+                  placeholder="contoh: dus, karton, pack"
                   value={unitCode}
                   onChange={(e) => setUnitCode(e.target.value)}
-                  disabled={Boolean(editingUnit) || isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:opacity-50"
+                  disabled={isPending || Boolean(editingUnit)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-500"
                   required
                 />
-                {editingUnit && (
-                  <p className="text-xs text-stone-500 mt-1">
-                    Kode satuan tidak dapat diubah setelah dibuat.
-                  </p>
-                )}
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Nama Lengkap Satuan
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Lengkap Satuan *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: Kemasan Pack 500g"
+                  placeholder="contoh: Dus Besar (Isi 24)"
                   value={unitName}
                   onChange={(e) => setUnitName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setUnitModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
-                  {isPending ? 'Menyimpan...' : 'Simpan'}
+                  {isPending ? 'Menyimpan...' : 'Simpan Satuan'}
                 </button>
               </div>
             </form>
@@ -521,43 +541,55 @@ export default function InventorySetupPage() {
         </div>
       )}
 
-      {/* ─── MODAL KATEGORI ─────────────────────────────────────────────────── */}
+      {/* ─── MODAL ADD/EDIT CATEGORY ────────────────────────────────────────── */}
       {categoryModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingCategory ? 'Edit Kategori Inventaris' : 'Tambah Kategori Inventaris'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingCategory ? 'Edit Kategori Inventaris' : 'Tambah Kategori Inventaris'}
+              </h3>
+              <button
+                onClick={() => setCategoryModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Nama Kategori
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Kategori Bahan *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: Coffee Beans, Dairy & Milk, Packaging"
+                  placeholder="contoh: Biji Kopi, Produk Dairy, Kemasan & Cup"
                   value={categoryName}
                   onChange={(e) => setCategoryName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setCategoryModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
-                  {isPending ? 'Menyimpan...' : 'Simpan'}
+                  {isPending ? 'Menyimpan...' : 'Simpan Kategori'}
                 </button>
               </div>
             </form>

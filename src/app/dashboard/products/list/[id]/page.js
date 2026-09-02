@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   getProductWithDetails,
   updateProduct,
+  uploadProductImage,
   createProductVariant,
   updateProductVariant,
   deleteProductVariant,
@@ -15,7 +16,8 @@ import {
   getProductCategories,
 } from '@/app/actions/product';
 import { getInventoryItems } from '@/app/actions/inventory';
-import { formatRupiah, cn } from '@/lib/utils';
+import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -52,12 +54,15 @@ export default function ProductDetailPage() {
   const [prodForm, setProdForm] = useState({
     name: '',
     sku: '',
+    imageUrl: null,
     price: 0,
     categoryId: '',
     availability: 'AVAILABLE',
     discontinued: false,
     inventoryItemId: '',
   });
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -81,6 +86,7 @@ export default function ProductDetailPage() {
     setProdForm({
       name: p.name,
       sku: p.sku || '',
+      imageUrl: p.imageUrl || null,
       price: p.price,
       categoryId: p.categoryId,
       availability: p.availability,
@@ -101,14 +107,14 @@ export default function ProductDetailPage() {
     }
   }, [productId]);
 
-  // ─── RECIPE FORMULATOR HANDLERS ──────────────────────────────────────────
+  // ─── RECIPE HANDLERS ─────────────────────────────────────────────────────
   const openRecipeEditor = (variant = null) => {
     setRecipeTargetVariant(variant);
-    const currentActiveRecipe = variant ? variant.recipe : product?.recipe;
+    const targetRecipe = variant ? variant.recipe : product.recipe;
 
-    if (currentActiveRecipe?.activeVersion?.ingredients) {
+    if (targetRecipe && targetRecipe.activeVersion?.ingredients?.length > 0) {
       setRecipeIngredients(
-        currentActiveRecipe.activeVersion.ingredients.map((ing) => ({
+        targetRecipe.activeVersion.ingredients.map((ing) => ({
           inventoryItemId: ing.inventoryItemId,
           quantity: ing.quantity,
         }))
@@ -121,6 +127,7 @@ export default function ProductDetailPage() {
         },
       ]);
     }
+
     setIsEditingRecipe(true);
   };
 
@@ -139,7 +146,7 @@ export default function ProductDetailPage() {
       toast.error('Resep harus memiliki minimal 1 bahan baku.');
       return;
     }
-    setRecipeIngredients(recipeIngredients.filter((_, i) => i !== index));
+    setRecipeIngredients(recipeIngredients.filter((_, idx) => idx !== index));
   };
 
   const updateIngredientField = (index, field, value) => {
@@ -151,14 +158,22 @@ export default function ProductDetailPage() {
   const handleSaveRecipe = (e) => {
     e.preventDefault();
 
+    for (let i = 0; i < recipeIngredients.length; i++) {
+      const ing = recipeIngredients[i];
+      if (!ing.inventoryItemId || isNaN(parseFloat(ing.quantity)) || parseFloat(ing.quantity) <= 0) {
+        toast.error(`Baris ke-${i + 1}: Kuantitas bahan harus berupa angka positif lebih dari 0.`);
+        return;
+      }
+    }
+
     startTransition(async () => {
       const toastId = toast.loading('Menyimpan versi resep baru...');
       const res = await saveRecipe({
-        productId: recipeTargetVariant ? null : product.id,
-        variantId: recipeTargetVariant ? recipeTargetVariant.id : null,
-        ingredients: recipeIngredients.map((i) => ({
-          inventoryItemId: i.inventoryItemId,
-          quantity: parseFloat(i.quantity) || 0,
+        productId: product.id,
+        variantId: recipeTargetVariant?.id || null,
+        ingredients: recipeIngredients.map((ing) => ({
+          inventoryItemId: ing.inventoryItemId,
+          quantity: parseFloat(ing.quantity),
         })),
       });
 
@@ -168,7 +183,7 @@ export default function ProductDetailPage() {
       }
 
       toast.success(
-        `Resep Versi ${res.data.versionNumber} berhasil disimpan & diaktifkan!`,
+        `Resep berhasil disimpan (Versi ${res.data.activeVersion.versionNumber})!`,
         { id: toastId }
       );
       setIsEditingRecipe(false);
@@ -177,29 +192,32 @@ export default function ProductDetailPage() {
   };
 
   const viewRecipeHistory = async (variant = null) => {
-    setRecipeTargetVariant(variant);
+    const toastId = toast.loading('Memuat riwayat formulasi resep...');
     const res = await getRecipeHistory({
-      productId: variant ? null : product.id,
-      variantId: variant ? variant.id : null,
+      productId: product.id,
+      variantId: variant?.id || null,
     });
+
     if (res?.error) {
-      toast.error(res.error);
-    } else {
-      setRecipeHistory(res.data || []);
-      setShowHistoryModal(true);
+      toast.error(res.error, { id: toastId });
+      return;
     }
+
+    toast.dismiss(toastId);
+    setRecipeHistory(res.data || []);
+    setShowHistoryModal(true);
   };
 
-  // ─── VARIANT CRUD HANDLERS ───────────────────────────────────────────────
+  // ─── VARIANT HANDLERS ────────────────────────────────────────────────────
   const openCreateVariantModal = () => {
     setEditingVariant(null);
     setVariantForm({
       name: '',
       sku: '',
-      price: product?.price || 0,
+      price: product.price,
       availability: 'AVAILABLE',
       discontinued: false,
-      inventoryItemId: inventoryItems[0]?.id || '',
+      inventoryItemId: '',
     });
     setVariantModalOpen(true);
   };
@@ -220,33 +238,41 @@ export default function ProductDetailPage() {
   const handleSaveVariant = (e) => {
     e.preventDefault();
 
+    if (!variantForm.name.trim()) {
+      toast.error('Nama varian wajib diisi.');
+      return;
+    }
+
+    if (product.type === 'DIRECT_STOCK' && !variantForm.inventoryItemId) {
+      toast.error('Produk DIRECT_STOCK wajib memilih barang inventaris untuk varian.');
+      return;
+    }
+
     startTransition(async () => {
-      let res;
+      const toastId = toast.loading('Menyimpan varian...');
+
       if (editingVariant) {
-        const toastId = toast.loading('Menyimpan perubahan varian...');
-        res = await updateProductVariant({
-          id: editingVariant.id,
-          name: variantForm.name,
-          sku: variantForm.sku,
-          price: variantForm.price,
+        const res = await updateProductVariant(editingVariant.id, {
+          name: variantForm.name.trim(),
+          sku: variantForm.sku.trim() || null,
+          price: Number(variantForm.price),
           availability: variantForm.availability,
           discontinued: variantForm.discontinued,
-          inventoryItemId: variantForm.inventoryItemId,
+          inventoryItemId: product.type === 'DIRECT_STOCK' ? variantForm.inventoryItemId : null,
         });
         if (res?.error) {
           toast.error(res.error, { id: toastId });
           return;
         }
-        toast.success('Varian berhasil diperbarui!', { id: toastId });
+        toast.success(`Varian "${res.data.name}" berhasil diperbarui!`, { id: toastId });
       } else {
-        const toastId = toast.loading('Menambahkan varian baru...');
-        res = await createProductVariant({
+        const res = await createProductVariant({
           productId: product.id,
-          name: variantForm.name,
-          sku: variantForm.sku,
-          price: variantForm.price,
+          name: variantForm.name.trim(),
+          sku: variantForm.sku.trim() || null,
+          price: Number(variantForm.price),
           availability: variantForm.availability,
-          inventoryItemId: variantForm.inventoryItemId,
+          inventoryItemId: product.type === 'DIRECT_STOCK' ? variantForm.inventoryItemId : null,
         });
         if (res?.error) {
           toast.error(res.error, { id: toastId });
@@ -267,12 +293,12 @@ export default function ProductDetailPage() {
       text: `Apakah Anda yakin ingin menghapus varian "${variant.name}"?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#b45309',
-      cancelButtonColor: '#44403c',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal',
-      background: '#1c1917',
-      color: '#fef3c7',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (confirm.isConfirmed) {
@@ -289,6 +315,51 @@ export default function ProductDetailPage() {
     }
   };
 
+  // ─── IMAGE UPLOAD HANDLERS ──────────────────────────────────────────────
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Format file harus berupa PNG, JPG, WEBP, atau SVG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    const toastId = toast.loading('Mengunggah foto produk...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await uploadProductImage(formData);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success('Foto produk berhasil diunggah!', { id: toastId });
+        setProdForm((prev) => ({ ...prev, imageUrl: res.imageUrl }));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunggah foto produk.', { id: toastId });
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setProdForm((prev) => ({ ...prev, imageUrl: null }));
+  };
+
   // ─── PRODUCT INFO HANDLER ────────────────────────────────────────────────
   const handleSaveProductInfo = (e) => {
     e.preventDefault();
@@ -298,6 +369,7 @@ export default function ProductDetailPage() {
       const res = await updateProduct(product.id, {
         name: prodForm.name,
         sku: prodForm.sku,
+        imageUrl: prodForm.imageUrl,
         price: prodForm.price,
         categoryId: prodForm.categoryId,
         type: product.type,
@@ -318,7 +390,7 @@ export default function ProductDetailPage() {
 
   if (loading || !product) {
     return (
-      <div className="p-8 text-center text-stone-500 text-xs">
+      <div className="p-12 text-center text-slate-400 text-xs">
         Memuat detail konfigurasi produk...
       </div>
     );
@@ -341,21 +413,21 @@ export default function ProductDetailPage() {
     targetPrice > 0 ? (((targetPrice - currentHpp) / targetPrice) * 100).toFixed(1) : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl">
       <Toaster position="top-right" />
 
       {/* Breadcrumb & Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs text-stone-500 mb-1">
-            <Link href="/dashboard/products/list" className="hover:text-amber-400 transition-colors">
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+            <Link href="/dashboard/products/list" className="hover:text-emerald-700 font-semibold transition-colors">
               &larr; Daftar Menu Produk
             </Link>
             <span>/</span>
-            <span className="text-amber-200">{product.categoryName}</span>
+            <span className="text-slate-700 font-medium">{product.categoryName}</span>
           </div>
-          <h1 className="text-xl font-bold text-amber-50 flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
               </svg>
@@ -369,8 +441,8 @@ export default function ProductDetailPage() {
             className={cn(
               'px-3 py-1 rounded-full text-xs font-semibold border',
               product.type === 'RECIPE'
-                ? 'bg-amber-950/60 text-amber-300 border-amber-800/40'
-                : 'bg-blue-950/60 text-blue-300 border-blue-800/40'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-blue-50 text-blue-800 border-blue-200'
             )}
           >
             Tipe: {product.type === 'RECIPE' ? 'Resep Komposisi' : 'Stok Langsung'}
@@ -379,8 +451,8 @@ export default function ProductDetailPage() {
             className={cn(
               'px-3 py-1 rounded-full text-xs font-semibold border',
               product.availability === 'AVAILABLE'
-                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
-                : 'bg-rose-950/60 text-rose-400 border-rose-800/40'
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-rose-100 text-rose-800 border-rose-200'
             )}
           >
             {product.availability === 'AVAILABLE' ? 'Tersedia' : 'Habis'}
@@ -389,25 +461,25 @@ export default function ProductDetailPage() {
       </div>
 
       {/* KPI Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800">
-          <p className="text-[11px] font-semibold text-stone-400">Harga Jual Pokok</p>
-          <p className="text-xl font-bold font-mono text-amber-300 mt-1">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Harga Jual Pokok</p>
+          <p className="text-xl font-bold font-mono text-slate-900 mt-1">
             {formatRupiah(product.price)}
           </p>
         </div>
 
         {product.type === 'RECIPE' ? (
           <>
-            <div className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800">
-              <p className="text-[11px] font-semibold text-stone-400">Estimasi HPP (WAC)</p>
-              <p className="text-xl font-bold font-mono text-amber-100 mt-1">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estimasi HPP (WAC)</p>
+              <p className="text-xl font-bold font-mono text-slate-900 mt-1">
                 {formatRupiah(product.recipe?.activeVersion?.estimatedHpp || 0)}
               </p>
             </div>
-            <div className="p-4 rounded-2xl bg-stone-900/60 border border-emerald-900/30">
-              <p className="text-[11px] font-semibold text-emerald-400">Margin Keuntungan</p>
-              <p className="text-xl font-bold font-mono text-emerald-300 mt-1">
+            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 shadow-xs">
+              <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Margin Keuntungan</p>
+              <p className="text-xl font-bold font-mono text-emerald-700 mt-1">
                 {product.price > 0 && product.recipe?.activeVersion?.estimatedHpp
                   ? `${(
                       ((product.price - product.recipe.activeVersion.estimatedHpp) /
@@ -419,24 +491,24 @@ export default function ProductDetailPage() {
             </div>
           </>
         ) : (
-          <div className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800">
-            <p className="text-[11px] font-semibold text-stone-400">Bahan Baku Terhubung</p>
-            <p className="text-sm font-bold text-amber-100 mt-1 truncate">
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bahan Baku Terhubung</p>
+            <p className="text-sm font-bold text-slate-900 mt-1 truncate">
               {product.inventoryItem ? product.inventoryItem.name : 'Belum dihubungkan'}
             </p>
           </div>
         )}
 
-        <div className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800">
-          <p className="text-[11px] font-semibold text-stone-400">Jumlah Varian</p>
-          <p className="text-xl font-bold font-mono text-stone-200 mt-1">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jumlah Varian</p>
+          <p className="text-xl font-bold font-mono text-slate-900 mt-1">
             {product.variants?.length || 0} Varian
           </p>
         </div>
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-stone-800 gap-2">
+      <div className="flex border-b border-slate-200 gap-2">
         {product.type === 'RECIPE' && (
           <button
             onClick={() => {
@@ -446,8 +518,8 @@ export default function ProductDetailPage() {
             className={cn(
               'px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2',
               activeTab === 'RECIPE'
-                ? 'border-amber-500 text-amber-400 bg-stone-900/50'
-                : 'border-transparent text-stone-400 hover:text-stone-200'
+                ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             )}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -465,8 +537,8 @@ export default function ProductDetailPage() {
           className={cn(
             'px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2',
             activeTab === 'VARIANTS'
-              ? 'border-amber-500 text-amber-400 bg-stone-900/50'
-              : 'border-transparent text-stone-400 hover:text-stone-200'
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           )}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -483,8 +555,8 @@ export default function ProductDetailPage() {
           className={cn(
             'px-5 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2',
             activeTab === 'EDIT_INFO'
-              ? 'border-amber-500 text-amber-400 bg-stone-900/50'
-              : 'border-transparent text-stone-400 hover:text-stone-200'
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           )}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -498,20 +570,20 @@ export default function ProductDetailPage() {
       {activeTab === 'RECIPE' && product.type === 'RECIPE' && (
         <div className="space-y-6">
           {!isEditingRecipe ? (
-            <div className="bg-stone-900/70 border border-stone-800 rounded-3xl p-6 shadow-xl space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-800">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-amber-50">
+                    <h2 className="text-base font-bold text-slate-900">
                       Resep Aktif: {activeRecipe ? activeRecipe.name : product.name}
                     </h2>
                     {activeRecipe?.activeVersion && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-bold">
                         Versi {activeRecipe.activeVersion.versionNumber} (Aktif)
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-stone-400 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Bahan baku ini akan otomatis dipotong secara proporsional dari stok inventaris saat pesanan kasir dibayar.
                   </p>
                 </div>
@@ -519,13 +591,13 @@ export default function ProductDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => viewRecipeHistory(null)}
-                    className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs font-semibold border border-stone-700 transition-all"
+                    className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-2xs transition-all"
                   >
                     Riwayat Versi
                   </button>
                   <button
                     onClick={() => openRecipeEditor(null)}
-                    className="px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-950 transition-all flex items-center gap-1.5"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -537,9 +609,9 @@ export default function ProductDetailPage() {
 
               {/* Ingredients List Table */}
               {activeRecipe?.activeVersion?.ingredients?.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-stone-300">
-                    <thead className="bg-stone-950/80 text-stone-400 border-b border-stone-800 uppercase tracking-wider text-[10px]">
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="py-3 px-4 font-semibold">Bahan Baku (Inventaris)</th>
                         <th className="py-3 px-4 font-semibold">Takaran per Porsi</th>
@@ -547,30 +619,30 @@ export default function ProductDetailPage() {
                         <th className="py-3 px-4 font-semibold text-right">Subtotal HPP</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-stone-800/60 font-mono">
+                    <tbody className="divide-y divide-slate-100 font-mono">
                       {activeRecipe.activeVersion.ingredients.map((ing) => (
-                        <tr key={ing.id} className="hover:bg-stone-800/30 transition-colors">
-                          <td className="py-3 px-4 font-sans font-semibold text-amber-50">
+                        <tr key={ing.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-sans font-semibold text-slate-900">
                             {ing.inventoryItemName}
                           </td>
-                          <td className="py-3 px-4 text-stone-200">
+                          <td className="py-3 px-4 text-slate-700">
                             {ing.quantity} {ing.baseUnitCode}
                           </td>
-                          <td className="py-3 px-4 text-stone-400">
+                          <td className="py-3 px-4 text-slate-500">
                             {formatRupiah(ing.averageCost)} / {ing.baseUnitCode}
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-amber-300">
+                          <td className="py-3 px-4 text-right font-bold text-emerald-700">
                             {formatRupiah(ing.subtotalHpp)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="border-t-2 border-stone-800 bg-stone-950/60">
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                       <tr>
-                        <td colSpan="3" className="py-3 px-4 font-bold text-amber-100 text-right uppercase text-[11px]">
+                        <td colSpan="3" className="py-3 px-4 font-bold text-slate-900 text-right uppercase text-[11px]">
                           Total Estimasi HPP per Porsi:
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-extrabold text-amber-300 text-sm">
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-700 text-sm">
                           {formatRupiah(activeRecipe.activeVersion.estimatedHpp)}
                         </td>
                       </tr>
@@ -578,20 +650,20 @@ export default function ProductDetailPage() {
                   </table>
                 </div>
               ) : (
-                <div className="py-12 text-center text-stone-500 text-xs">
-                  Menu ini belum memiliki komposisi resep. Klik tombol "Susun Resep Baru" di atas.
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  Menu ini belum memiliki komposisi resep. Klik tombol &quot;Susun Resep Baru&quot; di atas.
                 </div>
               )}
             </div>
           ) : (
             /* ─── RECIPE BUILDER / EDITOR ────────────────────────────────────── */
-            <form onSubmit={handleSaveRecipe} className="bg-stone-900/90 border border-stone-800 rounded-3xl p-6 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-stone-800">
+            <form onSubmit={handleSaveRecipe} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                 <div>
-                  <h2 className="text-base font-bold text-amber-50">
+                  <h2 className="text-base font-bold text-slate-900">
                     Formulasi Versi Resep Baru: {recipeTargetVariant ? `${product.name} (${recipeTargetVariant.name})` : product.name}
                   </h2>
-                  <p className="text-xs text-stone-400 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Menyimpan resep ini akan membuat Versi baru yang aktif tanpa menghapus riwayat versi sebelumnya.
                   </p>
                 </div>
@@ -599,7 +671,7 @@ export default function ProductDetailPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditingRecipe(false)}
-                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-xs font-semibold"
+                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold"
                 >
                   Batal
                 </button>
@@ -608,13 +680,13 @@ export default function ProductDetailPage() {
               {/* Dynamic Ingredients Rows */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-stone-300 uppercase tracking-wider">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Daftar Komposisi Bahan Baku *
                   </label>
                   <button
                     type="button"
                     onClick={addIngredientRow}
-                    className="px-3 py-1 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40 text-xs font-semibold flex items-center gap-1"
+                    className="px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1"
                   >
                     + Tambah Baris Bahan
                   </button>
@@ -629,18 +701,18 @@ export default function ProductDetailPage() {
                     return (
                       <div
                         key={idx}
-                        className="p-3 rounded-2xl bg-stone-950/60 border border-stone-800 flex flex-col sm:flex-row items-center gap-3"
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center gap-3"
                       >
                         {/* Select Inventory Item */}
                         <div className="flex-1 w-full sm:w-auto">
-                          <label className="block text-[10px] text-stone-500 font-semibold mb-1">
+                          <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
                             Bahan Baku
                           </label>
                           <select
                             value={ing.inventoryItemId}
                             onChange={(e) => updateIngredientField(idx, 'inventoryItemId', e.target.value)}
                             disabled={isPending}
-                            className="w-full px-3 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             required
                           >
                             {inventoryItems.map((it) => (
@@ -653,7 +725,7 @@ export default function ProductDetailPage() {
 
                         {/* Quantity Input */}
                         <div className="w-full sm:w-44">
-                          <label className="block text-[10px] text-stone-500 font-semibold mb-1">
+                          <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
                             Takaran ({selectedItem?.baseUnit?.code || 'Unit'})
                           </label>
                           <div className="relative">
@@ -664,10 +736,10 @@ export default function ProductDetailPage() {
                               value={ing.quantity}
                               onChange={(e) => updateIngredientField(idx, 'quantity', e.target.value)}
                               disabled={isPending}
-                              className="w-full pl-3 pr-10 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              className="w-full pl-3 pr-10 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               required
                             />
-                            <span className="absolute right-3 top-2 text-[11px] text-stone-400 font-mono">
+                            <span className="absolute right-3 top-2 text-[11px] text-slate-400 font-mono">
                               {selectedItem?.baseUnit?.code}
                             </span>
                           </div>
@@ -675,20 +747,20 @@ export default function ProductDetailPage() {
 
                         {/* Subtotal Cost Preview */}
                         <div className="w-full sm:w-36 text-right font-mono">
-                          <label className="block text-[10px] text-stone-500 font-semibold mb-1 text-right">
+                          <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1 text-right">
                             Subtotal Biaya
                           </label>
-                          <p className="text-xs font-bold text-amber-300 py-2">
+                          <p className="text-xs font-bold text-emerald-700 py-1.5">
                             {formatRupiah(subtotal)}
                           </p>
                         </div>
 
                         {/* Remove Button */}
-                        <div className="pt-4 sm:pt-4">
+                        <div className="pt-2 sm:pt-4">
                           <button
                             type="button"
                             onClick={() => removeIngredientRow(idx)}
-                            className="p-2 rounded-xl text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors"
+                            className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
                             title="Hapus baris"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -703,14 +775,14 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Summary Calculations Footer */}
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
                 <div>
-                  <p className="text-xs text-amber-200">
-                    Estimasi HPP Resep Baru: <strong className="text-amber-300 font-extrabold text-sm">{formatRupiah(liveEstimatedHpp)}</strong>
+                  <p className="text-xs text-emerald-900">
+                    Estimasi HPP Resep Baru: <strong className="text-emerald-700 font-extrabold text-sm">{formatRupiah(liveEstimatedHpp)}</strong>
                   </p>
-                  <p className="text-[11px] text-stone-400 mt-0.5">
+                  <p className="text-[11px] text-slate-600 mt-0.5">
                     Harga Jual: {formatRupiah(targetPrice)} &bull; Margin Keuntungan:{' '}
-                    <span className="text-emerald-400 font-bold">{marginPercentage}%</span>
+                    <span className="text-emerald-700 font-bold">{marginPercentage}%</span>
                   </p>
                 </div>
 
@@ -718,14 +790,14 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     onClick={() => setIsEditingRecipe(false)}
-                    className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold"
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={isPending}
-                    className="px-6 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-950 transition-all disabled:opacity-50"
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
                   >
                     {isPending ? 'Menyimpan Resep...' : 'Simpan & Terapkan Resep'}
                   </button>
@@ -741,15 +813,15 @@ export default function ProductDetailPage() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-bold text-amber-50">Varian Produk ({product.name})</h2>
-              <p className="text-xs text-stone-400 mt-0.5">
+              <h2 className="text-base font-bold text-slate-900">Varian Produk ({product.name})</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
                 Tambahkan pilihan varian seperti Hot/Iced, Regular/Large, atau ukuran porsi lain.
               </p>
             </div>
 
             <button
               onClick={openCreateVariantModal}
-              className="px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-950 transition-all flex items-center justify-center gap-1.5"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5"
             >
               + Tambah Varian Baru
             </button>
@@ -757,24 +829,24 @@ export default function ProductDetailPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {product.variants?.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-stone-500 text-xs rounded-2xl bg-stone-900/40 border border-stone-800">
+              <div className="col-span-full py-12 text-center text-slate-400 text-xs rounded-2xl bg-white border border-slate-200">
                 Belum ada varian untuk produk ini. Menu akan dijual dengan harga dan formulasi default produk induk.
               </div>
             ) : (
               product.variants.map((v) => (
                 <div
                   key={v.id}
-                  className="p-5 rounded-3xl bg-stone-900/70 border border-stone-800 flex flex-col justify-between gap-4 shadow-xl"
+                  className="p-5 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between gap-4 shadow-xs hover:shadow-md transition-all"
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="text-sm font-bold text-amber-50">{v.name}</h3>
+                        <h3 className="text-sm font-bold text-slate-900">{v.name}</h3>
                         {v.sku && (
-                          <p className="text-[11px] font-mono text-stone-500">SKU: {v.sku}</p>
+                          <p className="text-[11px] font-mono text-slate-400">SKU: {v.sku}</p>
                         )}
                       </div>
-                      <span className="px-2.5 py-1 rounded-full font-mono font-extrabold text-amber-300 text-xs bg-stone-800 border border-stone-700">
+                      <span className="px-2.5 py-1 rounded-full font-mono font-bold text-emerald-700 text-xs bg-emerald-50 border border-emerald-200">
                         {formatRupiah(v.price)}
                       </span>
                     </div>
@@ -782,67 +854,60 @@ export default function ProductDetailPage() {
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <span
                         className={cn(
-                          'px-2 py-0.5 rounded-md text-[10px] font-bold border',
+                          'px-2.5 py-0.5 rounded-full text-[10px] font-bold border',
                           v.availability === 'AVAILABLE'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border-rose-200'
                         )}
                       >
                         {v.availability === 'AVAILABLE' ? 'Tersedia' : 'Habis'}
                       </span>
                       {v.discontinued && (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-stone-800 text-stone-400 border border-stone-700">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                           Discontinued
                         </span>
                       )}
                     </div>
 
                     {/* Direct stock linkage or Recipe info */}
-                    {product.type === 'DIRECT_STOCK' && (
-                      <div className="p-2.5 rounded-xl bg-stone-950/60 border border-stone-800 text-[11px] text-stone-400">
-                        Link Inventaris:{' '}
-                        <span className="font-semibold text-amber-200">
-                          {v.inventoryItem ? v.inventoryItem.name : 'Belum dihubungkan'}
-                        </span>{' '}
-                        ({v.inventoryItem?.currentQuantity || 0} {v.inventoryItem?.baseUnitCode})
+                    {product.type === 'DIRECT_STOCK' && v.inventoryItem && (
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-0.5">
+                        <p className="font-semibold text-slate-800">
+                          Direct Stock: {v.inventoryItem.name}
+                        </p>
+                        <p className="text-[11px] font-mono text-slate-500">
+                          Stok: {v.inventoryItem.balance?.quantity || 0} {v.inventoryItem.baseUnit?.code}
+                        </p>
                       </div>
                     )}
 
                     {product.type === 'RECIPE' && (
-                      <div className="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 text-[11px] flex items-center justify-between">
-                        <span className="text-stone-400">
-                          Resep Varian:{' '}
-                          {v.recipe?.activeVersion ? (
-                            <span className="text-amber-200 font-semibold font-mono">
-                              Versi {v.recipe.activeVersion.versionNumber} ({formatRupiah(v.recipe.activeVersion.estimatedHpp)})
-                            </span>
-                          ) : (
-                            <span className="text-stone-500 italic">Ikut resep induk</span>
-                          )}
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex justify-between items-center">
+                        <span className="text-[11px]">
+                          {v.recipe?.activeVersion
+                            ? `Resep Khusus: Versi ${v.recipe.activeVersion.versionNumber} (HPP: ${formatRupiah(v.recipe.activeVersion.estimatedHpp)})`
+                            : 'Menggunakan Resep Induk'}
                         </span>
                         <button
-                          onClick={() => {
-                            setActiveTab('RECIPE');
-                            openRecipeEditor(v);
-                          }}
-                          className="text-amber-400 hover:text-amber-300 font-semibold underline text-[10px]"
+                          onClick={() => openRecipeEditor(v)}
+                          className="text-[11px] font-bold text-emerald-700 hover:underline"
                         >
-                          Atur Resep Khusus &rarr;
+                          {v.recipe?.activeVersion ? 'Edit Resep' : 'Buat Resep'}
                         </button>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-800/80">
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                     <button
                       onClick={() => openEditVariantModal(v)}
-                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 text-xs font-semibold transition-all"
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
                     >
-                      Edit
+                      Edit Varian
                     </button>
                     <button
                       onClick={() => handleDeleteVariant(v)}
-                      className="px-3 py-1.5 rounded-xl bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/30 text-xs font-semibold transition-all"
+                      className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors"
                     >
                       Hapus
                     </button>
@@ -854,153 +919,195 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* ─── TAB 3: EDIT INFO MENU INDUK ──────────────────────────────────────── */}
+      {/* ─── TAB 3: EDIT INFORMASI PRODUK ──────────────────────────────────────── */}
       {activeTab === 'EDIT_INFO' && (
-        <div className="bg-stone-900/70 border border-stone-800 rounded-3xl p-6 shadow-xl max-w-xl">
-          <h2 className="text-sm font-bold text-amber-50 mb-4">Edit Informasi Menu Produk</h2>
-          <form onSubmit={handleSaveProductInfo} className="space-y-4">
+        <form onSubmit={handleSaveProductInfo} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Informasi Dasar Produk Menu</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Ubah foto, nama, kategori, harga default, atau ketersediaan menu.
+            </p>
+          </div>
+
+          {/* Foto Produk */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Foto Menu Produk
+            </label>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative">
+                {prodForm.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={prodForm.imageUrl} alt="Foto Produk" className="w-full h-full object-cover" />
+                ) : (
+                  <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                  </svg>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={handleImageUpload}
+                disabled={isPending || isUploadingImage}
+                className="hidden"
+              />
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isPending || isUploadingImage}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    {prodForm.imageUrl ? 'Ganti Foto' : 'Pilih Foto'}
+                  </button>
+                  {prodForm.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={isPending || isUploadingImage}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">Format PNG, JPG, WEBP maks 5MB.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Nama Menu Produk *
               </label>
               <input
                 type="text"
                 value={prodForm.name}
                 onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
-                disabled={isPending}
-                className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                  SKU (Kode Menu)
-                </label>
-                <input
-                  type="text"
-                  value={prodForm.sku}
-                  onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                  Kategori Menu *
-                </label>
-                <select
-                  value={prodForm.categoryId}
-                  onChange={(e) => setProdForm({ ...prodForm, categoryId: e.target.value })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <div>
-              <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                Harga Jual Pokok (Rp) *
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                SKU / Barcode
               </label>
               <input
-                type="number"
-                min="0"
-                step="100"
+                type="text"
+                value={prodForm.sku}
+                onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Harga Jual Pokok (Rp) *
+              </label>
+              <CurrencyInput
+                placeholder="25.000"
                 value={prodForm.price}
-                onChange={(e) => setProdForm({ ...prodForm, price: parseFloat(e.target.value) || 0 })}
+                onChange={(val) => setProdForm({ ...prodForm, price: val })}
                 disabled={isPending}
-                className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
                 required
               />
             </div>
-
-            {product.type === 'DIRECT_STOCK' && (
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                  Bahan Baku Inventaris (Pemotong Stok Langsung) *
-                </label>
-                <select
-                  value={prodForm.inventoryItemId}
-                  onChange={(e) => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                >
-                  <option value="">Pilih Barang Inventaris</option>
-                  {inventoryItems.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.name} ({it.category?.name || 'Inventaris'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                  Ketersediaan Kasir
-                </label>
-                <select
-                  value={prodForm.availability}
-                  onChange={(e) => setProdForm({ ...prodForm, availability: e.target.value })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  <option value="AVAILABLE">Tersedia (Available)</option>
-                  <option value="OUT_OF_STOCK">Habis (Out of Stock)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                  Status Menu
-                </label>
-                <select
-                  value={prodForm.discontinued ? 'true' : 'false'}
-                  onChange={(e) => setProdForm({ ...prodForm, discontinued: e.target.value === 'true' })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  <option value="false">Aktif Dijual</option>
-                  <option value="true">Dihentikan (Discontinued)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-stone-800 flex justify-end">
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-6 py-2.5 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-950 transition-all disabled:opacity-50"
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Kategori Menu *
+              </label>
+              <select
+                value={prodForm.categoryId}
+                onChange={(e) => setProdForm({ ...prodForm, categoryId: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                required
               >
-                {isPending ? 'Menyimpan Perubahan...' : 'Simpan Perubahan'}
-              </button>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          </form>
-        </div>
+          </div>
+
+          {product.type === 'DIRECT_STOCK' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Barang Inventaris Terhubung (Direct Stock)
+              </label>
+              <select
+                value={prodForm.inventoryItemId}
+                onChange={(e) => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">-- Pilih Barang Inventaris --</option>
+                {inventoryItems.map((it) => (
+                  <option key={it.id} value={it.id}>
+                    {it.name} (Stok: {it.balance?.quantity || 0} {it.baseUnit?.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Ketersediaan Menu
+              </label>
+              <select
+                value={prodForm.availability}
+                onChange={(e) => setProdForm({ ...prodForm, availability: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
+                <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2.5 pt-6">
+              <input
+                id="chk-edit-discontinued"
+                type="checkbox"
+                checked={prodForm.discontinued}
+                onChange={(e) => setProdForm({ ...prodForm, discontinued: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="chk-edit-discontinued" className="text-xs font-semibold text-slate-700">
+                Menu Dihentikan (Discontinued)
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+            <button
+              type="submit"
+              disabled={isPending}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all disabled:opacity-50"
+            >
+              {isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+            </button>
+          </div>
+        </form>
       )}
 
-      {/* ─── MODAL FORM VARIAN ─────────────────────────────────────────────────── */}
+      {/* ─── MODAL ADD/EDIT VARIANT ───────────────────────────────────────────── */}
       {variantModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-800 rounded-3xl max-w-md w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-4">
-              <h2 className="text-base font-bold text-amber-50">
-                {editingVariant ? `Edit Varian: ${editingVariant.name}` : 'Tambah Varian Baru'}
-              </h2>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingVariant ? 'Edit Varian Produk' : 'Tambah Varian Baru'}
+              </h3>
               <button
                 onClick={() => setVariantModalOpen(false)}
-                className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1010,121 +1117,109 @@ export default function ProductDetailPage() {
 
             <form onSubmit={handleSaveVariant} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                   Nama Varian *
                 </label>
                 <input
                   type="text"
-                  placeholder="Contoh: Iced / Hot / Large / 500ml"
+                  placeholder="contoh: Hot, Iced, Large, Double Shot"
                   value={variantForm.name}
                   onChange={(e) => setVariantForm({ ...variantForm, name: e.target.value })}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                    Harga Jual Varian (Rp) *
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Harga Jual (Rp) *
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="100"
+                  <CurrencyInput
+                    placeholder="25.000"
                     value={variantForm.price}
-                    onChange={(e) => setVariantForm({ ...variantForm, price: parseFloat(e.target.value) || 0 })}
+                    onChange={(val) => setVariantForm({ ...variantForm, price: val })}
                     disabled={isPending}
-                    className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
                     required
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     SKU Varian
                   </label>
                   <input
                     type="text"
-                    placeholder="Opsional"
+                    placeholder="VAR-001"
                     value={variantForm.sku}
                     onChange={(e) => setVariantForm({ ...variantForm, sku: e.target.value })}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                   />
                 </div>
               </div>
 
               {product.type === 'DIRECT_STOCK' && (
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                    Link Bahan Baku Inventaris *
+                  <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1.5">
+                    Pilih Bahan Baku Inventaris *
                   </label>
                   <select
                     value={variantForm.inventoryItemId}
                     onChange={(e) => setVariantForm({ ...variantForm, inventoryItemId: e.target.value })}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   >
-                    <option value="">Pilih Bahan Baku</option>
+                    <option value="" disabled>-- Pilih Barang Inventaris --</option>
                     {inventoryItems.map((it) => (
                       <option key={it.id} value={it.id}>
-                        {it.name} ({it.category?.name || 'Inventaris'}) &bull; Stok: {it.balance?.quantity || 0} {it.baseUnit?.code}
+                        {it.name} (Stok: {it.balance?.quantity || 0} {it.baseUnit?.code})
                       </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Ketersediaan
                   </label>
                   <select
                     value={variantForm.availability}
                     onChange={(e) => setVariantForm({ ...variantForm, availability: e.target.value })}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="AVAILABLE">Tersedia</option>
-                    <option value="OUT_OF_STOCK">Habis</option>
+                    <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
+                    <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
                   </select>
                 </div>
-
                 {editingVariant && (
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-300 uppercase tracking-wider mb-1.5">
-                      Status
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      id="chk-var-discontinued"
+                      type="checkbox"
+                      checked={variantForm.discontinued}
+                      onChange={(e) => setVariantForm({ ...variantForm, discontinued: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <label htmlFor="chk-var-discontinued" className="text-xs font-semibold text-slate-700">
+                      Discontinued
                     </label>
-                    <select
-                      value={variantForm.discontinued ? 'true' : 'false'}
-                      onChange={(e) => setVariantForm({ ...variantForm, discontinued: e.target.value === 'true' })}
-                      disabled={isPending}
-                      className="w-full px-3.5 py-2 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      <option value="false">Aktif</option>
-                      <option value="true">Discontinued</option>
-                    </select>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-stone-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setVariantModalOpen(false)}
-                  disabled={isPending}
-                  className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-950 transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Varian'}
                 </button>
@@ -1134,22 +1229,22 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* ─── MODAL RIWAYAT VERSI RESEP ────────────────────────────────────────── */}
+      {/* ─── MODAL RIWAYAT RESEP ──────────────────────────────────────────────── */}
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h2 className="text-sm font-bold text-amber-50">
-                  Riwayat Formulasi Resep (HPP Historis)
-                </h2>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  Versi resep yang pernah aktif untuk audit dan laporan HPP pesanan lampau.
+                <h3 className="text-base font-bold text-slate-900">
+                  Riwayat Versi Resep ({product.name})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Seluruh versi resep di masa lampau disimpan secara abadi untuk menjaga keakuratan HPP pesanan historis.
                 </p>
               </div>
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1157,72 +1252,60 @@ export default function ProductDetailPage() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              {recipeHistory.length === 0 ? (
-                <div className="py-8 text-center text-stone-500 text-xs">
-                  Belum ada riwayat versi resep tercatat.
-                </div>
-              ) : (
-                recipeHistory.map((ver) => (
-                  <div
-                    key={ver.id}
-                    className={cn(
-                      'p-4 rounded-2xl border transition-all space-y-3',
-                      ver.isActive
-                        ? 'bg-amber-950/20 border-amber-800/50'
-                        : 'bg-stone-950/60 border-stone-800/80'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-amber-200">
-                          Versi {ver.versionNumber}
-                        </span>
-                        {ver.isActive ? (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                            Aktif Saat Ini
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-500 text-[10px]">
-                            Arsip
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-stone-500 font-mono">
-                        {new Date(ver.createdAt).toLocaleDateString('id-ID', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+            <div className="space-y-3">
+              {recipeHistory.map((ver) => (
+                <div
+                  key={ver.id}
+                  className={cn(
+                    'p-4 rounded-2xl border space-y-2.5',
+                    ver.isActive
+                      ? 'bg-emerald-50/50 border-emerald-200'
+                      : 'bg-slate-50 border-slate-200'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-slate-900">
+                        Versi {ver.versionNumber}
                       </span>
+                      {ver.isActive ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Aktif Digunakan
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">
+                          Arsip Historis
+                        </span>
+                      )}
                     </div>
-
-                    <div className="space-y-1 font-mono text-xs">
-                      {ver.ingredients?.map((ing) => (
-                        <div key={ing.id} className="flex items-center justify-between text-stone-300">
-                          <span className="font-sans text-[11px]">{ing.name}</span>
-                          <span>
-                            {ing.quantity} {ing.unitCode} ({formatRupiah(ing.quantity * ing.averageCost)})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-2 border-t border-stone-800/60 flex justify-between text-xs font-mono">
-                      <span className="text-stone-400 font-sans">Total HPP Versi Ini:</span>
-                      <span className="font-bold text-amber-300">{formatRupiah(ver.estimatedHpp)}</span>
-                    </div>
+                    <span className="text-[11px] font-mono text-slate-500">
+                      {formatDateTime(ver.createdAt)}
+                    </span>
                   </div>
-                ))
-              )}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    {ver.ingredients?.map((ing) => (
+                      <div key={ing.id} className="p-2 rounded-xl bg-white border border-slate-200">
+                        <p className="font-semibold text-slate-800 truncate">{ing.inventoryItemName}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          {ing.quantity} {ing.baseUnitCode} &bull; {formatRupiah(ing.averageCost)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 flex justify-between text-xs font-mono">
+                    <span className="text-slate-600 font-sans">Estimasi HPP Versi Ini:</span>
+                    <span className="font-bold text-emerald-700">{formatRupiah(ver.estimatedHpp)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="pt-4 border-t border-stone-800 flex justify-end">
+            <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
               >
                 Tutup
               </button>

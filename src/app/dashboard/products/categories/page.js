@@ -86,9 +86,9 @@ export default function ProductCategoriesPage() {
         icon: 'error',
         title: 'Tidak Dapat Dihapus',
         text: `Kategori "${category.name}" masih memiliki ${category._count.products} produk menu aktif. Pindahkan atau hapus produk di kategori ini terlebih dahulu.`,
-        confirmButtonColor: '#b45309',
-        background: '#1c1917',
-        color: '#fef3c7',
+        confirmButtonColor: '#e11d48',
+        background: '#ffffff',
+        color: '#0f172a',
       });
       return;
     }
@@ -100,157 +100,158 @@ export default function ProductCategoriesPage() {
       showCancelButton: true,
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
-    if (!confirm.isConfirmed) return;
-
-    startTransition(async () => {
-      const toastId = toast.loading('Menghapus kategori...');
-      const res = await deleteProductCategory(category.id);
-      if (res.error) {
-        toast.error(res.error, { id: toastId, duration: 4000 });
-      } else {
-        toast.success('Kategori berhasil dihapus.', { id: toastId });
-        loadData();
-      }
-    });
+    if (confirm.isConfirmed) {
+      startTransition(async () => {
+        const toastId = toast.loading('Menghapus kategori...');
+        const res = await deleteProductCategory(category.id);
+        if (res.error) {
+          toast.error(res.error, { id: toastId });
+        } else {
+          toast.success('Kategori berhasil dihapus.', { id: toastId });
+          loadData();
+        }
+      });
+    }
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-5xl">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Kategori Menu Produk</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Kategori khusus untuk pengelompokan menu penjualan di kasir POS (contoh: Coffee, Non-Coffee, Pastry, Snacks).
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+            <Link href="/dashboard/products/list" className="hover:text-emerald-700 font-semibold transition-colors">
+              &larr; Kembali ke Daftar Menu
+            </Link>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Kategori Menu Produk
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Pengelompokan menu penjualan kasir (contoh: Coffee, Non-Coffee, Pastry, Snacks).
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/products/list"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-stone-300 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/60 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Daftar Produk Menu
-          </Link>
-          <button
-            id="btn-add-prod-cat"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Tambah Kategori
-          </button>
-        </div>
+        <button
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all self-start sm:self-auto"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Tambah Kategori
+        </button>
       </div>
 
-      {/* Info Card: Isolation note */}
-      <div className="p-4 bg-amber-950/20 border border-amber-800/30 rounded-2xl flex items-start gap-3">
-        <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-        </svg>
-        <div className="text-xs text-stone-300">
-          <span className="font-semibold text-amber-300">Prinsip Arsitektur POS:</span> Kategori Produk di modul ini terisolasi sepenuhnya dari Kategori Inventaris. Kategori ini hanya digunakan untuk mengelompokkan tampilan tombol dan tab kasir POS saat melayani pelanggan.
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
-        <table className="w-full text-left text-sm text-stone-300">
-          <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
-            <tr>
-              <th className="py-3 px-4">Nama Kategori Menu</th>
-              <th className="py-3 px-4">Jumlah Menu Produk</th>
-              <th className="py-3 px-4 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-800/60">
-            {loading ? (
+      {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <td colSpan={3} className="py-8 text-center text-stone-500">
-                  Memuat kategori produk...
-                </td>
+                <th className="py-3.5 px-6">Nama Kategori</th>
+                <th className="py-3.5 px-6">Jumlah Menu Produk</th>
+                <th className="py-3.5 px-6 text-right">Aksi</th>
               </tr>
-            ) : categories.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="py-8 text-center text-stone-500">
-                  Belum ada kategori menu. Klik &quot;Tambah Kategori&quot; untuk membuat yang pertama.
-                </td>
-              </tr>
-            ) : (
-              categories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-stone-800/30 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-amber-50">{cat.name}</td>
-                  <td className="py-3 px-4 text-xs text-stone-400">
-                    <span className="inline-flex px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700/60">
-                      {cat._count?.products || 0} menu
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => openEditModal(cat)}
-                      className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(cat)}
-                      className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
-                    >
-                      Hapus
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={3} className="py-12 text-center text-slate-400">
+                    Memuat daftar kategori...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : categories.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="py-12 text-center text-slate-400">
+                    Belum ada kategori terdaftar. Klik &quot;Tambah Kategori&quot; untuk membuat kategori menu.
+                  </td>
+                </tr>
+              ) : (
+                categories.map((cat) => (
+                  <tr key={cat.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3.5 px-6 font-bold text-slate-900">
+                      {cat.name}
+                    </td>
+                    <td className="py-3.5 px-6">
+                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                        {cat._count?.products || 0} Produk
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-6 text-right space-x-2">
+                      <button
+                        onClick={() => openEditModal(cat)}
+                        className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(cat)}
+                        className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Modal Add / Edit */}
+      {/* ─── MODAL ADD/EDIT CATEGORY ─────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingCategory ? 'Edit Kategori Menu' : 'Tambah Kategori Menu Baru'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingCategory ? 'Edit Kategori Menu' : 'Tambah Kategori Menu Baru'}
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Nama Kategori Menu
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Kategori Menu *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: Signature Coffee, Manual Brew, Toast & Bakery"
+                  placeholder="contoh: Signature Coffee, Non-Coffee, Bakery"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50 shadow-md shadow-amber-950"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Kategori'}
                 </button>

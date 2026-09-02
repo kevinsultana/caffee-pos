@@ -10,6 +10,7 @@ import {
 } from '@/app/actions/promotion';
 import { getProducts } from '@/app/actions/product';
 import { formatRupiah, formatDate, cn } from '@/lib/utils';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 
 export default function PromotionsPage() {
   const [promotions, setPromotions] = useState([]);
@@ -118,34 +119,40 @@ export default function PromotionsPage() {
       return;
     }
 
-    if (scope === 'PRODUCT' && !targetProductId) {
-      toast.error('Pilih produk target untuk promosi berskala PRODUCT.');
+    if (Number(discountValue) <= 0) {
+      toast.error('Nilai diskon harus lebih dari 0.');
       return;
     }
 
+    if (discountType === 'PERCENTAGE' && Number(discountValue) > 100) {
+      toast.error('Diskon persentase tidak boleh melebihi 100%.');
+      return;
+    }
+
+    if (scope === 'PRODUCT' && !targetProductId) {
+      toast.error('Pilih target produk menu untuk promosi tipe PRODUCT.');
+      return;
+    }
+
+    const payload = {
+      name: name.trim(),
+      code: code.trim() ? code.trim().toUpperCase() : null,
+      description: description.trim() || null,
+      status,
+      priority: Number(priority) || 0,
+      stackable,
+      startAt: startAt || null,
+      endAt: endAt || null,
+      usageLimit: usageLimit ? Number(usageLimit) : null,
+      scope,
+      discountType,
+      discountValue: Number(discountValue),
+      maxDiscount: maxDiscount ? Number(maxDiscount) : null,
+      minimumPurchase: minimumPurchase ? Number(minimumPurchase) : null,
+      targetProductId: scope === 'PRODUCT' ? targetProductId : null,
+    };
+
     startTransition(async () => {
-      const toastId = toast.loading(
-        editingPromo ? 'Memperbarui promosi...' : 'Membuat promosi...'
-      );
-
-      const payload = {
-        name,
-        code,
-        description,
-        status,
-        priority: Number(priority),
-        stackable,
-        startAt,
-        endAt: endAt || null,
-        usageLimit: usageLimit ? Number(usageLimit) : null,
-        scope,
-        discountType,
-        discountValue: Number(discountValue),
-        maxDiscount: maxDiscount ? Number(maxDiscount) : null,
-        minimumPurchase: minimumPurchase ? Number(minimumPurchase) : null,
-        targetProductId: scope === 'PRODUCT' ? targetProductId : null,
-      };
-
       let res;
       if (editingPromo) {
         res = await updatePromotion(editingPromo.id, payload);
@@ -154,14 +161,9 @@ export default function PromotionsPage() {
       }
 
       if (res.error) {
-        toast.error(res.error, { id: toastId, duration: 4500 });
+        toast.error(res.error);
       } else {
-        toast.success(
-          editingPromo
-            ? 'Promosi berhasil diperbarui!'
-            : 'Promosi baru berhasil dibuat!',
-          { id: toastId }
-        );
+        toast.success(editingPromo ? 'Promosi berhasil diperbarui!' : 'Promosi baru berhasil dibuat!');
         setModalOpen(false);
         loadData();
       }
@@ -171,78 +173,57 @@ export default function PromotionsPage() {
   async function handleDelete(promo) {
     const Swal = (await import('sweetalert2')).default;
 
-    if (promo.usageCount > 0 || promo._count?.orderPromotions > 0) {
-      await Swal.fire({
-        icon: 'error',
-        title: 'Tidak Boleh Dihapus',
-        html: `
-          <div class="text-left text-sm text-stone-300 space-y-2">
-            <p>Promosi <b>"${promo.name}"</b> telah digunakan dalam <b>${promo.usageCount}</b> transaksi penjualan.</p>
-            <p class="text-xs text-stone-400">
-              Sesuai aturan audit ERD, promosi yang memiliki riwayat transaksi tidak boleh dihapus agar struk dan snapshot finansial historis tetap utuh.
-            </p>
-            <p class="text-xs text-amber-300 font-semibold">
-              Saran: Ubah status promosi menjadi <b>INACTIVE</b> untuk menghentikannya.
-            </p>
-          </div>
-        `,
-        confirmButtonColor: '#b45309',
-        background: '#1c1917',
-        color: '#fef3c7',
-      });
-      return;
-    }
-
     const confirm = await Swal.fire({
       title: 'Hapus Promosi?',
-      text: `Apakah Anda yakin ingin menghapus promosi "${promo.name}"?`,
+      text: `Apakah Anda yakin ingin menghapus promosi "${promo.name}"? Jika promosi sudah pernah digunakan di transaksi kasir, promosi akan dinonaktifkan secara otomatis.`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Ya, Hapus',
+      confirmButtonText: 'Ya, Hapus/Nonaktifkan',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
-    if (!confirm.isConfirmed) return;
-
-    startTransition(async () => {
-      const toastId = toast.loading('Menghapus promosi...');
-      const res = await deletePromotion(promo.id);
-
-      if (res.error) {
-        toast.error(res.error, { id: toastId });
-      } else {
-        toast.success('Promosi berhasil dihapus.', { id: toastId });
-        loadData();
-      }
-    });
+    if (confirm.isConfirmed) {
+      startTransition(async () => {
+        const res = await deletePromotion(promo.id);
+        if (res.error) {
+          toast.error(res.error);
+        } else {
+          toast.success(res.message || 'Promosi berhasil dihapus.');
+          loadData();
+        }
+      });
+    }
   }
 
   const filteredPromotions = promotions.filter((p) => {
-    const matchSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.code && p.code.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchStatus = selectedStatus === 'ALL' || p.status === selectedStatus;
-    return matchSearch && matchStatus;
+    const matchQuery =
+      !searchQuery.trim() ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.code?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchStatus && matchQuery;
   });
 
   return (
     <div className="space-y-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Manajemen Promosi & Diskon</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Konfigurasi aturan diskon berbasis kode promo atau diskon otomatis dengan evaluasi kondisi ketat.
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Promosi & Skema Diskon
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Aturan diskon terkendali (Voucher Kode Promo, Diskon Menu, dan Diskon Minimum Belanja).
           </p>
         </div>
         <button
           id="btn-add-promotion"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all w-fit"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all w-fit"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -251,10 +232,10 @@ export default function PromotionsPage() {
         </button>
       </div>
 
-      {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/* ─── FILTERS & SEARCH ─────────────────────────────────────────────── */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <input
@@ -262,13 +243,13 @@ export default function PromotionsPage() {
             placeholder="Cari nama promosi atau kode promo..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
           />
         </div>
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
         >
           <option value="ALL">Semua Status</option>
           <option value="ACTIVE">ACTIVE (Aktif)</option>
@@ -276,31 +257,31 @@ export default function PromotionsPage() {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
+      {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-stone-300">
-            <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4">Nama Promosi</th>
-                <th className="py-3 px-4">Kode Promo</th>
-                <th className="py-3 px-4">Cakupan (Scope)</th>
-                <th className="py-3 px-4">Skema Diskon</th>
-                <th className="py-3 px-4">Syarat Minimum</th>
-                <th className="py-3 px-4">Status & Kuota</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+                <th className="py-3.5 px-4">Nama Promosi</th>
+                <th className="py-3.5 px-4">Kode Promo</th>
+                <th className="py-3.5 px-4">Cakupan (Scope)</th>
+                <th className="py-3.5 px-4 text-right">Skema Diskon</th>
+                <th className="py-3.5 px-4 text-right">Syarat Minimum</th>
+                <th className="py-3.5 px-4">Status & Kuota</th>
+                <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-800/60">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Memuat daftar promosi...
                   </td>
                 </tr>
               ) : filteredPromotions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     {searchQuery || selectedStatus !== 'ALL'
                       ? 'Tidak ada promosi yang cocok dengan filter.'
                       : 'Belum ada promosi. Klik "Tambah Promosi" untuk membuat diskon baru.'}
@@ -317,84 +298,84 @@ export default function PromotionsPage() {
                   )?.product?.name;
 
                   return (
-                    <tr key={p.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-amber-50">{p.name}</div>
+                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-slate-900">{p.name}</div>
                         {p.description && (
-                          <p className="text-[11px] text-stone-500 line-clamp-1">
+                          <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
                             {p.description}
                           </p>
                         )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {p.code ? (
-                          <span className="inline-flex px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-amber-950/60 text-amber-300 border border-amber-800/50">
+                          <span className="inline-flex px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             {p.code}
                           </span>
                         ) : (
-                          <span className="text-xs text-stone-500 italic">Otomatis (No Code)</span>
+                          <span className="text-xs text-slate-400 italic">Otomatis (No Code)</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {action?.scope === 'PRODUCT' ? (
                           <div>
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-950/60 text-blue-400 border border-blue-800/50">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
                               PRODUCT
                             </span>
                             {prodTarget && (
-                              <p className="text-[11px] text-stone-400 mt-0.5">
+                              <p className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[120px]">
                                 Target: {prodTarget}
                               </p>
                             )}
                           </div>
                         ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-950/60 text-purple-400 border border-purple-800/50">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
                             ORDER (Subtotal)
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono text-xs">
-                        <span className="font-bold text-amber-300">
+                      <td className="py-3.5 px-4 font-mono text-xs text-right">
+                        <span className="font-bold text-slate-900">
                           {action?.type === 'PERCENTAGE'
                             ? `${action.value}%`
                             : formatRupiah(action?.value || 0)}
                         </span>
                         {action?.maxDiscount && (
-                          <span className="text-stone-500 block text-[10px]">
-                            Maks. {formatRupiah(action.maxDiscount)}
+                          <span className="text-slate-400 block text-[10px]">
+                            Maks: {formatRupiah(action.maxDiscount)}
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-xs font-mono text-stone-300">
+                      <td className="py-3.5 px-4 text-xs font-mono text-slate-700 text-right">
                         {minPurch ? formatRupiah(minPurch) : '-'}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <div className="space-y-0.5">
                           {p.status === 'ACTIVE' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                               ACTIVE
                             </span>
                           ) : (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-stone-800 text-stone-400 border border-stone-700">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                               INACTIVE
                             </span>
                           )}
-                          <p className="text-[10px] text-stone-500">
+                          <p className="text-[10px] text-slate-400 font-mono">
                             Terpakai: {p.usageCount} {p.usageLimit ? `/ ${p.usageLimit}` : 'kali'}
                           </p>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
+                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                         <button
                           onClick={() => openEditModal(p)}
-                          className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(p)}
-                          className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
                         >
                           Hapus
                         </button>
@@ -408,239 +389,63 @@ export default function PromotionsPage() {
         </div>
       </div>
 
-      {/* ─── MODAL ADD / EDIT PROMOTION ──────────────────────────────────────── */}
+      {/* ─── MODAL ADD/EDIT PROMOTION ────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingPromo ? 'Edit Promosi' : 'Buat Promosi / Diskon Baru'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingPromo ? 'Edit Promosi & Diskon' : 'Tambah Promosi Baru'}
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* Nama & Kode Promo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Nama Promosi
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="contoh: Diskon Grand Opening, Promo Kopi Sore"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Kode Promo (Voucher)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="contoh: KOPIHEMAT20 (Opsional)"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-300 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 uppercase"
-                  />
-                </div>
-              </div>
-
-              {/* Deskripsi */}
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Keterangan / Syarat Promosi
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Promosi *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: Diskon 20% khusus pembelian Espresso Blend di atas Rp50rb"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  placeholder="contoh: Diskon Grand Opening 20%, Promo Kopi Susu"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
                 />
               </div>
 
-              {/* Cakupan Scope: ORDER vs PRODUCT */}
-              <div className="p-4 bg-stone-800/50 border border-stone-700/60 rounded-2xl space-y-3">
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-widest">
-                  Cakupan Diskon (Discount Scope)
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setScope('ORDER')}
-                    className={cn(
-                      'p-3 rounded-xl border text-left transition-all',
-                      scope === 'ORDER'
-                        ? 'bg-amber-950/50 border-amber-500 text-amber-200 shadow-sm'
-                        : 'bg-stone-800/60 border-stone-700 text-stone-400 hover:border-stone-600'
-                    )}
-                  >
-                    <p className="text-sm font-semibold">ORDER Scope</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      Memotong subtotal seluruh pesanan belanja.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScope('PRODUCT')}
-                    className={cn(
-                      'p-3 rounded-xl border text-left transition-all',
-                      scope === 'PRODUCT'
-                        ? 'bg-amber-950/50 border-amber-500 text-amber-200 shadow-sm'
-                        : 'bg-stone-800/60 border-stone-700 text-stone-400 hover:border-stone-600'
-                    )}
-                  >
-                    <p className="text-sm font-semibold">PRODUCT Scope</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      Hanya memotong menu produk tertentu.
-                    </p>
-                  </button>
-                </div>
-
-                {scope === 'PRODUCT' && (
-                  <div className="pt-2">
-                    <label className="block text-xs font-semibold text-amber-400 uppercase tracking-widest mb-1.5">
-                      Pilih Menu Produk Target
-                    </label>
-                    <select
-                      value={targetProductId}
-                      onChange={(e) => setTargetProductId(e.target.value)}
-                      disabled={isPending}
-                      className="w-full px-3.5 py-2.5 bg-stone-900 border border-amber-600/60 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    >
-                      {products.map((prod) => (
-                        <option key={prod.id} value={prod.id}>
-                          {prod.name} ({formatRupiah(prod.price)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Tipe & Nilai Diskon */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Tipe Diskon
-                  </label>
-                  <select
-                    value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                  >
-                    <option value="PERCENTAGE">Persentase (%)</option>
-                    <option value="FIXED_AMOUNT">Nominal Tetap (Rp)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Besar Diskon ({discountType === 'PERCENTAGE' ? '%' : 'Rp'})
-                  </label>
-                  <input
-                    type="number"
-                    min="0.1"
-                    max={discountType === 'PERCENTAGE' ? 100 : undefined}
-                    step="any"
-                    value={discountValue}
-                    onChange={(e) => setDiscountValue(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono font-bold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Maks. Diskon (Rp, Opsional)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    placeholder="contoh: 25000"
-                    value={maxDiscount}
-                    onChange={(e) => setMaxDiscount(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Syarat & Batas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Min. Pembelian Subtotal (Rp)
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Kode Promo (Opsional)
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="5000"
-                    placeholder="0"
-                    value={minimumPurchase}
-                    onChange={(e) => setMinimumPurchase(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
+                    type="text"
+                    placeholder="contoh: SCHAW20"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Jika dikosongkan, promo berlaku otomatis jika syarat terpenuhi.
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Batas Kuota Pemakaian (Kali)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Unlimited jika kosong"
-                    value={usageLimit}
-                    onChange={(e) => setUsageLimit(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Periode & Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Tanggal Mulai
-                  </label>
-                  <input
-                    type="date"
-                    value={startAt}
-                    onChange={(e) => setStartAt(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                    Tanggal Berakhir (Opsional)
-                  </label>
-                  <input
-                    type="date"
-                    value={endAt}
-                    onChange={(e) => setEndAt(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Status Promosi
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
-                    disabled={isPending}
-                    className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="ACTIVE">ACTIVE (Aktif)</option>
                     <option value="INACTIVE">INACTIVE (Non-Aktif)</option>
@@ -648,20 +453,139 @@ export default function PromotionsPage() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-800">
+              {/* Skema Diskon & Scope */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Cakupan & Nilai Diskon
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-500 font-bold mb-1">Cakupan (Scope)</label>
+                    <select
+                      value={scope}
+                      onChange={(e) => setScope(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="ORDER">ORDER (Seluruh Tagihan)</option>
+                      <option value="PRODUCT">PRODUCT (Menu Tertentu)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-500 font-bold mb-1">Tipe Diskon</label>
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="PERCENTAGE">PERCENTAGE (%)</option>
+                      <option value="FIXED_AMOUNT">FIXED AMOUNT (Rp Potongan)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] text-slate-500 font-bold mb-1">
+                      {discountType === 'PERCENTAGE' ? 'Nilai Diskon (%) *' : 'Nominal Potongan (Rp) *'}
+                    </label>
+                    {discountType === 'PERCENTAGE' ? (
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          placeholder="10"
+                          value={discountValue}
+                          onChange={(e) => setDiscountValue(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          required
+                        />
+                        <span className="absolute right-3 top-2 text-xs text-slate-400 font-mono font-bold">%</span>
+                      </div>
+                    ) : (
+                      <CurrencyInput
+                        placeholder="10.000"
+                        value={discountValue}
+                        onChange={(val) => setDiscountValue(val)}
+                        required
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-500 font-bold mb-1">
+                      Maksimal Diskon (Rp, Opsional)
+                    </label>
+                    <CurrencyInput
+                      placeholder="contoh: 20.000"
+                      value={maxDiscount}
+                      onChange={(val) => setMaxDiscount(val)}
+                    />
+                  </div>
+                </div>
+
+                {scope === 'PRODUCT' && (
+                  <div className="pt-2">
+                    <label className="block text-[10px] text-emerald-800 font-bold mb-1">
+                      Pilih Menu Target Diskon *
+                    </label>
+                    <select
+                      value={targetProductId}
+                      onChange={(e) => setTargetProductId(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    >
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({formatRupiah(p.price)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Syarat & Batasan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Minimal Belanja (Rp, Opsional)
+                  </label>
+                  <CurrencyInput
+                    placeholder="contoh: 50.000"
+                    value={minimumPurchase}
+                    onChange={(val) => setMinimumPurchase(val)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Batas Kuota Pemakaian (Kali)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="contoh: 100 (Kosong = Tak Terbatas)"
+                    value={usageLimit}
+                    onChange={(e) => setUsageLimit(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-6 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50 shadow-md shadow-amber-950"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Promosi'}
                 </button>

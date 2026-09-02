@@ -305,8 +305,16 @@ export default function PublicMenuPage() {
             return (
               <div
                 key={prod.id}
-                className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800/80 flex items-center justify-between gap-3 shadow-sm hover:border-amber-700/40 transition-colors"
+                className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800/80 flex items-center justify-between gap-3.5 shadow-sm hover:border-amber-700/40 transition-colors"
               >
+                {/* Product Thumbnail if exists */}
+                {prod.imageUrl ? (
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-stone-800 shrink-0 border border-stone-700/60">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
+                  </div>
+                ) : null}
+
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">

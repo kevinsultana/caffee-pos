@@ -21,7 +21,31 @@ export function formatRupiah(amount) {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
-  }).format(amount);
+  }).format(amount || 0);
+}
+
+/**
+ * Formats a raw number into Indonesian thousand-separated string (e.g. 1500000 -> "1.500.000")
+ * @param {number|string} val
+ * @returns {string}
+ */
+export function formatThousand(val) {
+  if (val === undefined || val === null || val === '') return '';
+  const numStr = String(val).replace(/\D/g, '');
+  if (!numStr) return '';
+  return Number(numStr).toLocaleString('id-ID');
+}
+
+/**
+ * Parses a thousand-separated string into a pure integer/number (e.g. "1.500.000" -> 1500000)
+ * @param {string|number} val
+ * @returns {number}
+ */
+export function parseThousand(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return val;
+  const cleaned = String(val).replace(/\D/g, '');
+  return cleaned ? parseInt(cleaned, 10) : 0;
 }
 
 /**

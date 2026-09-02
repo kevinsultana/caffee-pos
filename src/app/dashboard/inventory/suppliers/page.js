@@ -94,9 +94,9 @@ export default function SuppliersPage() {
         icon: 'error',
         title: 'Tidak Dapat Dihapus',
         text: `Supplier "${sup.name}" memiliki ${sup._count.purchases} riwayat pembelian bahan. Data ini tidak dapat dihapus untuk menjaga audit pembukuan.`,
-        confirmButtonColor: '#b45309',
-        background: '#1c1917',
-        color: '#fef3c7',
+        confirmButtonColor: '#e11d48',
+        background: '#ffffff',
+        color: '#0f172a',
       });
       return;
     }
@@ -108,204 +108,215 @@ export default function SuppliersPage() {
       showCancelButton: true,
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
-    if (!confirm.isConfirmed) return;
-
-    startTransition(async () => {
-      const toastId = toast.loading('Menghapus supplier...');
-      const res = await deleteSupplier(sup.id);
-      if (res.error) {
-        toast.error(res.error, { id: toastId, duration: 4000 });
-      } else {
-        toast.success('Supplier berhasil dihapus.', { id: toastId });
-        loadData();
-      }
-    });
+    if (confirm.isConfirmed) {
+      startTransition(async () => {
+        const toastId = toast.loading('Menghapus data...');
+        const res = await deleteSupplier(sup.id);
+        if (res.error) {
+          toast.error(res.error, { id: toastId });
+        } else {
+          toast.success('Supplier berhasil dihapus.', { id: toastId });
+          loadData();
+        }
+      });
+    }
   }
 
-  const filteredSuppliers = suppliers.filter(
-    (s) =>
+  const filteredSuppliers = suppliers.filter((s) => {
+    return (
+      !searchQuery.trim() ||
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.phone && s.phone.includes(searchQuery)) ||
-      (s.address && s.address.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+      s.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-6xl">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Daftar Supplier / Vendor</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Kelola data vendor penyedia biji kopi, susu, sirup, dan kemasan.
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Data Supplier & Vendor
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Daftar distributor dan supplier penyedia bahan baku kopi, susu, sirup, dan kemasan kafe.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/inventory/purchases"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-stone-300 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/60 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Riwayat Pembelian
-          </Link>
-          <button
-            id="btn-add-supplier"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-semibold shadow-md shadow-amber-950 transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Tambah Supplier
-          </button>
+        <button
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all w-fit"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          + Tambah Supplier
+        </button>
+      </div>
+
+      {/* ─── SEARCH ───────────────────────────────────────────────────────── */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+        <div className="relative">
+          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Cari nama supplier atau nomor kontak..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+          />
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Cari nama supplier, nomor telepon, atau alamat..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-        />
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden">
-        <table className="w-full text-left text-sm text-stone-300">
-          <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
-            <tr>
-              <th className="py-3 px-4">Nama Supplier</th>
-              <th className="py-3 px-4">Kontak Telepon</th>
-              <th className="py-3 px-4">Alamat</th>
-              <th className="py-3 px-4">Transaksi PO</th>
-              <th className="py-3 px-4 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-800/60">
-            {loading ? (
+      {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <td colSpan={5} className="py-8 text-center text-stone-500">
-                  Memuat data supplier...
-                </td>
+                <th className="py-3.5 px-6">Nama Supplier</th>
+                <th className="py-3.5 px-6">Kontak / Telepon</th>
+                <th className="py-3.5 px-6">Alamat</th>
+                <th className="py-3.5 px-6">Riwayat PO</th>
+                <th className="py-3.5 px-6 text-right">Aksi</th>
               </tr>
-            ) : filteredSuppliers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-stone-500">
-                  {searchQuery
-                    ? 'Tidak ada supplier yang cocok dengan pencarian.'
-                    : 'Belum ada supplier terdaftar. Klik "Tambah Supplier" untuk memulai.'}
-                </td>
-              </tr>
-            ) : (
-              filteredSuppliers.map((sup) => (
-                <tr key={sup.id} className="hover:bg-stone-800/30 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-amber-50">{sup.name}</td>
-                  <td className="py-3 px-4 font-mono text-xs text-stone-300">
-                    {sup.phone || '-'}
-                  </td>
-                  <td className="py-3 px-4 text-xs text-stone-400 max-w-xs truncate">
-                    {sup.address || '-'}
-                  </td>
-                  <td className="py-3 px-4 text-xs text-stone-400">
-                    <span className="inline-flex px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700/60">
-                      {sup._count?.purchases || 0} PO
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => openEditModal(sup)}
-                      className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(sup)}
-                      className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
-                    >
-                      Hapus
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    Memuat data supplier...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : filteredSuppliers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    {searchQuery
+                      ? 'Tidak ada supplier yang cocok dengan pencarian.'
+                      : 'Belum ada supplier terdaftar. Klik "+ Tambah Supplier" untuk memulai.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredSuppliers.map((sup) => (
+                  <tr key={sup.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3.5 px-6 font-bold text-slate-900">
+                      {sup.name}
+                    </td>
+                    <td className="py-3.5 px-6 font-mono text-slate-600">
+                      {sup.phone || '-'}
+                    </td>
+                    <td className="py-3.5 px-6 text-slate-600">
+                      {sup.address || '-'}
+                    </td>
+                    <td className="py-3.5 px-6">
+                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                        {sup._count?.purchases || 0} Pembelian
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-6 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => openEditModal(sup)}
+                        className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(sup)}
+                        className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Modal Add / Edit */}
+      {/* ─── MODAL ADD/EDIT SUPPLIER ────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-amber-50">
-              {editingSupplier ? 'Edit Data Supplier' : 'Tambah Supplier Baru'}
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingSupplier ? 'Edit Data Supplier' : 'Tambah Supplier Baru'}
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Nama Supplier / Perusahaan
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nama Supplier / Vendor *
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: PT Kopi Nusantara, CV Sumber Dairy"
+                  placeholder="contoh: PT. Sukses Jaya Kopi, CV. Sumber Dairy"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                   Nomor Telepon / WhatsApp
                 </label>
                 <input
                   type="text"
-                  placeholder="contoh: 081234567890"
+                  placeholder="contoh: 021-5551234, 08123456789"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Alamat Lengkap / Catatan
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Alamat Kantor / Gudang
                 </label>
                 <textarea
-                  rows={3}
-                  placeholder="contoh: Jl. Roastery No. 12, Jakarta Barat"
+                  rows="2"
+                  placeholder="Alamat lengkap supplier..."
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800/80 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50 shadow-md shadow-amber-950"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Supplier'}
                 </button>

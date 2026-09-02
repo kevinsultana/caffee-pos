@@ -35,11 +35,14 @@ export async function getPosInitData() {
         where: {
           storeId,
           discontinued: false,
-          availability: 'AVAILABLE',
         },
         orderBy: { name: 'asc' },
         include: {
           category: true,
+          variants: {
+            where: { discontinued: false },
+            orderBy: { name: 'asc' },
+          },
           inventoryItem: {
             include: {
               baseUnit: true,
@@ -68,6 +71,10 @@ export async function getPosInitData() {
     const serializedProducts = products.map((p) => ({
       ...p,
       price: Number(p.price),
+      variants: p.variants?.map((v) => ({
+        ...v,
+        price: Number(v.price),
+      })) || [],
       inventoryItem: p.inventoryItem
         ? {
             ...p.inventoryItem,

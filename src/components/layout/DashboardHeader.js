@@ -1,25 +1,26 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { logout } from '@/app/actions/auth';
 
 export default function DashboardHeader({ user, onMenuToggle }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     const Swal = (await import('sweetalert2')).default;
 
     const result = await Swal.fire({
-      title: 'Logout?',
-      text: 'Sesi Anda akan diakhiri.',
+      title: 'Konfirmasi Logout',
+      text: 'Apakah Anda yakin ingin mengakhiri sesi kerja ini?',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Ya, Logout',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#b45309',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (!result.isConfirmed) return;
@@ -36,48 +37,77 @@ export default function DashboardHeader({ user, onMenuToggle }) {
     .toUpperCase()
     .slice(0, 2);
 
+  // Simple breadcrumb label helper
+  const getPageTitle = () => {
+    if (pathname === '/dashboard') return 'Dashboard Ringkasan';
+    if (pathname.startsWith('/dashboard/pos/cash')) return 'POS / Arus Kas Manual';
+    if (pathname.startsWith('/dashboard/pos/shift')) return 'POS / Manajemen Shift';
+    if (pathname.startsWith('/dashboard/pos')) return 'Point of Sale (Kasir)';
+    if (pathname.startsWith('/dashboard/qr')) return 'Generate QR Meja';
+    if (pathname.startsWith('/dashboard/products/categories')) return 'Master Menu / Kategori';
+    if (pathname.startsWith('/dashboard/products/list')) return 'Master Menu / Daftar Menu & Resep';
+    if (pathname.startsWith('/dashboard/promotions')) return 'Master Menu / Promosi & Diskon';
+    if (pathname.startsWith('/dashboard/customers')) return 'Database Pelanggan & Member';
+    if (pathname.startsWith('/dashboard/inventory/items')) return 'Inventaris / Daftar Bahan Baku';
+    if (pathname.startsWith('/dashboard/inventory/purchases')) return 'Inventaris / Pembelian Supplier';
+    if (pathname.startsWith('/dashboard/inventory/movements')) return 'Inventaris / Kartu Stok Mutasi';
+    if (pathname.startsWith('/dashboard/inventory/opname')) return 'Inventaris / Stock Opname';
+    if (pathname.startsWith('/dashboard/inventory/suppliers')) return 'Inventaris / Data Supplier';
+    if (pathname.startsWith('/dashboard/inventory/setup')) return 'Inventaris / Satuan & Kategori';
+    if (pathname.startsWith('/dashboard/users')) return 'Administrasi / Manajemen Karyawan';
+    if (pathname.startsWith('/dashboard/audit')) return 'Administrasi / System Audit Trail';
+    if (pathname.startsWith('/dashboard/settings')) return 'Konfigurasi Toko';
+    return 'Schaw POS';
+  };
+
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-4 px-4 lg:px-6 py-3.5 bg-stone-950/80 backdrop-blur-md border-b border-stone-800/60">
-      {/* Mobile hamburger */}
-      <button
-        id="btn-sidebar-toggle"
-        onClick={onMenuToggle}
-        className="lg:hidden p-2 rounded-xl text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
-        aria-label="Toggle sidebar"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
-      </button>
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 lg:px-8 py-3.5 bg-white border-b border-slate-200/80 shadow-2xs">
+      {/* Left: Mobile hamburger & breadcrumb */}
+      <div className="flex items-center gap-3">
+        <button
+          id="btn-sidebar-toggle"
+          onClick={onMenuToggle}
+          className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+          aria-label="Toggle sidebar"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
 
-      {/* Page breadcrumb / title area */}
-      <div className="flex-1 hidden lg:block" />
-
-      {/* Right section */}
-      <div className="flex items-center gap-3 ml-auto">
-        {/* User info */}
-        <div className="hidden sm:flex flex-col items-end">
-          <p className="text-sm font-semibold text-amber-50 leading-none">{user?.name ?? 'User'}</p>
-          <p className="text-xs text-stone-500 mt-0.5">{roleLabel}</p>
+        <div>
+          <h2 className="text-xs font-semibold text-slate-700 hidden sm:block">
+            {getPageTitle()}
+          </h2>
         </div>
+      </div>
 
-        {/* Avatar */}
-        <div className="w-9 h-9 rounded-xl bg-amber-900/40 border border-amber-700/30 flex items-center justify-center shrink-0">
-          <span className="text-xs font-bold text-amber-300">{initials}</span>
+      {/* Right section: User Profile & Actions */}
+      <div className="flex items-center gap-3 ml-auto">
+        {/* User Info & Badge */}
+        <div className="flex items-center gap-2.5 pl-2">
+          <div className="hidden sm:flex flex-col items-end">
+            <span className="text-xs font-bold text-slate-900 leading-none">{user?.name ?? 'User'}</span>
+            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-1 border border-emerald-200/60">
+              {roleLabel}
+            </span>
+          </div>
+
+          {/* Avatar with Initials */}
+          <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs ring-2 ring-emerald-100">
+            {initials}
+          </div>
         </div>
 
         {/* Divider */}
-        <div className="w-px h-6 bg-stone-800" />
+        <div className="w-px h-6 bg-slate-200" />
 
-        {/* Logout button */}
+        {/* Logout Button */}
         <button
           id="btn-logout"
           onClick={handleLogout}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium
-            text-stone-400 hover:text-red-400 hover:bg-red-950/30
-            border border-transparent hover:border-red-900/40
-            transition-all duration-200"
-          aria-label="Logout"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 hover:border-rose-200 transition-all"
+          title="Keluar dari sistem"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />

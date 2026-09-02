@@ -110,6 +110,7 @@ model Store {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   code      String   @unique
+  logoUrl   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -154,6 +155,8 @@ model StoreSettings {
 
   cashRoundingEnabled Boolean @default(false)
   cashRoundingUnit    Decimal @db.Decimal(18, 2)
+
+  printerWidth Int @default(58)
 
   timezone String @default("Asia/Jakarta")
 
@@ -320,8 +323,9 @@ model Product {
 
   categoryId String @db.Uuid
 
-  name String
-  sku  String?
+  name     String
+  sku      String?
+  imageUrl String?
 
   type  ProductType
   price Decimal     @db.Decimal(18, 2)

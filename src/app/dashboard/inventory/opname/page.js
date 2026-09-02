@@ -50,31 +50,31 @@ export default function StockOpnamePage() {
 
     const diffBadge =
       diff === 0
-        ? '<span class="text-stone-300 font-bold">Pas (Tidak ada selisih)</span>'
+        ? '<span class="text-slate-700 font-bold">Pas (Tidak ada selisih)</span>'
         : diff > 0
-        ? `<span class="text-emerald-400 font-bold">Surplus (+${diff} ${selectedItem.baseUnitCode})</span>`
-        : `<span class="text-red-400 font-bold">Defisit (${diff} ${selectedItem.baseUnitCode})</span>`;
+        ? `<span class="text-emerald-700 font-bold">Surplus (+${diff} ${selectedItem.baseUnitCode})</span>`
+        : `<span class="text-rose-600 font-bold">Defisit (${diff} ${selectedItem.baseUnitCode})</span>`;
 
     const confirm = await Swal.fire({
       title: 'Konfirmasi Stock Opname?',
       html: `
-        <div class="text-left text-sm text-stone-300 space-y-2">
-          <p>Anda akan melakukan penyesuaian stok untuk: <b>${selectedItem.name}</b></p>
-          <div class="p-3 bg-stone-800 rounded-xl space-y-1 text-xs font-mono">
-            <div class="flex justify-between text-stone-400">
+        <div class="text-left text-xs text-slate-700 space-y-2 font-sans">
+          <p>Anda akan melakukan penyesuaian stok untuk: <strong class="text-slate-900">${selectedItem.name}</strong></p>
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 font-mono text-xs">
+            <div class="flex justify-between text-slate-500">
               <span>Stok Sistem:</span>
               <span>${selectedItem.systemQuantity} ${selectedItem.baseUnitCode}</span>
             </div>
-            <div class="flex justify-between text-stone-400">
+            <div class="flex justify-between text-slate-500">
               <span>Stok Fisik Aktual:</span>
-              <span class="text-amber-300 font-bold">${numPhysical} ${selectedItem.baseUnitCode}</span>
+              <span class="text-slate-900 font-bold">${numPhysical} ${selectedItem.baseUnitCode}</span>
             </div>
-            <div class="flex justify-between pt-1 border-t border-stone-700">
+            <div class="flex justify-between pt-1 border-t border-slate-200">
               <span>Perubahan Stok:</span>
               <span>${diffBadge}</span>
             </div>
           </div>
-          <p class="text-xs text-stone-400 italic">
+          <p class="text-xs text-slate-400 italic">
             Perubahan akan dicatat ke kartu stok dengan tipe mutasi <b>ADJUSTMENT</b>.
           </p>
         </div>
@@ -83,10 +83,10 @@ export default function StockOpnamePage() {
       showCancelButton: true,
       confirmButtonText: 'Ya, Sesuaikan Stok',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#b45309',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (!confirm.isConfirmed) return;
@@ -103,7 +103,7 @@ export default function StockOpnamePage() {
         toast.error(res.error, { id: toastId });
       } else {
         toast.success(
-          `Stok "${selectedItem.name}" berhasil disesuaikan!`,
+          `Penyesuaian stok "${res.data.itemName}" berhasil disimpan!`,
           { id: toastId }
         );
         setSelectedItem(null);
@@ -114,126 +114,123 @@ export default function StockOpnamePage() {
 
   const filteredItems = items.filter((it) => {
     return (
+      !searchQuery.trim() ||
       it.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (it.sku && it.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
       it.categoryName.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
 
   return (
     <div className="space-y-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-amber-50">Stock Opname & Penyesuaian Fisik</h1>
-          <p className="text-sm text-stone-400 mt-0.5">
-            Cocokkan saldo sistem persediaan dengan hasil penghitungan fisik nyata di gudang / bar.
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Stock Opname & Rekonsiliasi Fisik
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Penyesuaian kuantitas fisik riil di gudang dengan catatan saldo sistem untuk memperbarui kartu stok secara akurat.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/inventory/movements"
-            className="px-4 py-2 rounded-xl text-sm font-semibold bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition-colors flex items-center gap-1.5"
-          >
-            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
-            </svg>
-            Kartu Mutasi Stok
-          </Link>
-          <Link
-            href="/dashboard/inventory/items"
-            className="px-4 py-2 rounded-xl text-sm font-semibold bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition-colors flex items-center gap-1.5"
-          >
-            Daftar Bahan Baku
-          </Link>
+        <Link
+          href="/dashboard/inventory/movements"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-2xs transition-colors self-start sm:self-auto"
+        >
+          <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+          </svg>
+          Buku Mutasi Stok
+        </Link>
+      </div>
+
+      {/* ─── SEARCH ───────────────────────────────────────────────────────── */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+        <div className="relative">
+          <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Cari nama bahan baku untuk stock opname..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+          />
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Cari bahan baku berdasarkan nama, SKU, atau kategori..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-stone-900/60 border border-stone-800 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-        />
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-stone-800/80 bg-stone-900/40 overflow-hidden shadow-xl">
+      {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-stone-300">
-            <thead className="bg-stone-800/60 text-xs font-semibold uppercase tracking-wider text-stone-400 border-b border-stone-800">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="py-3.5 px-4">Nama Bahan Baku</th>
                 <th className="py-3.5 px-4">Kategori</th>
-                <th className="py-3.5 px-4">Satuan Dasar</th>
-                <th className="py-3.5 px-4">Stok Tercatat di Sistem</th>
-                <th className="py-3.5 px-4">HPP / Unit (WAC)</th>
-                <th className="py-3.5 px-4 text-right">Aksi Opname</th>
+                <th className="py-3.5 px-4 text-right">Stok Sistem Saat Ini</th>
+                <th className="py-3.5 px-4 text-right">Biaya Rata-rata (WAC)</th>
+                <th className="py-3.5 px-4">Status Saldo</th>
+                <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-800/60">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-stone-500">
-                    Memuat daftar bahan inventaris...
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    Memuat daftar bahan untuk stock opname...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-stone-500">
-                    Tidak ada bahan baku ditemukan.
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    Tidak ada bahan baku yang sesuai dengan pencarian.
                   </td>
                 </tr>
               ) : (
                 filteredItems.map((it) => {
-                  const isNegative = it.systemQuantity < 0;
-                  const isLow = it.minimumStock !== null && it.systemQuantity <= it.minimumStock;
+                  const qty = it.systemQuantity;
+                  const isNegative = qty < 0;
 
                   return (
-                    <tr key={it.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-amber-50">{it.name}</div>
-                        {it.sku && (
-                          <span className="text-[11px] font-mono text-stone-500">
-                            SKU: {it.sku}
+                    <tr key={it.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {it.name}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          {it.categoryName}
+                        </span>
+                      </td>
+                      <td
+                        className={cn(
+                          'py-3.5 px-4 font-mono font-bold text-right text-xs',
+                          isNegative ? 'text-rose-600' : 'text-slate-900'
+                        )}
+                      >
+                        {qty.toLocaleString('id-ID')} {it.baseUnitCode}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-slate-700 text-right">
+                        {formatRupiah(it.averageCost)} / {it.baseUnitCode}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {isNegative ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Defisit (Minus)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Normal
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-xs text-stone-400">
-                        {it.categoryName}
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-amber-400/90 font-bold">
-                        {it.baseUnitCode}
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold">
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs',
-                            isNegative
-                              ? 'bg-red-950/60 text-red-400 border border-red-800/50'
-                              : isLow
-                              ? 'bg-amber-950/60 text-amber-400 border border-amber-800/50'
-                              : 'text-stone-200'
-                          )}
-                        >
-                          {it.systemQuantity} {it.baseUnitCode}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-stone-300">
-                        {formatRupiah(it.averageCost)}/{it.baseUnitCode}
-                      </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => openAdjustModal(it)}
-                          className="px-3.5 py-1.5 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-600/40 rounded-xl text-xs font-bold transition-all"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all"
                         >
-                          Hitung Fisik
+                          Input Hitung Fisik &rarr;
                         </button>
                       </td>
                     </tr>
@@ -245,61 +242,64 @@ export default function StockOpnamePage() {
         </div>
       </div>
 
-      {/* ─── MODAL FORM OPNAME ──────────────────────────────────────────────── */}
+      {/* ─── MODAL INPUT OPNAME FISIK ────────────────────────────────────────── */}
       {selectedItem && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                Form Penyesuaian Stok Fisik
-              </span>
-              <h3 className="text-lg font-bold text-amber-50 mt-0.5">
-                {selectedItem.name}
-              </h3>
-              <p className="text-xs text-stone-400">
-                Stok Sistem Saat Ini:{' '}
-                <span className="font-mono font-bold text-stone-200">
-                  {selectedItem.systemQuantity} {selectedItem.baseUnitCode}
-                </span>
-              </p>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Input Stock Opname Fisik
+                </h3>
+                <p className="text-xs text-slate-500">{selectedItem.name}</p>
+              </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             <form onSubmit={handleSaveAdjustment} className="space-y-4">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Saldo Tercatat di Sistem:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {selectedItem.systemQuantity} {selectedItem.baseUnitCode}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Biaya Rata-rata (WAC):</span>
+                  <span className="font-mono">{formatRupiah(selectedItem.averageCost)}</span>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-widest mb-1.5">
-                  Kuantitas Fisik Riil ({selectedItem.baseUnitCode})
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Jumlah Fisik Riil Hasil Hitung *
                 </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={physicalQty}
-                  onChange={(e) => setPhysicalQty(e.target.value)}
-                  disabled={isPending}
-                  className="w-full px-4 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-300 font-mono font-bold text-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  required
-                />
-              </div>
-
-              {/* Difference Preview */}
-              <div className="p-3 bg-stone-950/60 border border-stone-800 rounded-2xl flex items-center justify-between text-xs">
-                <span className="text-stone-400 font-medium">Estimasi Selisih:</span>
-                <span
-                  className={cn(
-                    'font-mono font-bold text-sm',
-                    Number(physicalQty) - selectedItem.systemQuantity === 0
-                      ? 'text-stone-400'
-                      : Number(physicalQty) - selectedItem.systemQuantity > 0
-                      ? 'text-emerald-400'
-                      : 'text-red-400'
-                  )}
-                >
-                  {Number(physicalQty) - selectedItem.systemQuantity > 0 ? '+' : ''}
-                  {Number(physicalQty) - selectedItem.systemQuantity} {selectedItem.baseUnitCode}
-                </span>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={physicalQty}
+                    onChange={(e) => setPhysicalQty(e.target.value)}
+                    disabled={isPending}
+                    className="w-full pl-3 pr-14 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">
+                    {selectedItem.baseUnitCode}
+                  </span>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                   Alasan / Keterangan Penyesuaian
                 </label>
                 <input
@@ -307,27 +307,45 @@ export default function StockOpnamePage() {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="contoh: Stock Opname Akhir Bulan, Tumpah/Bocor"
-                  required
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="flex gap-2 pt-2 border-t border-stone-800">
+              {/* Live Difference Preview */}
+              {!isNaN(Number(physicalQty)) && (
+                <div className="p-3 rounded-xl border flex items-center justify-between text-xs font-mono bg-slate-50 border-slate-200">
+                  <span className="text-slate-600 font-sans">Selisih Stok:</span>
+                  <span
+                    className={cn(
+                      'font-bold',
+                      Number(physicalQty) - selectedItem.systemQuantity > 0
+                        ? 'text-emerald-700'
+                        : Number(physicalQty) - selectedItem.systemQuantity < 0
+                        ? 'text-rose-600'
+                        : 'text-slate-700'
+                    )}
+                  >
+                    {Number(physicalQty) - selectedItem.systemQuantity > 0 ? '+' : ''}
+                    {Number(physicalQty) - selectedItem.systemQuantity} {selectedItem.baseUnitCode}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setSelectedItem(null)}
                   disabled={isPending}
-                  className="w-1/3 py-2.5 rounded-xl text-xs font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="w-2/3 py-2.5 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-950 transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
-                  {isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  {isPending ? 'Memproses...' : 'Simpan Penyesuaian'}
                 </button>
               </div>
             </form>

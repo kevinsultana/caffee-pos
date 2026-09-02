@@ -11,6 +11,7 @@ import {
   addCashMovement,
 } from '@/app/actions/shift';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
+import CurrencyInput from '@/components/ui/CurrencyInput';
 
 export default function ShiftManagementPage() {
   const router = useRouter();
@@ -79,52 +80,58 @@ export default function ShiftManagementPage() {
 
     const diffText =
       diff === 0
-        ? '<span class="text-emerald-400 font-bold">Pas (Tidak ada selisih)</span>'
+        ? '<span class="text-slate-700 font-bold">Pas (Tidak ada selisih)</span>'
         : diff > 0
-        ? `<span class="text-emerald-400 font-bold">Surplus / Lebih: +${formatRupiah(diff)}</span>`
-        : `<span class="text-red-400 font-bold">Defisit / Kurang: -${formatRupiah(Math.abs(diff))}</span>`;
+        ? `<span class="text-emerald-700 font-bold">Surplus / Lebih: +${formatRupiah(diff)}</span>`
+        : `<span class="text-rose-600 font-bold">Defisit / Kurang: -${formatRupiah(Math.abs(diff))}</span>`;
 
     const confirm = await Swal.fire({
       title: 'Tutup Shift Kasir?',
       html: `
-        <div class="text-left text-sm text-stone-300 space-y-2">
+        <div class="text-left text-xs text-slate-700 space-y-2 font-sans">
           <p>Anda akan menutup sesi shift saat ini.</p>
-          <div class="p-3 bg-stone-800 rounded-xl space-y-1 text-xs">
-            <div class="flex justify-between text-stone-400">
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+            <div class="flex justify-between text-slate-500">
               <span>Kas Diharapkan (Expected):</span>
-              <span class="font-mono font-bold text-amber-300">${formatRupiah(expected)}</span>
+              <span class="font-mono font-bold text-slate-900">${formatRupiah(expected)}</span>
             </div>
-            <div class="flex justify-between text-stone-400">
+            <div class="flex justify-between text-slate-500">
               <span>Kas Fisik Aktual:</span>
-              <span class="font-mono font-bold text-stone-100">${formatRupiah(actual)}</span>
+              <span class="font-mono font-bold text-slate-900">${formatRupiah(actual)}</span>
             </div>
-            <div class="flex justify-between pt-1 border-t border-stone-700">
-              <span>Status Selisih:</span>
-              <span>${diffText}</span>
+            <div class="flex justify-between pt-1 border-t border-slate-200">
+              <span>Selisih Rekonsiliasi:</span>
+              <span class="font-mono">${diffText}</span>
             </div>
           </div>
+          <p class="text-xs text-slate-400 italic">
+            Laporan penutupan shift akan tercatat dan laci kasir dinonaktifkan hingga dibuka kembali.
+          </p>
         </div>
       `,
-      icon: 'warning',
+      icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Ya, Tutup Shift',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#b45309',
-      cancelButtonColor: '#44403c',
-      background: '#1c1917',
-      color: '#fef3c7',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
     });
 
     if (!confirm.isConfirmed) return;
 
     startTransition(async () => {
-      const toastId = toast.loading('Menutup shift kasir...');
-      const res = await closeShift({ actualCash: actual });
+      const toastId = toast.loading('Menutup shift dan menghitung rekonsiliasi...');
+      const res = await closeShift({
+        actualCash: actual,
+        notes: `Tutup shift kasir. Selisih: ${diff}`,
+      });
 
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success('Shift kasir berhasil ditutup.', { id: toastId });
+        toast.success('Shift kasir berhasil ditutup. Laporan tersimpan.', { id: toastId });
         loadShiftData();
       }
     });
@@ -132,23 +139,33 @@ export default function ShiftManagementPage() {
 
   function handleSaveMovement(e) {
     e.preventDefault();
-    if (Number(movementAmount) <= 0 || !movementReason.trim()) {
-      toast.error('Jumlah dan alasan mutasi kas wajib diisi.');
+    const amt = Number(movementAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Nominal mutasi kas harus lebih dari 0.');
+      return;
+    }
+    if (!movementReason.trim()) {
+      toast.error('Alasan mutasi kas wajib diisi.');
       return;
     }
 
     startTransition(async () => {
-      const toastId = toast.loading('Mencatat pergerakan kas...');
+      const toastId = toast.loading('Mencatat mutasi kas...');
       const res = await addCashMovement({
         type: movementType,
-        amount: Number(movementAmount),
-        reason: movementReason,
+        amount: amt,
+        reason: movementReason.trim(),
       });
 
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success('Mutasi kas berhasil dicatat!', { id: toastId });
+        toast.success(
+          movementType === 'CASH_IN'
+            ? 'Kas Masuk berhasil dicatat!'
+            : 'Kas Keluar berhasil dicatat!',
+          { id: toastId }
+        );
         setMovementModalOpen(false);
         setMovementAmount(0);
         setMovementReason('');
@@ -159,322 +176,365 @@ export default function ShiftManagementPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-stone-500">
-        Memeriksa status shift kasir...
+      <div className="p-12 text-center text-slate-400 text-xs">
+        Memuat status shift kasir...
       </div>
     );
   }
 
   return (
     <div className="space-y-6 max-w-5xl">
-      {/* ─── KONDISI 1: BELUM BUKA SHIFT ────────────────────────────────────── */}
+      {/* ─── HEADER ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Manajemen Shift Kasir (Cash Drawer)
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Buka sesi shift kasir, catat modal awal, monitor arus kas laci, dan rekonsiliasi tutup shift.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/pos"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all w-fit"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+          Layar Kasir (POS)
+        </Link>
+      </div>
+
+      {/* ─── KONDISI 1: TIDAK ADA SHIFT AKTIF (BUKA SHIFT) ──────────────────── */}
       {!shift ? (
-        <div className="max-w-xl mx-auto space-y-6 py-8">
-          <div className="text-center space-y-2">
-            <div className="inline-flex p-4 rounded-3xl bg-amber-950/40 border border-amber-800/40 text-amber-400">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-amber-50">Buka Shift Kasir Baru</h1>
-            <p className="text-sm text-stone-400 max-w-md mx-auto">
-              Sesuai aturan operasional Schaw Cafe, kasir harus membuka shift dan memasukkan modal awal sebelum dapat melayani transaksi penjualan di POS.
+        <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-lg mx-auto shadow-sm space-y-6 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-xs">
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-slate-900">
+              Shift Kasir Sedang Ditutup
+            </h2>
+            <p className="text-xs text-slate-500">
+              Silakan masukkan modal awal kas kecil (kembalian) di laci kasir untuk memulai transaksi penjualan.
             </p>
           </div>
 
-          <div className="p-6 rounded-2xl border border-stone-800/80 bg-stone-900/60 shadow-xl space-y-5">
-            <form onSubmit={handleOpenShift} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-stone-300 uppercase tracking-widest mb-1.5">
-                  Modal Awal Kasir / Opening Cash (Rp)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="5000"
-                  value={openingCash}
-                  onChange={(e) => setOpeningCash(e.target.value)}
-                  disabled={isPending}
-                  className="w-full px-4 py-3 bg-stone-800 border border-stone-700 rounded-xl text-amber-300 font-mono font-bold text-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="200000"
-                  required
-                />
-              </div>
-
-              {/* Quick Presets */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] text-stone-400">Pilihan Cepat Nominal:</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {[100000, 200000, 300000, 500000].map((nominal) => (
-                    <button
-                      key={nominal}
-                      type="button"
-                      onClick={() => setOpeningCash(nominal)}
-                      className={cn(
-                        'py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                        Number(openingCash) === nominal
-                          ? 'bg-amber-950/60 border-amber-600 text-amber-300'
-                          : 'bg-stone-800/60 border-stone-700 text-stone-300 hover:bg-stone-800'
-                      )}
-                    >
-                      {formatRupiah(nominal)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="submit"
+          <form onSubmit={handleOpenShift} className="space-y-4 text-left">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Modal Awal Kasir (Cash Float) *
+              </label>
+              <CurrencyInput
+                placeholder="200.000"
+                value={openingCash}
+                onChange={(val) => setOpeningCash(val)}
                 disabled={isPending}
-                className="w-full py-3 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl font-bold shadow-lg shadow-amber-950 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-                {isPending ? 'Membuka Shift...' : 'Buka Shift & Masuk Layar POS'}
-              </button>
-            </form>
-          </div>
+                required
+              />
+            </div>
+
+            {/* Quick cash options */}
+            <div className="flex gap-2">
+              {[100000, 200000, 500000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setOpeningCash(amt)}
+                  className="flex-1 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-semibold transition-colors"
+                >
+                  {formatRupiah(amt)}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isPending}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            >
+              {isPending ? 'Membuka Shift...' : 'Buka Shift & Mulai Transaksi'}
+            </button>
+          </form>
         </div>
       ) : (
-        /* ─── KONDISI 2: SHIFT SEDANG AKTIF (OPEN) ─────────────────────────── */
+        /* ─── KONDISI 2: SHIFT AKTIF (MONITOR & TUTUP SHIFT) ──────────────── */
         <div className="space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold text-amber-50">Status Shift Kasir Aktif</h1>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  SHIFT OPEN
-                </span>
+          {/* Active Shift Banner Card */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center font-black">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
               </div>
-              <p className="text-sm text-stone-400 mt-0.5">
-                Kasir: <span className="text-amber-300 font-semibold">{shift.user?.name}</span> &middot; Dibuka sejak: {formatDateTime(shift.openedAt)}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    SHIFT AKTIF
+                  </span>
+                  <span className="text-xs font-mono text-slate-500">
+                    Mulai: {formatDateTime(shift.openedAt)}
+                  </span>
+                </div>
+                <h2 className="text-base font-bold text-slate-900 mt-1">
+                  Petugas Kasir: {shift.user?.name || 'Kasir'}
+                </h2>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setMovementModalOpen(true)}
-                className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-colors"
               >
-                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Kas Masuk / Keluar
+                + Catat Arus Kas
               </button>
-              <Link
-                href="/dashboard/pos"
-                className="px-5 py-2 bg-linear-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-950 transition-all flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-                </svg>
-                Layar Kasir (POS)
-              </Link>
             </div>
           </div>
 
-          {/* Cards Grid Financial Breakdown */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Modal Awal */}
-            <div className="p-5 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-1">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                Modal Awal (Opening)
-              </p>
-              <p className="text-xl font-bold font-mono text-stone-100">
+          {/* KPI Laci Kas Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Modal Awal Kasir</p>
+              <p className="text-lg font-bold font-mono text-slate-900 mt-1">
                 {formatRupiah(shift.openingCash)}
               </p>
-              <p className="text-[11px] text-stone-500">Kas tunai awal laci</p>
             </div>
 
-            {/* Penjualan Tunai */}
-            <div className="p-5 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-1">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                Penjualan Tunai (Cash)
-              </p>
-              <p className="text-xl font-bold font-mono text-emerald-400">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Penjualan Tunai (Cash)</p>
+              <p className="text-lg font-bold font-mono text-emerald-700 mt-1">
                 +{formatRupiah(shift.cashSales)}
               </p>
-              <p className="text-[11px] text-stone-500">Uang fisik masuk</p>
             </div>
 
-            {/* Penjualan QRIS */}
-            <div className="p-5 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-1">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                Penjualan QRIS
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kas Masuk/Keluar</p>
+              <p className="text-lg font-bold font-mono text-slate-700 mt-1">
+                {formatRupiah(shift.totalCashIn - shift.totalCashOut)}
               </p>
-              <p className="text-xl font-bold font-mono text-blue-400">
-                {formatRupiah(shift.qrisSales)}
-              </p>
-              <p className="text-[11px] text-blue-300/80">Non-kas (Rekening Bank)</p>
             </div>
 
-            {/* Kas Masuk / Keluar */}
-            <div className="p-5 rounded-2xl border border-stone-800/80 bg-stone-900/50 space-y-1">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                Mutasi Kas (In/Out)
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 shadow-xs">
+              <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Kas Seharusnya di Laci</p>
+              <p className="text-xl font-black font-mono text-emerald-700 mt-1">
+                {formatRupiah(shift.expectedCash)}
               </p>
-              <div className="text-sm font-mono space-y-0.5">
-                <span className="text-emerald-400">+{formatRupiah(shift.cashIn)}</span> &middot;{' '}
-                <span className="text-red-400">-{formatRupiah(shift.cashOut)}</span>
-              </div>
-              <p className="text-[11px] text-stone-500">Pengeluaran/penerimaan kas</p>
             </div>
           </div>
 
-          {/* Expected Cash Highlight & Close Shift Form */}
-          <div className="p-6 rounded-2xl border border-amber-900/40 bg-linear-to-br from-stone-900 via-stone-900/90 to-amber-950/20 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                  Total Kas Fisik yang Diharapkan (Expected Cash)
-                </p>
-                <p className="text-3xl font-extrabold font-mono text-amber-300 mt-1">
-                  {formatRupiah(shift.expectedCash)}
-                </p>
-                <p className="text-xs text-stone-400 mt-1">
-                  Rumus: Modal Awal ({formatRupiah(shift.openingCash)}) + Penjualan Tunai ({formatRupiah(shift.cashSales)}) + Kas In ({formatRupiah(shift.cashIn)}) - Kas Out ({formatRupiah(shift.cashOut)})
-                </p>
+          {/* Two Columns: Recent Movements & Close Shift Form */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: Cash Movements List */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900">
+                  Arus Kas Masuk / Keluar Shift Ini
+                </h3>
+                <button
+                  onClick={() => setMovementModalOpen(true)}
+                  className="text-xs text-emerald-700 hover:underline font-semibold"
+                >
+                  + Tambah Mutasi
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {shift.cashMovements?.length === 0 ? (
+                  <p className="py-8 text-center text-xs text-slate-400">
+                    Belum ada arus kas manual pada shift ini.
+                  </p>
+                ) : (
+                  shift.cashMovements?.map((m) => (
+                    <div
+                      key={m.id}
+                      className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                              m.type === 'CASH_IN'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border-rose-200'
+                            )}
+                          >
+                            {m.type === 'CASH_IN' ? 'KAS MASUK' : 'KAS KELUAR'}
+                          </span>
+                          <span className="text-slate-500 font-mono text-[10px]">
+                            {new Date(m.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 font-medium mt-1">{m.reason}</p>
+                      </div>
+                      <p
+                        className={cn(
+                          'font-mono font-bold text-xs',
+                          m.type === 'CASH_IN' ? 'text-emerald-700' : 'text-rose-600'
+                        )}
+                      >
+                        {m.type === 'CASH_IN' ? '+' : '-'}{formatRupiah(m.amount)}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
-            {/* Close Shift Box */}
-            <div className="pt-6 border-t border-stone-800/80">
-              <h2 className="text-sm font-bold text-stone-200 uppercase tracking-wider mb-4">
-                Form Tutup Shift Kasir
-              </h2>
+            {/* Right: Close Shift Form */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm font-bold text-slate-900">
+                Rekonsiliasi & Penutupan Shift
+              </h3>
+              <p className="text-xs text-slate-500">
+                Hitung uang tunai fisik yang ada di laci kasir saat ini dan masukkan nominalnya untuk verifikasi selisih kas.
+              </p>
+
               <form onSubmit={handleCloseShift} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-300 uppercase tracking-widest mb-1.5">
-                      Hitung Kas Fisik Aktual di Laci (Rp)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1000"
-                      value={actualCash}
-                      onChange={(e) => setActualCash(e.target.value)}
-                      disabled={isPending}
-                      className="w-full px-4 py-3 bg-stone-800 border border-stone-700 rounded-xl text-amber-300 font-mono font-bold text-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs text-stone-400 mb-2">
-                      Selisih:{' '}
-                      <span
-                        className={cn(
-                          'font-mono font-bold',
-                          Number(actualCash) - shift.expectedCash >= 0
-                            ? 'text-emerald-400'
-                            : 'text-red-400'
-                        )}
-                      >
-                        {formatRupiah(Number(actualCash) - shift.expectedCash)}
-                      </span>
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isPending}
-                      className="w-full py-3 bg-linear-to-r from-red-800 to-red-700 hover:from-red-700 hover:to-red-600 text-white rounded-xl font-bold shadow-md shadow-red-950 transition-all disabled:opacity-50"
-                    >
-                      {isPending ? 'Menutup Shift...' : 'Tutup Shift Sekarang'}
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Kas Fisik Riil di Laci (Actual Cash) *
+                  </label>
+                  <CurrencyInput
+                    placeholder="0"
+                    value={actualCash}
+                    onChange={(val) => setActualCash(val)}
+                    disabled={isPending}
+                    required
+                  />
                 </div>
+
+                {/* Diff Preview */}
+                {!isNaN(Number(actualCash)) && (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-600 font-sans">Selisih Kas:</span>
+                    <span
+                      className={cn(
+                        'font-bold',
+                        Number(actualCash) - Number(shift.expectedCash) === 0
+                          ? 'text-slate-700'
+                          : Number(actualCash) - Number(shift.expectedCash) > 0
+                          ? 'text-emerald-700'
+                          : 'text-rose-600'
+                      )}
+                    >
+                      {Number(actualCash) - Number(shift.expectedCash) > 0 ? '+' : ''}
+                      {formatRupiah(Number(actualCash) - Number(shift.expectedCash))}
+                    </span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+                >
+                  {isPending ? 'Menutup Shift...' : 'Tutup Shift Kasir'}
+                </button>
               </form>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── MODAL CASH MOVEMENT ────────────────────────────────────────────── */}
+      {/* ─── MODAL ADD CASH MOVEMENT ─────────────────────────────────────────── */}
       {movementModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-stone-900 border border-stone-700/60 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-amber-50">
-              Catat Mutasi Kas Fisik Laci
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                Catat Arus Kas Manual
+              </h3>
+              <button
+                onClick={() => setMovementModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSaveMovement} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Tipe Pergerakan Kas
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Jenis Pergerakan Kas
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
                   <button
                     type="button"
                     onClick={() => setMovementType('CASH_IN')}
                     className={cn(
-                      'py-2 rounded-xl text-xs font-bold border transition-colors',
+                      'py-1.5 rounded-lg text-xs font-bold transition-all',
                       movementType === 'CASH_IN'
-                        ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300'
-                        : 'bg-stone-800 border-stone-700 text-stone-400'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
                     )}
                   >
-                    KAS MASUK (Cash In)
+                    + Kas Masuk (In)
                   </button>
                   <button
                     type="button"
                     onClick={() => setMovementType('CASH_OUT')}
                     className={cn(
-                      'py-2 rounded-xl text-xs font-bold border transition-colors',
+                      'py-1.5 rounded-lg text-xs font-bold transition-all',
                       movementType === 'CASH_OUT'
-                        ? 'bg-red-950/60 border-red-600 text-red-300'
-                        : 'bg-stone-800 border-stone-700 text-stone-400'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
                     )}
                   >
-                    KAS KELUAR (Cash Out)
+                    - Kas Keluar (Out)
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Jumlah Nominal (Rp)
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Nominal (Rp) *
                 </label>
-                <input
-                  type="number"
-                  min="1000"
-                  step="1000"
-                  placeholder="50000"
+                <CurrencyInput
+                  placeholder="0"
                   value={movementAmount}
-                  onChange={(e) => setMovementAmount(e.target.value)}
+                  onChange={(val) => setMovementAmount(val)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-                  Alasan / Keterangan Mutasi
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Keterangan / Alasan *
                 </label>
                 <textarea
-                  rows={2}
-                  placeholder="contoh: Beli es batu darurat, Tambahan uang kembalian dari brankas"
+                  rows="2"
+                  placeholder="Contoh: Beli es batu kristal 2 bal, beli gas elpiji..."
                   value={movementReason}
                   onChange={(e) => setMovementReason(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3.5 py-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-stone-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setMovementModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-all disabled:opacity-50 shadow-md shadow-amber-950"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
                 >
                   {isPending ? 'Menyimpan...' : 'Simpan Mutasi'}
                 </button>

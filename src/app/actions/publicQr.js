@@ -60,6 +60,7 @@ export async function getPublicMenuData() {
     const serializedProducts = products.map((p) => ({
       id: p.id,
       name: p.name,
+      imageUrl: p.imageUrl || null,
       price: Number(p.price),
       type: p.type,
       description: p.description,

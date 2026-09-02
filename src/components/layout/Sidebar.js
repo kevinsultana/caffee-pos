@@ -207,36 +207,37 @@ export default function Sidebar({ isOpen, onClose, user }) {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 lg:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30 lg:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Container */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-64 z-30 flex flex-col',
-          'bg-stone-900 border-r border-stone-800/80',
+          'fixed top-0 left-0 h-full w-64 z-40 flex flex-col',
+          'bg-white border-r border-slate-200/90 shadow-sm',
           'transition-transform duration-300 ease-in-out',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:translate-x-0 lg:static lg:z-auto'
         )}
       >
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-stone-800/80">
-          <div className="shrink-0 w-9 h-9 rounded-xl bg-amber-900/50 border border-amber-700/30 flex items-center justify-center">
-            <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        {/* Brand Header */}
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+          <div className="shrink-0 w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-sm flex items-center justify-center">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 01-1.5-2.121V3.104m3 0c.25.023.5.05.75.082M19.5 14.5l-4.091-4.09A2.25 2.25 0 0115 8.818V3.104" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-bold text-amber-50 leading-none">Schaw Cafe</p>
-            <p className="text-xs text-stone-500 mt-0.5">POS System</p>
+            <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">Schaw Cafe</p>
+            <p className="text-[11px] font-medium text-emerald-600 mt-1">Enterprise POS</p>
           </div>
+
           {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="ml-auto p-1.5 rounded-lg text-stone-500 hover:text-stone-300 hover:bg-stone-800 transition-colors lg:hidden"
+            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors lg:hidden"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -244,8 +245,8 @@ export default function Sidebar({ isOpen, onClose, user }) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+        {/* Navigation List */}
+        <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
           {NAV_GROUPS.map((group, groupIdx) => {
             // Sembunyikan grup jika role tidak sesuai
             if (group.requiredRole && group.requiredRole !== userRole) {
@@ -263,7 +264,7 @@ export default function Sidebar({ isOpen, onClose, user }) {
 
             return (
               <div key={groupIdx} className="space-y-1">
-                <p className="px-3 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+                <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   {group.title}
                 </p>
                 {visibleItems.map((item) => {
@@ -274,19 +275,16 @@ export default function Sidebar({ isOpen, onClose, user }) {
                       href={item.href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150',
+                        'flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150',
                         active
-                          ? 'bg-amber-900/40 text-amber-300 border border-amber-800/40 font-semibold'
-                          : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/60'
+                          ? 'bg-emerald-50 text-emerald-800 border-r-4 border-emerald-600 rounded-l-xl rounded-r-none'
+                          : 'text-slate-600 hover:text-emerald-700 hover:bg-slate-100/80 rounded-xl'
                       )}
                     >
-                      <span className={cn(active ? 'text-amber-400' : 'text-stone-500')}>
+                      <span className={cn('transition-colors', active ? 'text-emerald-600' : 'text-slate-400')}>
                         {item.icon}
                       </span>
-                      {item.label}
-                      {active && (
-                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400" />
-                      )}
+                      <span>{item.label}</span>
                     </Link>
                   );
                 })}
@@ -295,11 +293,13 @@ export default function Sidebar({ isOpen, onClose, user }) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-stone-800/80">
-          <p className="text-xs text-stone-600">
-            Schaw POS v1.0
-          </p>
+        {/* User Card / Footer */}
+        <div className="p-3 m-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'Staff'}</p>
+            <p className="text-[10px] text-slate-500 font-medium capitalize">{userRole || 'User'}</p>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-emerald-500" title="Online" />
         </div>
       </aside>
     </>

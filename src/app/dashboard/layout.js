@@ -1,7 +1,5 @@
 import { redirect } from 'next/navigation';
 import { verifySession } from '@/app/actions/auth';
-import Sidebar from '@/components/layout/Sidebar';
-import DashboardHeader from '@/components/layout/DashboardHeader';
 import DashboardShell from '@/components/layout/DashboardShell';
 
 export const metadata = {
@@ -14,7 +12,7 @@ export default async function DashboardLayout({ children }) {
   if (!user) redirect('/login');
 
   return (
-    <div className="min-h-screen bg-stone-950 flex">
+    <div className="min-h-screen bg-slate-50 flex text-slate-800">
       {/* Sidebar (controlled via client DashboardShell) */}
       <DashboardShell user={user}>
         {children}

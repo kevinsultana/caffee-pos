@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
+import { supabase } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 
 async function getAuthenticatedUserAndStore() {
@@ -192,6 +193,80 @@ export async function getProducts() {
   }
 }
 
+/**
+ * Upload Foto Produk ke Supabase Storage (Bucket: product-images)
+ */
+export async function uploadProductImage(formData) {
+  try {
+    await getAuthenticatedUserAndStore();
+    const file = formData.get('file') || formData.get('image');
+    if (!file || typeof file === 'string') {
+      return { error: 'File gambar tidak ditemukan.' };
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+    if (!allowedMimeTypes.includes(file.type)) {
+      return { error: 'Format file tidak didukung. Harap gunakan PNG, JPG, WEBP, atau SVG.' };
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return { error: 'Ukuran file gambar maksimal 5MB.' };
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const ext = file.name ? file.name.split('.').pop() : 'png';
+    const fileName = `product-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${ext}`;
+    const filePath = `products/${fileName}`;
+    const bucketName = 'product-images';
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(filePath, buffer, {
+        contentType: file.type,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[uploadProductImage] Supabase error, falling back to data URI:', uploadError);
+      const base64 = buffer.toString('base64');
+      return {
+        success: true,
+        imageUrl: `data:${file.type};base64,${base64}`,
+      };
+    }
+
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+    return {
+      success: true,
+      imageUrl: publicData?.publicUrl || '',
+    };
+  } catch (error) {
+    console.error('[uploadProductImage] Error:', error);
+    return { error: error.message || 'Gagal mengunggah foto produk.' };
+  }
+}
+
+/**
+ * Hapus file foto produk dari Supabase Storage jika tersimpan di bucket product-images
+ */
+export async function deleteProductImageFile(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') return;
+  try {
+    if (imageUrl.includes('product-images/')) {
+      const parts = imageUrl.split('product-images/');
+      if (parts[1]) {
+        const filePath = decodeURIComponent(parts[1]);
+        await supabase.storage.from('product-images').remove([filePath]);
+      }
+    }
+  } catch (err) {
+    console.error('[deleteProductImageFile] Error:', err);
+  }
+}
+
 export async function createProduct({
   name,
   sku,
@@ -201,6 +276,7 @@ export async function createProduct({
   availability = 'AVAILABLE',
   discontinued = false,
   inventoryItemId,
+  imageUrl = null,
 }) {
   try {
     const { storeId } = await getAuthenticatedUserAndStore();
@@ -257,6 +333,7 @@ export async function createProduct({
         categoryId,
         name: cleanName,
         sku: cleanSku,
+        imageUrl: imageUrl || null,
         price: priceNum,
         type,
         availability,
@@ -270,6 +347,7 @@ export async function createProduct({
     });
 
     revalidatePath('/dashboard/products/list');
+    revalidatePath('/dashboard/pos');
     return { success: true, data: product };
   } catch (error) {
     console.error('[createProduct] Error:', error);
@@ -288,6 +366,7 @@ export async function updateProduct(
     availability = 'AVAILABLE',
     discontinued = false,
     inventoryItemId,
+    imageUrl,
   }
 ) {
   try {
@@ -350,6 +429,16 @@ export async function updateProduct(
       }
     }
 
+    const currentProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { imageUrl: true },
+    });
+
+    // If imageUrl is explicitly modified and previous image is in Supabase bucket, remove old image
+    if (imageUrl !== undefined && currentProduct?.imageUrl && currentProduct.imageUrl !== imageUrl) {
+      await deleteProductImageFile(currentProduct.imageUrl);
+    }
+
     const updated = await prisma.product.update({
       where: { id },
       data: {
@@ -361,6 +450,7 @@ export async function updateProduct(
         availability,
         discontinued: Boolean(discontinued),
         inventoryItemId: type === 'DIRECT_STOCK' ? inventoryItemId : null,
+        ...(imageUrl !== undefined ? { imageUrl } : {}),
       },
       include: {
         category: true,
@@ -369,6 +459,7 @@ export async function updateProduct(
     });
 
     revalidatePath('/dashboard/products/list');
+    revalidatePath('/dashboard/pos');
     return { success: true, data: updated };
   } catch (error) {
     console.error('[updateProduct] Error:', error);
@@ -416,9 +507,15 @@ export async function deleteProduct(id) {
       };
     }
 
+    // Delete image from storage if exists
+    if (product.imageUrl) {
+      await deleteProductImageFile(product.imageUrl);
+    }
+
     await prisma.product.delete({ where: { id } });
 
     revalidatePath('/dashboard/products/list');
+    revalidatePath('/dashboard/pos');
     return { success: true };
   } catch (error) {
     console.error('[deleteProduct] Error:', error);
