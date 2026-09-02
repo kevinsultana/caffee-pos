@@ -132,6 +132,7 @@ export async function getPosInitData() {
  * 8. Buat Payment (CASH / QRIS)
  */
 export async function processPosCheckout({
+  customerId = null,
   customerName = 'Pelanggan',
   customerPhone = '',
   queueNumber,
@@ -399,6 +400,7 @@ export async function processPosCheckout({
       const order = await tx.order.create({
         data: {
           storeId,
+          customerId: customerId || null,
           createdById: user.id,
           orderNumber,
           queueNumber: queueNumber.trim(),

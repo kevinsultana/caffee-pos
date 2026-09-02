@@ -220,19 +220,47 @@ export async function addCashMovement({ type, amount, reason }) {
       return { error: 'Keterangan/alasan pergerakan kas wajib diisi.' };
     }
 
-    const movement = await prisma.cashMovement.create({
-      data: {
-        storeId,
-        shiftId: shiftRes.data.id,
-        userId: user.id,
-        type,
-        amount: numAmount,
-        reason: reason.trim(),
-      },
+    const movement = await prisma.$transaction(async (tx) => {
+      const m = await tx.cashMovement.create({
+        data: {
+          storeId,
+          shiftId: shiftRes.data.id,
+          userId: user.id,
+          type,
+          amount: numAmount,
+          reason: reason.trim(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: user.id,
+          action: type === 'CASH_IN' ? 'CASH_IN' : 'CASH_OUT',
+          module: 'POS',
+          entityType: 'CashMovement',
+          entityId: m.id,
+          changeSummary: `Kasir ${user.name} mencatat ${type === 'CASH_IN' ? 'Kas Masuk (+)' : 'Kas Keluar (-)'} sebesar ${formatRupiah(numAmount)} [Alasan: ${reason.trim()}]`,
+        },
+      });
+
+      return m;
     });
 
     revalidatePath('/dashboard/pos/shift');
-    return { success: true, data: movement };
+    revalidatePath('/dashboard/pos/cash');
+    revalidatePath('/dashboard/pos');
+
+    return {
+      success: true,
+      data: {
+        id: movement.id,
+        type: movement.type,
+        amount: Number(movement.amount),
+        reason: movement.reason,
+        createdAt: movement.createdAt,
+      },
+    };
   } catch (error) {
     console.error('[addCashMovement] Error:', error);
     return { error: error.message || 'Gagal mencatat mutasi kas.' };

@@ -36,6 +36,7 @@ export default function DashboardShell({ user, children }) {
 
       {/* Sidebar */}
       <Sidebar
+        user={user}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />

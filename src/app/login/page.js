@@ -36,6 +36,21 @@ export default function LoginPage() {
       if (result?.success) {
         // Dynamically import SweetAlert2 to avoid SSR issues
         const Swal = (await import('sweetalert2')).default;
+
+        if (result.mustChangePassword) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Wajib Ganti Password!',
+            text: `Halo ${username}, akun Anda wajib mengganti password sementara sebelum mengakses sistem.`,
+            confirmButtonText: 'Ganti Password Sekarang',
+            confirmButtonColor: '#b45309',
+            background: '#1c1917',
+            color: '#fef3c7',
+          });
+          router.push('/login/change-password');
+          return;
+        }
+
         await Swal.fire({
           icon: 'success',
           title: 'Login Berhasil!',
@@ -44,11 +59,8 @@ export default function LoginPage() {
           confirmButtonColor: '#b45309',
           background: '#1c1917',
           color: '#fef3c7',
-          timer: 2500,
+          timer: 2000,
           timerProgressBar: true,
-          showClass: {
-            popup: 'animate__animated animate__fadeInDown',
-          },
         });
         router.push('/dashboard');
       }

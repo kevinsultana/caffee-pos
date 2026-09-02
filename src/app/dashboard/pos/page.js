@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
 import { validatePromoCode } from '@/app/actions/promotion';
+import { getCustomers } from '@/app/actions/customer';
 import {
   getPublicPendingOrders,
   confirmPublicQrPayment,
@@ -21,8 +22,10 @@ export default function PosScreenPage() {
   // Master Data
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [settings, setSettings] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
 
   // Online Orders State
   const [pendingOrders, setPendingOrders] = useState([]);
@@ -54,9 +57,10 @@ export default function PosScreenPage() {
 
   async function loadData() {
     setLoading(true);
-    const [initRes, pendingRes] = await Promise.all([
+    const [initRes, pendingRes, custRes] = await Promise.all([
       getPosInitData(),
       getPublicPendingOrders(),
+      getCustomers(),
     ]);
 
     if (initRes.error) {
@@ -70,6 +74,10 @@ export default function PosScreenPage() {
 
     if (pendingRes.data) {
       setPendingOrders(pendingRes.data);
+    }
+
+    if (custRes.data) {
+      setCustomers(custRes.data);
     }
 
     setLoading(false);
@@ -245,6 +253,7 @@ export default function PosScreenPage() {
       const toastId = toast.loading('Memproses transaksi penjualan...');
 
       const payload = {
+        customerId: selectedCustomerId || null,
         customerName: customerName.trim() || 'Pelanggan',
         customerPhone: customerPhone.trim(),
         queueNumber: queueNumber.trim(),
@@ -633,31 +642,73 @@ export default function PosScreenPage() {
               </div>
 
               {/* Queue & Customer Inputs */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-1">
-                  <label className="block text-[10px] font-semibold text-stone-400 uppercase mb-1">
-                    No. Antrean
-                  </label>
-                  <input
-                    type="text"
-                    value={queueNumber}
-                    onChange={(e) => setQueueNumber(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-stone-800 border border-stone-700 rounded-lg text-amber-300 font-mono font-bold text-xs text-center focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    placeholder="A-01"
-                    required
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-semibold text-stone-400 uppercase mb-1">
-                    Nama Pelanggan
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+              <div className="space-y-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-semibold text-stone-400 uppercase">
+                      Member / Pelanggan Terdaftar
+                    </label>
+                    <Link
+                      href="/dashboard/customers"
+                      target="_blank"
+                      className="text-[10px] text-amber-400 hover:underline"
+                    >
+                      + Member Baru
+                    </Link>
+                  </div>
+                  <select
+                    value={selectedCustomerId}
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      setSelectedCustomerId(cid);
+                      if (cid) {
+                        const c = customers.find((cust) => cust.id === cid);
+                        if (c) {
+                          setCustomerName(c.name);
+                          setCustomerPhone(c.phone || '');
+                        }
+                      } else {
+                        setCustomerName('Pelanggan');
+                        setCustomerPhone('');
+                      }
+                    }}
                     className="w-full px-2.5 py-1.5 bg-stone-800 border border-stone-700 rounded-lg text-amber-50 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    placeholder="Pelanggan"
-                  />
+                  >
+                    <option value="">👤 Guest (Bukan Member)</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        ★ {c.name} {c.phone ? `(${c.phone})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1">
+                    <label className="block text-[10px] font-semibold text-stone-400 uppercase mb-1">
+                      No. Antrean
+                    </label>
+                    <input
+                      type="text"
+                      value={queueNumber}
+                      onChange={(e) => setQueueNumber(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-stone-800 border border-stone-700 rounded-lg text-amber-300 font-mono font-bold text-xs text-center focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      placeholder="A-01"
+                      required
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-semibold text-stone-400 uppercase mb-1">
+                      Nama Pelanggan
+                    </label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-stone-800 border border-stone-700 rounded-lg text-amber-50 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      placeholder="Pelanggan"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -515,3 +515,218 @@ export async function deleteInventoryItem(id) {
     return { error: error.message || 'Gagal menghapus barang inventaris.' };
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 4. INVENTORY ITEM DETAIL & UNIT CONVERSIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Mengambil data detail satu bahan baku beserta konversi satuan dan pergerakan stoknya.
+ */
+export async function getInventoryItemDetail(id) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    const item = await prisma.inventoryItem.findFirst({
+      where: { id, storeId },
+      include: {
+        category: true,
+        baseUnit: true,
+        balance: true,
+        product: { select: { id: true, name: true } },
+        variant: { select: { id: true, name: true, product: { select: { name: true } } } },
+        conversions: {
+          include: { purchaseUnit: true },
+          orderBy: { createdAt: 'asc' },
+        },
+        stockMovements: {
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!item) {
+      return { error: 'Barang inventaris tidak ditemukan.' };
+    }
+
+    const serializedItem = {
+      id: item.id,
+      name: item.name,
+      categoryId: item.categoryId,
+      categoryName: item.category?.name || 'Uncategorized',
+      baseUnitId: item.baseUnitId,
+      baseUnitCode: item.baseUnit?.code || '',
+      baseUnitName: item.baseUnit?.name || '',
+      minimumStock: item.minimumStock ? Number(item.minimumStock) : 0,
+      currentQuantity: item.balance ? Number(item.balance.quantity) : 0,
+      averageCost: item.balance ? Number(item.balance.averageCost) : 0,
+      stockValue: item.balance ? Number(item.balance.stockValue) : 0,
+      product: item.product,
+      variant: item.variant,
+      conversions: item.conversions.map((c) => ({
+        id: c.id,
+        purchaseUnitId: c.purchaseUnitId,
+        purchaseUnitCode: c.purchaseUnit?.code || '',
+        purchaseUnitName: c.purchaseUnit?.name || '',
+        conversionFactor: Number(c.conversionFactor),
+      })),
+      stockMovements: item.stockMovements.map((m) => ({
+        id: m.id,
+        type: m.type,
+        quantity: Number(m.quantity),
+        previousQuantity: Number(m.previousQuantity),
+        newQuantity: Number(m.newQuantity),
+        costPerUnit: Number(m.costPerUnit),
+        referenceNumber: m.referenceNumber,
+        reason: m.reason,
+        createdAt: m.createdAt,
+      })),
+    };
+
+    return { data: serializedItem };
+  } catch (error) {
+    console.error('[getInventoryItemDetail] Error:', error);
+    return { error: error.message || 'Gagal memuat detail bahan baku.' };
+  }
+}
+
+/**
+ * Menambahkan aturan konversi satuan pembelian (Purchase Unit Conversion).
+ * Contoh: 1 Dus (Purchase Unit) = 40 pcs (Base Unit) -> conversionFactor = 40.
+ */
+export async function createUnitConversion({
+  inventoryItemId,
+  purchaseUnitId,
+  conversionFactor,
+}) {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    if (!inventoryItemId || !purchaseUnitId) {
+      return { error: 'Barang inventaris dan Satuan Beli wajib dipilih.' };
+    }
+
+    const factor = Number(conversionFactor);
+    if (isNaN(factor) || factor <= 0) {
+      return { error: 'Faktor konversi harus berupa angka positif lebih dari 0.' };
+    }
+
+    const item = await prisma.inventoryItem.findFirst({
+      where: { id: inventoryItemId, storeId },
+      include: { baseUnit: true },
+    });
+    if (!item) return { error: 'Barang inventaris tidak ditemukan.' };
+
+    if (item.baseUnitId === purchaseUnitId) {
+      return {
+        error: 'Satuan Beli tidak boleh sama dengan Base Unit barang inventaris.',
+      };
+    }
+
+    const purchaseUnit = await prisma.unit.findFirst({
+      where: { id: purchaseUnitId, storeId },
+    });
+    if (!purchaseUnit) return { error: 'Satuan beli tidak ditemukan.' };
+
+    // Cek apakah konversi untuk satuan ini sudah pernah dibuat
+    const existing = await prisma.inventoryUnitConversion.findUnique({
+      where: {
+        inventoryItemId_purchaseUnitId: {
+          inventoryItemId,
+          purchaseUnitId,
+        },
+      },
+    });
+
+    if (existing) {
+      return {
+        error: `Konversi untuk satuan "${purchaseUnit.code}" sudah ada pada barang ini.`,
+      };
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const conv = await tx.inventoryUnitConversion.create({
+        data: {
+          inventoryItemId,
+          purchaseUnitId,
+          conversionFactor: factor,
+        },
+        include: { purchaseUnit: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: user.id,
+          action: 'CREATE_UNIT_CONVERSION',
+          module: 'INVENTORY',
+          entityType: 'InventoryUnitConversion',
+          entityId: conv.id,
+          changeSummary: `Menambahkan konversi satuan untuk "${item.name}": 1 ${purchaseUnit.code} = ${factor} ${item.baseUnit.code}`,
+        },
+      });
+
+      return conv;
+    });
+
+    revalidatePath(`/dashboard/inventory/items/${inventoryItemId}`);
+    revalidatePath('/dashboard/inventory/purchases');
+
+    return {
+      success: true,
+      data: {
+        id: created.id,
+        purchaseUnitCode: created.purchaseUnit?.code,
+        conversionFactor: Number(created.conversionFactor),
+      },
+    };
+  } catch (error) {
+    console.error('[createUnitConversion] Error:', error);
+    return { error: error.message || 'Gagal menambahkan konversi satuan.' };
+  }
+}
+
+/**
+ * Menghapus aturan konversi satuan inventaris.
+ */
+export async function deleteUnitConversion(id) {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    const conversion = await prisma.inventoryUnitConversion.findUnique({
+      where: { id },
+      include: {
+        inventoryItem: { include: { baseUnit: true } },
+        purchaseUnit: true,
+      },
+    });
+
+    if (!conversion || conversion.inventoryItem.storeId !== storeId) {
+      return { error: 'Konversi satuan tidak ditemukan.' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.inventoryUnitConversion.delete({ where: { id } });
+
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: user.id,
+          action: 'DELETE_UNIT_CONVERSION',
+          module: 'INVENTORY',
+          entityType: 'InventoryUnitConversion',
+          entityId: id,
+          changeSummary: `Menghapus konversi satuan 1 ${conversion.purchaseUnit.code} = ${conversion.conversionFactor} ${conversion.inventoryItem.baseUnit.code} untuk "${conversion.inventoryItem.name}"`,
+        },
+      });
+    });
+
+    revalidatePath(`/dashboard/inventory/items/${conversion.inventoryItemId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('[deleteUnitConversion] Error:', error);
+    return { error: error.message || 'Gagal menghapus konversi satuan.' };
+  }
+}
+

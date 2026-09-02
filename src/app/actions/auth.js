@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 
 const SESSION_COOKIE = 'schaw_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 jam
@@ -21,7 +22,7 @@ function hashToken(token) {
  * Login Server Action
  * @param {string} username
  * @param {string} password
- * @returns {{ success: true } | { error: string }}
+ * @returns {{ success: true, mustChangePassword: boolean } | { error: string }}
  */
 export async function login(username, password) {
   // ── Validasi input dasar ──────────────────────────────────────────────────
@@ -30,11 +31,12 @@ export async function login(username, password) {
   }
 
   try {
-    // ── Cari user aktif berdasarkan username ──────────────────────────────
+    const cleanUsername = username.trim().toLowerCase();
+
+    // ── Cari user berdasarkan username ────────────────────────────────────
     const user = await prisma.user.findFirst({
       where: {
-        username: username.trim(),
-        status: 'ACTIVE',
+        username: cleanUsername,
       },
       include: {
         role: true,
@@ -46,13 +48,22 @@ export async function login(username, password) {
       return { error: 'Username atau password salah.' };
     }
 
+    // ── Cek status user (RESIGNED / INACTIVE) ──────────────────────────────
+    if (user.status === 'RESIGNED') {
+      return { error: 'Akun telah berstatus RESIGNED dan tidak dapat login ke sistem.' };
+    }
+
+    if (user.status === 'INACTIVE') {
+      return { error: 'Akun sedang dinonaktifkan. Silakan hubungi Owner.' };
+    }
+
     // ── Verifikasi password ───────────────────────────────────────────────
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       return { error: 'Username atau password salah.' };
     }
 
-    // ── Revoke semua sesi aktif (aturan: single active session) ──────────
+    // ── Revoke semua sesi aktif sebelumnya (aturan: single active session) ─
     await prisma.userSession.updateMany({
       where: {
         userId: user.id,
@@ -79,6 +90,19 @@ export async function login(username, password) {
       },
     });
 
+    // ── Catat Audit Log Login ─────────────────────────────────────────────
+    await prisma.auditLog.create({
+      data: {
+        storeId: user.storeId,
+        userId: user.id,
+        action: 'LOGIN',
+        module: 'AUTH',
+        entityType: 'User',
+        entityId: user.id,
+        changeSummary: `Login berhasil: ${user.name} (${user.username}) [${user.role?.name}]`,
+      },
+    });
+
     // ── Set HTTP-only cookie ──────────────────────────────────────────────
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, rawToken, {
@@ -89,10 +113,82 @@ export async function login(username, password) {
       path: '/',
     });
 
-    return { success: true };
+    return {
+      success: true,
+      mustChangePassword: user.mustChangePassword,
+    };
   } catch (error) {
     console.error('[auth/login] Error:', error);
     return { error: 'Terjadi kesalahan pada server. Silakan coba lagi.' };
+  }
+}
+
+/**
+ * Server Action Ganti Password Wajib Pertama Kali
+ * Dipanggil saat user memiliki mustChangePassword === true
+ */
+export async function changeFirstTimePassword({ currentPassword, newPassword, confirmPassword }) {
+  try {
+    const user = await verifySession();
+    if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+
+    if (!currentPassword || !newPassword) {
+      return { error: 'Password saat ini dan password baru wajib diisi.' };
+    }
+
+    if (newPassword.length < 6) {
+      return { error: 'Password baru minimal 6 karakter.' };
+    }
+
+    if (newPassword !== confirmPassword) {
+      return { error: 'Konfirmasi password baru tidak cocok.' };
+    }
+
+    if (currentPassword === newPassword) {
+      return { error: 'Password baru tidak boleh sama dengan password sementara sebelumnya.' };
+    }
+
+    // Ambil full record user untuk cek hash password lama
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+    });
+
+    if (!dbUser) return { error: 'User tidak ditemukan.' };
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, dbUser.passwordHash);
+    if (!isCurrentValid) {
+      return { error: 'Password sementara saat ini salah.' };
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: newHash,
+          mustChangePassword: false, // Flag dinonaktifkan
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId: user.storeId,
+          userId: user.id,
+          action: 'FORCED_PASSWORD_CHANGE',
+          module: 'AUTH',
+          entityType: 'User',
+          entityId: user.id,
+          changeSummary: `Pengguna ${user.name} (${user.username}) berhasil menyelesaikan penggantian password wajib pertama kali.`,
+        },
+      });
+    });
+
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    console.error('[changeFirstTimePassword] Error:', error);
+    return { error: error.message || 'Gagal mengubah password.' };
   }
 }
 
@@ -105,10 +201,26 @@ export async function logout() {
 
   if (rawToken) {
     const tokenHash = hashToken(rawToken);
-    await prisma.userSession.updateMany({
+    const session = await prisma.userSession.findUnique({
       where: { sessionTokenHash: tokenHash },
-      data: { revokedAt: new Date() },
     });
+
+    if (session) {
+      await prisma.userSession.update({
+        where: { sessionTokenHash: tokenHash },
+        data: { revokedAt: new Date() },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          storeId: session.userId ? (await prisma.user.findUnique({ where: { id: session.userId } }))?.storeId : '',
+          userId: session.userId,
+          action: 'LOGOUT',
+          module: 'AUTH',
+          changeSummary: 'Pengguna melakukan logout dari sistem.',
+        },
+      });
+    }
   }
 
   cookieStore.delete(SESSION_COOKIE);
@@ -138,6 +250,7 @@ export async function verifySession() {
   if (!session) return null;
   if (session.revokedAt) return null;
   if (session.expiresAt < new Date()) return null;
+  if (session.user.status !== 'ACTIVE') return null;
 
   return session.user;
 }

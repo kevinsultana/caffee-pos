@@ -356,10 +356,16 @@ export default function ProductsListPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
+                      <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                        <Link
+                          href={`/dashboard/products/list/${prod.id}`}
+                          className="px-2.5 py-1 text-xs font-semibold text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 rounded-lg transition-colors inline-flex items-center gap-1"
+                        >
+                          {prod.type === 'RECIPE' ? 'Resep & Varian' : 'Kelola Varian'} &rarr;
+                        </Link>
                         <button
                           onClick={() => openEditModal(prod)}
-                          className="px-2.5 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 rounded-lg transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
                         >
                           Edit
                         </button>
