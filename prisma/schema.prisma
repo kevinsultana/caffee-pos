@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserStatus {
@@ -632,7 +633,7 @@ model StockMovement {
 
   reason String?
 
-  responsibleUserId String?
+  responsibleUserId String? @db.Uuid
 
   createdAt DateTime @default(now())
 
@@ -720,8 +721,8 @@ model Order {
 
   storeId String @db.Uuid
 
-  customerId  String?
-  createdById String?
+  customerId  String? @db.Uuid
+  createdById String? @db.Uuid
 
   orderNumber String
   queueNumber String?
@@ -780,7 +781,7 @@ model OrderItem {
   orderId String @db.Uuid
 
   productId String  @db.Uuid
-  variantId String?
+  variantId String? @db.Uuid
 
   productNameSnapshot String
   variantNameSnapshot String?
@@ -794,7 +795,7 @@ model OrderItem {
   hppUnit  Decimal @db.Decimal(18, 6)
   hppTotal Decimal @db.Decimal(18, 2)
 
-  recipeVersionId String?
+  recipeVersionId String? @db.Uuid
 
   notes String?
 
