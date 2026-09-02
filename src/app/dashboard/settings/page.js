@@ -48,9 +48,7 @@ function RateInput({ id, label, value, onChange, disabled, suffix = '%', min = 0
           value={value}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           disabled={disabled}
-          className="w-full pr-10 pl-4 py-2.5 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-sm
-            focus:outline-none focus:ring-2 focus:ring-amber-600/50 focus:border-amber-600/50
-            disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full pr-10 pl-4 py-2.5 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
         />
         <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-stone-500 font-medium">
           {suffix}
@@ -281,7 +279,7 @@ export default function SettingsPage() {
           onClick={handleSave}
           disabled={isSaving}
           className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm
-            bg-gradient-to-r from-amber-700 to-amber-600
+            bg-linear-to-r from-amber-700 to-amber-600
             hover:from-amber-600 hover:to-amber-500
             text-white shadow-lg shadow-amber-900/30
             disabled:opacity-60 disabled:cursor-not-allowed

@@ -88,19 +88,19 @@ export default function LoginPage() {
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -left-32 w-96 h-96 bg-amber-900/20 rounded-full blur-3xl" />
           <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-800/15 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-stone-900/40 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-stone-900/40 rounded-full blur-3xl" />
         </div>
 
         {/* Login Card */}
         <div className="relative w-full max-w-md">
 
           {/* Glow border wrapper */}
-          <div className="absolute -inset-0.5 bg-gradient-to-br from-amber-700/50 via-amber-900/30 to-stone-800/50 rounded-2xl blur-sm" />
+          <div className="absolute -inset-0.5 bg-linear-to-br from-amber-700/50 via-amber-900/30 to-stone-800/50 rounded-2xl blur-sm" />
 
           <div className="relative bg-stone-900/90 backdrop-blur-xl border border-stone-700/50 rounded-2xl shadow-2xl overflow-hidden">
 
             {/* Top accent bar */}
-            <div className="h-1 bg-gradient-to-r from-amber-700 via-amber-500 to-amber-700" />
+            <div className="h-1 bg-linear-to-r from-amber-700 via-amber-500 to-amber-700" />
 
             <div className="p-8">
 
@@ -154,10 +154,7 @@ export default function LoginPage() {
                       onChange={(e) => setUsername(e.target.value)}
                       disabled={isLoading}
                       placeholder="Masukkan username"
-                      className="w-full pl-10 pr-4 py-3 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 placeholder-stone-600 text-sm
-                        focus:outline-none focus:ring-2 focus:ring-amber-600/50 focus:border-amber-600/50
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        transition-all duration-200"
+                      className="w-full pl-10 pr-4 py-3 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-600/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     />
                   </div>
                 </div>
@@ -184,10 +181,7 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={isLoading}
                       placeholder="Masukkan password"
-                      className="w-full pl-10 pr-12 py-3 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 placeholder-stone-600 text-sm
-                        focus:outline-none focus:ring-2 focus:ring-amber-600/50 focus:border-amber-600/50
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        transition-all duration-200"
+                      className="w-full pl-10 pr-12 py-3 bg-stone-800/60 border border-stone-700/60 rounded-xl text-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-600/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     />
                     {/* Show/hide password toggle */}
                     <button
@@ -217,9 +211,8 @@ export default function LoginPage() {
                   type="submit"
                   disabled={isLoading}
                   className="w-full py-3 px-6 rounded-xl font-semibold text-sm
-                    bg-gradient-to-r from-amber-700 to-amber-600
+                    bg-linear-to-r from-amber-700 to-amber-600
                     hover:from-amber-600 hover:to-amber-500
-                    active:from-amber-800 active:to-amber-700
                     text-white shadow-lg shadow-amber-900/30
                     disabled:opacity-60 disabled:cursor-not-allowed
                     transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99]

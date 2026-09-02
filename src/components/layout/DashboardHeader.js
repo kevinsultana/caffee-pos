@@ -62,7 +62,7 @@ export default function DashboardHeader({ user, onMenuToggle }) {
         </div>
 
         {/* Avatar */}
-        <div className="w-9 h-9 rounded-xl bg-amber-900/40 border border-amber-700/30 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-amber-900/40 border border-amber-700/30 flex items-center justify-center shrink-0">
           <span className="text-xs font-bold text-amber-300">{initials}</span>
         </div>
 

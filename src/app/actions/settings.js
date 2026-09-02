@@ -22,7 +22,20 @@ export async function getStoreSettings() {
       data: {
         storeName: store.name,
         storeCode: store.code,
-        settings: store.settings,
+        settings: store.settings
+          ? {
+              id: store.settings.id,
+              storeId: store.settings.storeId,
+              taxEnabled: store.settings.taxEnabled,
+              taxRate: Number(store.settings.taxRate),
+              taxBaseIncludesServiceCharge: store.settings.taxBaseIncludesServiceCharge,
+              serviceChargeEnabled: store.settings.serviceChargeEnabled,
+              serviceChargeRate: Number(store.settings.serviceChargeRate),
+              cashRoundingEnabled: store.settings.cashRoundingEnabled,
+              cashRoundingUnit: Number(store.settings.cashRoundingUnit),
+              timezone: store.settings.timezone,
+            }
+          : null,
       },
     };
   } catch (error) {
