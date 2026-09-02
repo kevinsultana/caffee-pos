@@ -26,11 +26,6 @@ export function middleware(request) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // ── Sudah login → akses /login → redirect ke /dashboard ───────────────
-  if (isGuestOnly && sessionToken) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
   return NextResponse.next();
 }
 
