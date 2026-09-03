@@ -243,7 +243,7 @@ export default function PromotionsPage() {
             placeholder="Cari nama promosi atau kode promo..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
         <select
@@ -323,7 +323,7 @@ export default function PromotionsPage() {
                               PRODUCT
                             </span>
                             {prodTarget && (
-                              <p className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[120px]">
+                              <p className="text-[10px] text-slate-500 mt-0.5 truncate max-w-30">
                                 Target: {prodTarget}
                               </p>
                             )}

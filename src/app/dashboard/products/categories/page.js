@@ -234,7 +234,7 @@ export default function ProductCategoriesPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isPending}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
