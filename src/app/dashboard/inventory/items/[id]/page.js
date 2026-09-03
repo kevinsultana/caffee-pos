@@ -131,7 +131,7 @@ export default function InventoryItemDetailPage() {
   const selectedUnitObj = units.find((u) => u.id === selectedUnitId);
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-7xl">
       <Toaster position="top-right" />
 
       {/* Breadcrumb & Title */}

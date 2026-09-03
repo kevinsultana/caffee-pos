@@ -13,11 +13,11 @@ export default async function DashboardLayout({ children }) {
   if (!user) redirect('/login');
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-slate-800">
+    <div className="min-h-screen bg-slate-50 text-slate-800">
       {/* Real-time Session Guard & Multi-Device Kick-out Handler */}
       <SessionGuard />
 
-      {/* Sidebar (controlled via client DashboardShell) */}
+      {/* Sidebar & Main Layout (controlled via client DashboardShell) */}
       <DashboardShell user={user}>
         {children}
       </DashboardShell>

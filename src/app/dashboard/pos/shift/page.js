@@ -82,8 +82,8 @@ export default function ShiftManagementPage() {
       diff === 0
         ? '<span class="text-slate-700 font-bold">Pas (Tidak ada selisih)</span>'
         : diff > 0
-        ? `<span class="text-emerald-700 font-bold">Surplus / Lebih: +${formatRupiah(diff)}</span>`
-        : `<span class="text-rose-600 font-bold">Defisit / Kurang: -${formatRupiah(Math.abs(diff))}</span>`;
+          ? `<span class="text-emerald-700 font-bold">Surplus / Lebih: +${formatRupiah(diff)}</span>`
+          : `<span class="text-rose-600 font-bold">Defisit / Kurang: -${formatRupiah(Math.abs(diff))}</span>`;
 
     const confirm = await Swal.fire({
       title: 'Tutup Shift Kasir?',
@@ -183,7 +183,7 @@ export default function ShiftManagementPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-7xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -420,8 +420,8 @@ export default function ShiftManagementPage() {
                         Number(actualCash) - Number(shift.expectedCash) === 0
                           ? 'text-slate-700'
                           : Number(actualCash) - Number(shift.expectedCash) > 0
-                          ? 'text-emerald-700'
-                          : 'text-rose-600'
+                            ? 'text-emerald-700'
+                            : 'text-rose-600'
                       )}
                     >
                       {Number(actualCash) - Number(shift.expectedCash) > 0 ? '+' : ''}

@@ -125,7 +125,7 @@ export default function PosCashMovementPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-7xl">
       <Toaster position="top-right" />
 
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
@@ -206,7 +206,7 @@ export default function PosCashMovementPage() {
                 disabled={isPending}
                 required
               />
-              
+
               {/* Quick buttons */}
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {[10000, 20000, 50000, 100000, 200000, 500000].map((v) => (
@@ -264,8 +264,8 @@ export default function PosCashMovementPage() {
               {isPending
                 ? 'Menyimpan Arus Kas...'
                 : type === 'CASH_OUT'
-                ? 'Simpan Kas Keluar (-)'
-                : 'Simpan Kas Masuk (+)'}
+                  ? 'Simpan Kas Keluar (-)'
+                  : 'Simpan Kas Masuk (+)'}
             </button>
           </form>
         </div>
