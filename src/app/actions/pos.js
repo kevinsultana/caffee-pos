@@ -217,7 +217,31 @@ export async function processPosCheckout({
         inventoryItem: {
           include: { balance: true, baseUnit: true },
         },
+        variants: {
+          include: {
+            inventoryItem: {
+              include: { balance: true, baseUnit: true },
+            },
+            recipes: {
+              include: {
+                versions: {
+                  where: { isActive: true },
+                  include: {
+                    ingredients: {
+                      include: {
+                        inventoryItem: {
+                          include: { balance: true, baseUnit: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         recipes: {
+          where: { variantId: null },
           include: {
             versions: {
               where: { isActive: true },
@@ -248,19 +272,33 @@ export async function processPosCheckout({
         return { error: `Produk tidak ditemukan di database.` };
       }
 
+      const selectedVariant = item.variantId
+        ? dbProd.variants?.find((v) => v.id === item.variantId)
+        : null;
+
       const qty = Number(item.quantity) || 1;
-      const unitPrice = Number(dbProd.price);
+      const unitPrice = selectedVariant
+        ? Number(selectedVariant.price)
+        : Number(dbProd.price);
       const subtotal = unitPrice * qty;
       productSubtotal += subtotal;
 
+      // Resep efektif: Prioritaskan resep varian, fallback ke resep induk
+      const effectiveRecipe =
+        selectedVariant?.recipes?.[0]?.versions?.[0] ||
+        dbProd.recipes?.[0]?.versions?.[0] ||
+        null;
+
       // Hitung HPP (WAC) saat ini
       let hppUnit = 0;
-      if (dbProd.type === 'DIRECT_STOCK' && dbProd.inventoryItem?.balance) {
-        hppUnit = Number(dbProd.inventoryItem.balance.averageCost) || 0;
+      if (dbProd.type === 'DIRECT_STOCK') {
+        const inv = selectedVariant?.inventoryItem || dbProd.inventoryItem;
+        if (inv?.balance) {
+          hppUnit = Number(inv.balance.averageCost) || 0;
+        }
       } else if (dbProd.type === 'RECIPE') {
-        const activeRecipe = dbProd.recipes[0]?.versions[0];
-        if (activeRecipe?.ingredients) {
-          for (const ing of activeRecipe.ingredients) {
+        if (effectiveRecipe?.ingredients) {
+          for (const ing of effectiveRecipe.ingredients) {
             const ingAvgCost = Number(ing.inventoryItem?.balance?.averageCost) || 0;
             hppUnit += Number(ing.quantity) * ingAvgCost;
           }
@@ -271,7 +309,9 @@ export async function processPosCheckout({
       orderItemsData.push({
         productId: dbProd.id,
         variantId: item.variantId || null,
-        productNameSnapshot: dbProd.name,
+        productNameSnapshot: selectedVariant
+          ? `${dbProd.name} (${selectedVariant.name})`
+          : dbProd.name,
         quantity: qty,
         unitPrice,
         promotionDiscount: 0,
@@ -280,6 +320,7 @@ export async function processPosCheckout({
         hppTotal,
         notes: item.notes?.trim() || null,
         productRef: dbProd,
+        effectiveRecipe,
       });
     }
 
@@ -512,7 +553,7 @@ export async function processPosCheckout({
 
         // 2) RECIPE
         if (item.productRef.type === 'RECIPE') {
-          const activeRecipe = item.productRef.recipes[0]?.versions[0];
+          const activeRecipe = item.effectiveRecipe || item.productRef.recipes[0]?.versions[0];
           if (activeRecipe?.ingredients) {
             for (const ing of activeRecipe.ingredients) {
               const ingInvId = ing.inventoryItemId;

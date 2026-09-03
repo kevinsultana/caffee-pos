@@ -1050,7 +1050,7 @@ export async function saveRecipe({
       if (!recipe) {
         recipe = await tx.recipe.create({
           data: {
-            productId: variantId ? null : productId,
+            productId: productId || null,
             variantId: variantId || null,
             name: finalRecipeName,
           },
@@ -1059,7 +1059,10 @@ export async function saveRecipe({
         // Update nama resep jika diubah
         await tx.recipe.update({
           where: { id: recipe.id },
-          data: { name: finalRecipeName },
+          data: {
+            name: finalRecipeName,
+            ...(productId ? { productId } : {}),
+          },
         });
       }
 
@@ -1107,7 +1110,14 @@ export async function saveRecipe({
         },
       });
 
-      return { recipeId: recipe.id, versionNumber: nextVersionNumber };
+      return {
+        recipeId: recipe.id,
+        versionNumber: nextVersionNumber,
+        activeVersion: {
+          id: newVersion.id,
+          versionNumber: nextVersionNumber,
+        },
+      };
     });
 
     const revalId = productId || (await prisma.productVariant.findUnique({ where: { id: variantId } }))?.productId;

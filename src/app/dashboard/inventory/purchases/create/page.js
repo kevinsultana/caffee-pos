@@ -181,7 +181,7 @@ export default function CreatePurchasePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-7xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">

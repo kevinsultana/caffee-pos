@@ -110,6 +110,14 @@ export default function ProductDetailPage() {
 
   // ─── RECIPE HANDLERS ─────────────────────────────────────────────────────
   const openRecipeEditor = (variant = null) => {
+    if (inventoryItems.length === 0) {
+      toast.error(
+        'Belum ada bahan baku inventaris yang terdaftar. Harap tambahkan barang di menu Inventaris terlebih dahulu.',
+        { duration: 5000 }
+      );
+      return;
+    }
+
     setRecipeTargetVariant(variant);
     const targetRecipe = variant ? variant.recipe : product.recipe;
 
@@ -129,7 +137,16 @@ export default function ProductDetailPage() {
       ]);
     }
 
+    setActiveTab('RECIPE');
     setIsEditingRecipe(true);
+  };
+
+  const handleCancelRecipeEdit = () => {
+    setIsEditingRecipe(false);
+    if (recipeTargetVariant) {
+      setActiveTab('VARIANTS');
+      setRecipeTargetVariant(null);
+    }
   };
 
   const addIngredientRow = () => {
@@ -172,6 +189,9 @@ export default function ProductDetailPage() {
       const res = await saveRecipe({
         productId: product.id,
         variantId: recipeTargetVariant?.id || null,
+        recipeName: recipeTargetVariant
+          ? `Resep: ${product.name} (${recipeTargetVariant.name})`
+          : `Resep: ${product.name}`,
         ingredients: recipeIngredients.map((ing) => ({
           inventoryItemId: ing.inventoryItemId,
           quantity: parseFloat(ing.quantity),
@@ -183,11 +203,20 @@ export default function ProductDetailPage() {
         return;
       }
 
+      const versionNum =
+        res.data?.activeVersion?.versionNumber ||
+        res.data?.versionNumber ||
+        1;
+
       toast.success(
-        `Resep berhasil disimpan (Versi ${res.data.activeVersion.versionNumber})!`,
+        `Resep ${recipeTargetVariant ? `varian "${recipeTargetVariant.name}"` : 'produk'} berhasil disimpan (Versi ${versionNum})!`,
         { id: toastId }
       );
       setIsEditingRecipe(false);
+      if (recipeTargetVariant) {
+        setActiveTab('VARIANTS');
+        setRecipeTargetVariant(null);
+      }
       loadData();
     });
   };
@@ -406,7 +435,10 @@ export default function ProductDetailPage() {
     return sum + qty * avg;
   }, 0);
 
-  const activeRecipe = product.recipe;
+  const targetRecipe = recipeTargetVariant
+    ? recipeTargetVariant.recipe
+    : product.recipe;
+  const activeRecipe = targetRecipe;
   const targetPrice = recipeTargetVariant ? recipeTargetVariant.price : product.price;
   const currentHpp = isEditingRecipe
     ? liveEstimatedHpp
@@ -515,6 +547,7 @@ export default function ProductDetailPage() {
           <button
             onClick={() => {
               setActiveTab('RECIPE');
+              setRecipeTargetVariant(null);
               setIsEditingRecipe(false);
             }}
             className={cn(
@@ -571,13 +604,33 @@ export default function ProductDetailPage() {
       {/* ─── TAB 1: FORMULASI RESEP ────────────────────────────────────────────── */}
       {activeTab === 'RECIPE' && product.type === 'RECIPE' && (
         <div className="space-y-6">
+          {inventoryItems.length === 0 && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <p className="font-bold">Belum Ada Bahan Baku Inventaris</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    Resep memerlukan bahan baku inventaris untuk pemotongan stok dan kalkulasi HPP otomatis. Silakan daftarkan bahan baku di menu Inventaris terlebih dahulu.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/inventory/setup"
+                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 transition-colors text-center"
+              >
+                Buka Setup Barang &rarr;
+              </Link>
+            </div>
+          )}
+
           {!isEditingRecipe ? (
             <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-bold text-slate-900">
-                      Resep Aktif: {activeRecipe ? activeRecipe.name : product.name}
+                      Resep Aktif: {recipeTargetVariant ? `${product.name} (${recipeTargetVariant.name})` : (activeRecipe ? activeRecipe.name : product.name)}
                     </h2>
                     {activeRecipe?.activeVersion && (
                       <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-bold">
@@ -592,13 +645,13 @@ export default function ProductDetailPage() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => viewRecipeHistory(null)}
+                    onClick={() => viewRecipeHistory(recipeTargetVariant)}
                     className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-2xs transition-all"
                   >
                     Riwayat Versi
                   </button>
                   <button
-                    onClick={() => openRecipeEditor(null)}
+                    onClick={() => openRecipeEditor(recipeTargetVariant)}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -672,7 +725,7 @@ export default function ProductDetailPage() {
 
                 <button
                   type="button"
-                  onClick={() => setIsEditingRecipe(false)}
+                  onClick={handleCancelRecipeEdit}
                   className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold"
                 >
                   Batal
@@ -788,7 +841,7 @@ export default function ProductDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsEditingRecipe(false)}
+                    onClick={handleCancelRecipeEdit}
                     className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold"
                   >
                     Batal
