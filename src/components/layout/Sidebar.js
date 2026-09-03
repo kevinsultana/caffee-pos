@@ -207,7 +207,7 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 md:hidden"
           onClick={onClose}
         />
       )}
@@ -215,9 +215,9 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
       {/* Sidebar Container — Fixed & Independently Scrollable */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col shadow-sm',
+          'fixed top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col shadow-sm',
           isCollapsed ? 'w-20' : 'w-64',
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
         {/* Brand Header */}
@@ -243,7 +243,7 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
           {!isCollapsed && (
             <button
               onClick={onToggleCollapse}
-              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               title="Kecilkan Sidebar"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -255,7 +255,7 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
           {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors lg:hidden"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors md:hidden"
             aria-label="Tutup menu"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -346,7 +346,7 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
           {isCollapsed && (
             <button
               onClick={onToggleCollapse}
-              className="hidden lg:flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-emerald-700 hover:bg-white border border-transparent hover:border-slate-200 transition-all w-full"
+              className="hidden md:flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-emerald-700 hover:bg-white border border-transparent hover:border-slate-200 transition-all w-full"
               title="Perluas Sidebar"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

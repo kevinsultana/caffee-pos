@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { logout } from '@/app/actions/auth';
+import { cn } from '@/lib/utils';
 
 export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onToggleCollapse }) {
   const router = useRouter();
@@ -61,7 +62,15 @@ export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onTog
   };
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 lg:px-8 py-3.5 bg-white border-b border-slate-200/80 shadow-2xs">
+    <header
+      className={cn(
+        'fixed top-0 right-0 z-40 h-16 bg-white border-b border-slate-200 transition-all duration-300',
+        'flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 shadow-2xs',
+        isCollapsed
+          ? 'w-full md:w-[calc(100%-5rem)]'
+          : 'w-full md:w-[calc(100%-16rem)]'
+      )}
+    >
       {/* Left: Mobile hamburger, Desktop collapse toggle & breadcrumb */}
       <div className="flex items-center gap-3">
         {/* Mobile hamburger */}

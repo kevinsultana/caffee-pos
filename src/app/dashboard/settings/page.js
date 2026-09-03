@@ -221,7 +221,7 @@ export default function SettingsPage() {
   const isSaving = isPending || isUploadingLogo;
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
