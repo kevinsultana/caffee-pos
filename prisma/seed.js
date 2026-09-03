@@ -35,24 +35,55 @@ async function main() {
   });
   console.log(`✅ Store    : ${store.name} (code: ${store.code})`);
 
-  // ─── 2. Roles ────────────────────────────────────────────────────────────────
-  const roleNames = ['OWNER', 'MANAGER', 'CASHIER', 'INVENTORY_STAFF'];
+  const roleConfigs = [
+    {
+      name: 'OWNER',
+      description: 'System root admin with full unrestricted access',
+      permissions: [],
+    },
+    {
+      name: 'MANAGER',
+      description: 'Operations manager with operational and reporting access',
+      permissions: [
+        'MENU_DASHBOARD', 'MENU_POS', 'MENU_CASH_FLOW', 'MENU_QR_TABLE',
+        'MENU_PRODUCTS', 'MENU_CATEGORIES', 'MENU_PROMOTIONS', 'MENU_CUSTOMERS',
+        'MENU_INVENTORY', 'MENU_PURCHASING', 'MENU_STOCK_CARD', 'MENU_OPNAME',
+        'MENU_SUPPLIERS', 'MENU_INVENTORY_SETUP', 'MENU_AUDIT'
+      ],
+    },
+    {
+      name: 'CASHIER',
+      description: 'Front-desk cashier with POS and cash handling access',
+      permissions: ['MENU_POS', 'MENU_CASH_FLOW', 'MENU_CUSTOMERS'],
+    },
+    {
+      name: 'INVENTORY_STAFF',
+      description: 'Warehouse staff managing stock, purchasing, and opnames',
+      permissions: [
+        'MENU_INVENTORY', 'MENU_PURCHASING', 'MENU_STOCK_CARD',
+        'MENU_OPNAME', 'MENU_SUPPLIERS', 'MENU_INVENTORY_SETUP'
+      ],
+    },
+  ];
   const roles = {};
 
-  for (const roleName of roleNames) {
+  for (const config of roleConfigs) {
     const role = await prisma.role.upsert({
       where: {
-        storeId_name: { storeId: store.id, name: roleName },
+        storeId_name: { storeId: store.id, name: config.name },
       },
-      update: {},
+      update: {
+        permissions: config.permissions,
+      },
       create: {
         storeId: store.id,
-        name: roleName,
-        description: `System role: ${roleName}`,
+        name: config.name,
+        description: config.description,
+        permissions: config.permissions,
         isSystem: true,
       },
     });
-    roles[roleName] = role;
+    roles[config.name] = role;
     console.log(`✅ Role     : ${role.name}`);
   }
 

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { MENU_PERMISSIONS } from '@/lib/permissions';
 
 const SESSION_COOKIE = 'schaw_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 jam
@@ -16,6 +17,26 @@ const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 jam
  */
 function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Parsing payload session cookie yang dapat berupa string token tunggal
+ * atau JSON object { token, requiresPasswordChange }.
+ */
+function parseSessionCookie(cookieValue) {
+  if (!cookieValue) return null;
+  try {
+    const decoded = decodeURIComponent(cookieValue);
+    if (decoded.startsWith('{')) {
+      return JSON.parse(decoded);
+    }
+    if (cookieValue.startsWith('{')) {
+      return JSON.parse(cookieValue);
+    }
+    return { token: cookieValue, requiresPasswordChange: false };
+  } catch {
+    return { token: cookieValue, requiresPasswordChange: false };
+  }
 }
 
 /**
@@ -117,9 +138,22 @@ export async function login(username, password) {
       },
     });
 
-    // ── Set HTTP-only cookie ──────────────────────────────────────────────
+    // ── Set HTTP-only cookie dengan payload sesi ──────────────────────────
+    const allPermissionCodes = MENU_PERMISSIONS.map((p) => p.code);
+    const effectivePermissions =
+      user.role?.name === 'OWNER'
+        ? allPermissionCodes
+        : user.role?.permissions || [];
+
+    const sessionPayload = JSON.stringify({
+      token: rawToken,
+      requiresPasswordChange: Boolean(user.mustChangePassword),
+      role: user.role?.name,
+      permissions: effectivePermissions,
+    });
+
     const cookieStore = await cookies();
-    cookieStore.set(SESSION_COOKIE, rawToken, {
+    cookieStore.set(SESSION_COOKIE, sessionPayload, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -129,7 +163,8 @@ export async function login(username, password) {
 
     return {
       success: true,
-      mustChangePassword: user.mustChangePassword,
+      mustChangePassword: Boolean(user.mustChangePassword),
+      redirectUrl: user.mustChangePassword ? '/login/change-password' : '/dashboard',
     };
   } catch (error) {
     console.error('[auth/login] Error:', error);
@@ -198,8 +233,27 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
       });
     });
 
+    // ── Perbarui session cookie: hilangkan flag requiresPasswordChange ──────
+    const cookieStore = await cookies();
+    const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
+    const sessionData = parseSessionCookie(rawCookie);
+    if (sessionData?.token) {
+      const updatedPayload = JSON.stringify({
+        token: sessionData.token,
+        requiresPasswordChange: false,
+      });
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      cookieStore.set(SESSION_COOKIE, updatedPayload, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        expires: expiresAt,
+        path: '/',
+      });
+    }
+
     revalidatePath('/dashboard');
-    return { success: true };
+    return { success: true, redirectUrl: '/dashboard' };
   } catch (error) {
     console.error('[changeFirstTimePassword] Error:', error);
     return { error: error.message || 'Gagal mengubah password.' };
@@ -211,29 +265,33 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
  */
 export async function logout() {
   const cookieStore = await cookies();
-  const rawToken = cookieStore.get(SESSION_COOKIE)?.value;
+  const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
 
-  if (rawToken) {
-    const tokenHash = hashToken(rawToken);
-    const session = await prisma.userSession.findUnique({
-      where: { sessionTokenHash: tokenHash },
-    });
-
-    if (session) {
-      await prisma.userSession.update({
+  if (rawCookie) {
+    const sessionData = parseSessionCookie(rawCookie);
+    const rawToken = sessionData?.token;
+    if (rawToken) {
+      const tokenHash = hashToken(rawToken);
+      const session = await prisma.userSession.findUnique({
         where: { sessionTokenHash: tokenHash },
-        data: { revokedAt: new Date() },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          storeId: session.userId ? (await prisma.user.findUnique({ where: { id: session.userId } }))?.storeId : '',
-          userId: session.userId,
-          action: 'LOGOUT',
-          module: 'AUTH',
-          changeSummary: 'Pengguna melakukan logout dari sistem.',
-        },
-      });
+      if (session) {
+        await prisma.userSession.update({
+          where: { sessionTokenHash: tokenHash },
+          data: { revokedAt: new Date() },
+        });
+
+        await prisma.auditLog.create({
+          data: {
+            storeId: session.userId ? (await prisma.user.findUnique({ where: { id: session.userId } }))?.storeId : '',
+            userId: session.userId,
+            action: 'LOGOUT',
+            module: 'AUTH',
+            changeSummary: 'Pengguna melakukan logout dari sistem.',
+          },
+        });
+      }
     }
   }
 
@@ -246,8 +304,12 @@ export async function logout() {
  */
 export async function verifySession() {
   const cookieStore = await cookies();
-  const rawToken = cookieStore.get(SESSION_COOKIE)?.value;
+  const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
 
+  if (!rawCookie) return null;
+
+  const sessionData = parseSessionCookie(rawCookie);
+  const rawToken = sessionData?.token;
   if (!rawToken) return null;
 
   const tokenHash = hashToken(rawToken);
@@ -266,6 +328,15 @@ export async function verifySession() {
   if (session.expiresAt < new Date()) return null;
   if (session.user.status !== 'ACTIVE') return null;
 
+  // Pastikan permissions terisi dengan benar (OWNER mendapatkan seluruh hak akses)
+  if (session.user.role) {
+    if (session.user.role.name === 'OWNER') {
+      session.user.role.permissions = MENU_PERMISSIONS.map((p) => p.code);
+    } else if (!Array.isArray(session.user.role.permissions)) {
+      session.user.role.permissions = [];
+    }
+  }
+
   return session.user;
 }
 
@@ -278,8 +349,14 @@ export async function verifySession() {
 export async function verifyCurrentSession() {
   try {
     const cookieStore = await cookies();
-    const rawToken = cookieStore.get(SESSION_COOKIE)?.value;
+    const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
 
+    if (!rawCookie) {
+      return { isValid: false, reason: 'REVOKED' };
+    }
+
+    const sessionData = parseSessionCookie(rawCookie);
+    const rawToken = sessionData?.token;
     if (!rawToken) {
       return { isValid: false, reason: 'REVOKED' };
     }

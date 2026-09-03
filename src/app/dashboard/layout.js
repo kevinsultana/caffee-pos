@@ -11,6 +11,7 @@ export default async function DashboardLayout({ children }) {
   // ── Validasi sesi di server (full DB check) ────────────────────────────
   const user = await verifySession();
   if (!user) redirect('/login');
+  if (user.mustChangePassword) redirect('/login/change-password');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">

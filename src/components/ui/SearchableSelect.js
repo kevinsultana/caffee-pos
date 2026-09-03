@@ -2,11 +2,13 @@
 
 import React, { useId } from 'react';
 import Select from 'react-select';
+import CreatableSelect from 'react-select/creatable';
 
 /**
  * SearchableSelect — Wrapper komponen react-select yang disesuaikan dengan
  * Design System Schaw Cafe (Tailwind Slate/Emerald).
  *
+ * Mendukung mode Creatable (pembuatan opsi baru on-the-fly) serta pencarian real-time.
  * Mengembalikan nilai primitif `value` (bukan objek { value, label }) pada onChange,
  * sehingga kompatibel 100% dengan state form standar.
  */
@@ -19,6 +21,9 @@ export default function SearchableSelect({
   isDisabled = false,
   isClearable = false,
   isSearchable = true,
+  isCreatable = false,
+  onCreateOption,
+  formatCreateLabel,
   className = '',
   id,
   name,
@@ -39,6 +44,8 @@ export default function SearchableSelect({
       onChange(selected ? selected.value : null);
     }
   };
+
+  const Component = isCreatable ? CreatableSelect : Select;
 
   const customStyles = {
     control: (base, state) => ({
@@ -146,13 +153,15 @@ export default function SearchableSelect({
 
   return (
     <div className={`relative ${className}`}>
-      <Select
+      <Component
         instanceId={id || instanceId}
         id={id}
         name={name}
         options={options}
         value={selectedOption}
         onChange={handleChange}
+        onCreateOption={onCreateOption}
+        formatCreateLabel={formatCreateLabel}
         placeholder={placeholder}
         isDisabled={activeDisabled}
         isClearable={isClearable}

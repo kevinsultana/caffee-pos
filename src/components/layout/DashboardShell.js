@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import DashboardHeader from '@/components/layout/DashboardHeader';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 
 /**
@@ -12,6 +12,22 @@ import { cn } from '@/lib/utils';
 export default function DashboardShell({ user, children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Deteksi jika user dialihkan karena tidak memiliki izin (403 Forbidden)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('forbidden') === '1') {
+        toast.error('Akses Ditolak: Peran akun Anda tidak memiliki hak akses untuk membuka menu tersebut.', {
+          id: 'forbidden-toast',
+          duration: 5000,
+        });
+        params.delete('forbidden');
+        const newSearch = params.toString() ? `?${params.toString()}` : '';
+        window.history.replaceState({}, '', `${window.location.pathname}${newSearch}`);
+      }
+    }
+  }, []);
 
   return (
     <>
