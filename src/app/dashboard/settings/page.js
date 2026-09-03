@@ -145,6 +145,7 @@ export default function SettingsPage() {
 
     try {
       const formData = new FormData();
+      formData.append('image', file);
       formData.append('file', file);
 
       const res = await uploadStoreLogo(formData);

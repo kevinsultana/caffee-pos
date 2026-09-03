@@ -219,11 +219,27 @@ const NAV_GROUPS = [
 
 export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCollapse }) {
   const pathname = usePathname();
-  const userRole = user?.role?.name;
+
+  // Ekstrak role dan permissions dengan fallback aman untuk seluruh skenario production
+  const userRole = typeof user?.role === 'string' ? user.role : user?.role?.name || '';
+  const isOwner = userRole === 'OWNER';
+
+  const userPerms = Array.isArray(user?.permissions)
+    ? user.permissions
+    : Array.isArray(user?.role?.permissions)
+    ? user.role.permissions
+    : [];
 
   const isLinkActive = (href, exact = false) => {
     if (exact || href === '/dashboard') return pathname === href;
     return pathname.startsWith(href);
+  };
+
+  // Helper otorisasi per menu dengan fallback aman
+  const canAccessMenu = (item) => {
+    if (isOwner) return true;
+    if (!item.permission) return true;
+    return userPerms.includes(item.permission);
   };
 
   return (
@@ -291,13 +307,8 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
         {/* Navigation List — Scrollable Mandiri */}
         <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto h-full">
           {NAV_GROUPS.map((group, groupIdx) => {
-            // Saring item menu berdasarkan hak akses dinamis user
-            const visibleItems = group.items.filter((item) => {
-              if (item.permission && !hasPermission(user, item.permission)) {
-                return false;
-              }
-              return true;
-            });
+            // Saring item menu berdasarkan hak akses dinamis user (dengan fallback aman)
+            const visibleItems = group.items.filter((item) => canAccessMenu(item));
 
             // Sembunyikan seluruh grup jika tidak ada satu pun item yang boleh diakses
             if (visibleItems.length === 0) return null;

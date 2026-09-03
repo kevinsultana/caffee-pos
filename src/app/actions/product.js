@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 
 async function getAuthenticatedUserAndStore() {
@@ -240,9 +240,17 @@ export async function getProducts() {
 export async function uploadProductImage(formData) {
   try {
     await getAuthenticatedUserAndStore();
-    const file = formData.get('file') || formData.get('image');
+
+    if (!isSupabaseConfigured) {
+      return {
+        error:
+          'Kunci API Supabase belum dikonfigurasi di file .env. Harap tambahkan SUPABASE_SERVICE_ROLE_KEY di .env.',
+      };
+    }
+
+    const file = formData.get('image') || formData.get('file');
     if (!file || typeof file === 'string') {
-      return { error: 'File gambar tidak ditemukan.' };
+      return { error: 'File gambar tidak ditemukan atau tidak valid.' };
     }
 
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
@@ -258,35 +266,36 @@ export async function uploadProductImage(formData) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const ext = file.name ? file.name.split('.').pop() : 'png';
-    const fileName = `product-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${ext}`;
-    const filePath = `products/${fileName}`;
+    const cleanFileName = file.name ? file.name.replace(/[^a-zA-Z0-9.-]/g, '_') : 'product.png';
+    const fileName = `${Date.now()}-${cleanFileName}`;
     const bucketName = 'product-images';
 
     const { error: uploadError } = await supabase.storage
       .from(bucketName)
-      .upload(filePath, buffer, {
+      .upload(fileName, buffer, {
         contentType: file.type,
         upsert: true,
       });
 
     if (uploadError) {
-      console.error('[uploadProductImage] Supabase error, falling back to data URI:', uploadError);
-      const base64 = buffer.toString('base64');
-      return {
-        success: true,
-        imageUrl: `data:${file.type};base64,${base64}`,
-      };
+      console.error('[uploadProductImage] Supabase Storage error:', uploadError);
+      return { error: `Gagal mengunggah foto produk ke Supabase Storage: ${uploadError.message}` };
     }
 
-    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    const publicUrl = publicData?.publicUrl || '';
+
+    if (!publicUrl) {
+      return { error: 'Gagal mendapatkan Public URL foto produk dari Supabase Storage.' };
+    }
+
     return {
       success: true,
-      imageUrl: publicData?.publicUrl || '',
+      imageUrl: publicUrl,
     };
   } catch (error) {
     console.error('[uploadProductImage] Error:', error);
-    return { error: error.message || 'Gagal mengunggah foto produk.' };
+    return { error: error.message || 'Gagal mengunggah foto produk ke Supabase Storage.' };
   }
 }
 
@@ -299,7 +308,7 @@ export async function deleteProductImageFile(imageUrl) {
     if (imageUrl.includes('product-images/')) {
       const parts = imageUrl.split('product-images/');
       if (parts[1]) {
-        const filePath = decodeURIComponent(parts[1]);
+        const filePath = decodeURIComponent(parts[1].split('?')[0]);
         await supabase.storage.from('product-images').remove([filePath]);
       }
     }

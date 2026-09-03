@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -67,13 +67,20 @@ export async function uploadStoreLogo(formData) {
   const user = await verifySession();
   if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
 
+  if (!isSupabaseConfigured) {
+    return {
+      error:
+        'Kunci API Supabase belum dikonfigurasi di file .env. Harap tambahkan SUPABASE_SERVICE_ROLE_KEY di .env.',
+    };
+  }
+
   try {
-    const file = formData.get('file') || formData.get('logo');
+    const file = formData.get('image') || formData.get('file') || formData.get('logo');
     if (!file || typeof file === 'string') {
       return { error: 'File logo tidak valid atau tidak ditemukan.' };
     }
 
-    // Validasi tipe file
+    // Validasi tipe file (harus berupa file gambar)
     const allowedMimeTypes = [
       'image/jpeg',
       'image/png',
@@ -85,7 +92,7 @@ export async function uploadStoreLogo(formData) {
       return { error: 'Format file tidak didukung. Harap gunakan file PNG, JPG, WEBP, atau SVG.' };
     }
 
-    // Validasi ukuran file (Max 5MB)
+    // Validasi ukuran file (Maksimal 5MB)
     const MAX_SIZE = 5 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return { error: 'Ukuran file terlalu besar. Maksimal 5MB.' };
@@ -94,50 +101,56 @@ export async function uploadStoreLogo(formData) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Dapatkan ekstensi file
-    const ext = file.name ? file.name.split('.').pop() : 'png';
-    const fileName = `logo-${Date.now()}.${ext}`;
-    const filePath = `store-logo/${fileName}`;
+    // Buat nama file unik
+    const cleanFileName = file.name ? file.name.replace(/[^a-zA-Z0-9.-]/g, '_') : 'logo.png';
+    const fileName = `${Date.now()}-${cleanFileName}`;
     const bucketName = 'store-assets';
+
+    // Dapatkan data store lama untuk pembersihan gambar lama
+    const currentStore = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      select: { logoUrl: true },
+    });
 
     // Upload ke Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from(bucketName)
-      .upload(filePath, buffer, {
+      .upload(fileName, buffer, {
         contentType: file.type,
         upsert: true,
       });
 
     if (uploadError) {
-      console.error('[settings/uploadStoreLogo] Supabase error:', uploadError);
-      // Fallback data URI jika bucket storage belum public/dibuat di dashboard Supabase
-      const base64 = buffer.toString('base64');
-      const dataUri = `data:${file.type};base64,${base64}`;
-
-      const store = await prisma.store.update({
-        where: { code: 'MAIN' },
-        data: { logoUrl: dataUri },
-      });
-
-      revalidatePath('/dashboard/settings');
-      revalidatePath('/dashboard');
-
-      return {
-        success: true,
-        logoUrl: dataUri,
-        message: 'Logo toko berhasil disimpan.',
-      };
+      console.error('[settings/uploadStoreLogo] Supabase Storage error:', uploadError);
+      return { error: `Gagal mengunggah logo ke Supabase Storage: ${uploadError.message}` };
     }
 
     // Dapatkan Public URL
-    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
     const publicUrl = publicData?.publicUrl || '';
 
-    // Simpan ke database Store
+    if (!publicUrl) {
+      return { error: 'Gagal mendapatkan Public URL logo dari Supabase Storage.' };
+    }
+
+    // Simpan HANYA Public URL ke database Store (Prisma)
     await prisma.store.update({
       where: { code: 'MAIN' },
       data: { logoUrl: publicUrl },
     });
+
+    // Cleanup: hapus gambar lama dari Supabase Storage jika sebelumnya tersimpan di store-assets
+    if (currentStore?.logoUrl && currentStore.logoUrl.includes('store-assets/')) {
+      try {
+        const oldParts = currentStore.logoUrl.split('store-assets/');
+        if (oldParts[1]) {
+          const oldFilePath = decodeURIComponent(oldParts[1].split('?')[0]);
+          await supabase.storage.from(bucketName).remove([oldFilePath]);
+        }
+      } catch (cleanErr) {
+        console.warn('[settings/uploadStoreLogo] Cleanup old logo error:', cleanErr);
+      }
+    }
 
     revalidatePath('/dashboard/settings');
     revalidatePath('/dashboard');
@@ -145,11 +158,11 @@ export async function uploadStoreLogo(formData) {
     return {
       success: true,
       logoUrl: publicUrl,
-      message: 'Logo toko berhasil diunggah dan disimpan.',
+      message: 'Logo toko berhasil diunggah ke Supabase Storage.',
     };
   } catch (error) {
     console.error('[settings/uploadStoreLogo]', error);
-    return { error: 'Gagal mengunggah logo toko.' };
+    return { error: 'Gagal mengunggah logo toko ke storage.' };
   }
 }
 
@@ -161,6 +174,23 @@ export async function removeStoreLogo() {
   if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
 
   try {
+    const store = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      select: { logoUrl: true },
+    });
+
+    if (store?.logoUrl && store.logoUrl.includes('store-assets/')) {
+      try {
+        const parts = store.logoUrl.split('store-assets/');
+        if (parts[1]) {
+          const filePath = decodeURIComponent(parts[1].split('?')[0]);
+          await supabase.storage.from('store-assets').remove([filePath]);
+        }
+      } catch (err) {
+        console.warn('[settings/removeStoreLogo] Gagal menghapus file storage:', err);
+      }
+    }
+
     await prisma.store.update({
       where: { code: 'MAIN' },
       data: { logoUrl: null },

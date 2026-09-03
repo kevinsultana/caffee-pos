@@ -223,7 +223,7 @@ export default function RolesManagementPage() {
             placeholder="Cari nama peran atau deskripsi..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
       </div>
@@ -402,7 +402,7 @@ export default function RolesManagementPage() {
                     value={roleName}
                     onChange={(e) => setRoleName(e.target.value)}
                     placeholder="Contoh: Admin Gudang, Kasir Senior, Barista"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                     required
                   />
                 </div>
@@ -417,7 +417,7 @@ export default function RolesManagementPage() {
                     value={roleDescription}
                     onChange={(e) => setRoleDescription(e.target.value)}
                     placeholder="Contoh: Mengelola penerimaan barang dan opname stok gudang"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                   />
                 </div>
 

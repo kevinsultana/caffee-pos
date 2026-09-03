@@ -43,12 +43,38 @@ export default function SessionGuard() {
             }
           }
 
+          const cleanupAndRedirect = async () => {
+            try {
+              // 1. Eksekusi Server Action logout untuk membersihkan sesi di server & cookie
+              await logout();
+            } catch (err) {
+              console.error('[SessionGuard] Error calling logout:', err);
+            }
+
+            // 2. Pembersihan cookie browser lokal secara langsung
+            if (typeof document !== 'undefined') {
+              document.cookie = 'schaw_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0';
+            }
+
+            // 3. Bersihkan storage
+            if (typeof window !== 'undefined') {
+              try {
+                sessionStorage.clear();
+                localStorage.removeItem('schaw_user');
+              } catch {
+                // Abaikan error storage
+              }
+              // 4. Redirect bersih ke /login dengan parameter revoked=1
+              window.location.href = '/login?revoked=1';
+            }
+          };
+
           // Tampilkan modal SweetAlert2 pemblokir layar
           Swal.fire({
             icon: 'warning',
             title: 'Sesi Berakhir',
-            text: 'Akun Anda telah login di perangkat lain. Anda akan dialihkan.',
-            confirmButtonText: 'OK',
+            text: 'Akun Anda telah login di perangkat lain. Anda akan dialihkan ke halaman login.',
+            confirmButtonText: 'Login Kembali',
             confirmButtonColor: '#059669', // Emerald-600
             allowOutsideClick: false,
             allowEscapeKey: false,
@@ -56,22 +82,10 @@ export default function SessionGuard() {
               popup: 'rounded-2xl shadow-xl font-sans',
               confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
             },
-          }).then(async () => {
-            try {
-              await logout();
-            } catch {
-              // ignore
-            }
-            window.location.href = '/login';
-          });
+          }).then(cleanupAndRedirect);
 
           // Fallback auto-redirect setelah 6 detik jika user tidak mengklik tombol
-          setTimeout(async () => {
-            try {
-              await logout();
-            } catch {}
-            window.location.href = '/login';
-          }, 6000);
+          setTimeout(cleanupAndRedirect, 6000);
         }
       } catch (err) {
         console.error('[SessionGuard] Error checking session:', err);

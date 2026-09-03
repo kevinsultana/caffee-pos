@@ -1492,7 +1492,7 @@ export default function PosScreenPage() {
                   value={newCustName}
                   onChange={(e) => setNewCustName(e.target.value)}
                   placeholder="Contoh: Budi Santoso"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                   autoFocus
                   required
                 />
@@ -1507,7 +1507,7 @@ export default function PosScreenPage() {
                   value={newCustPhone}
                   onChange={(e) => setNewCustPhone(e.target.value)}
                   placeholder="Contoh: 08123456789"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
                   Bisa dikosongkan atau diisi untuk memudahkan pencarian di kemudian hari.

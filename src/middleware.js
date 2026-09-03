@@ -26,6 +26,22 @@ function parseSessionCookie(cookieValue) {
   }
 }
 
+/**
+ * Helper untuk menghapus cookie sesi secara tuntas pada response (Production-safe)
+ */
+function clearSessionCookie(response) {
+  response.cookies.delete(SESSION_COOKIE);
+  response.cookies.set(SESSION_COOKIE, '', {
+    path: '/',
+    expires: new Date(0),
+    maxAge: 0,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  });
+  return response;
+}
+
 export function middleware(request) {
   const { pathname } = request.nextUrl;
   const sessionCookieValue = request.cookies.get(SESSION_COOKIE)?.value;
@@ -39,58 +55,71 @@ export function middleware(request) {
     pathname.startsWith(prefix)
   );
 
-  // ── 1. PENGGUNA BELUM LOGIN ─────────────────────────────────────────────────
-  if (!sessionToken) {
-    // Akses rute yang dilindungi (dashboard) → alihkan ke /login dengan tujuan asal
-    if (isProtected) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('from', pathname);
-      return NextResponse.redirect(loginUrl);
+  // ── ATURAN 1: CEGAH INFINITE REDIRECT LOOP DI HALAMAN /login ─────────────────
+  // JANGAN PERNAH redirect ke /login jika pengguna SUDAH BERADA di /login.
+  if (pathname === '/login') {
+    const isRevokedOrRedirected =
+      request.nextUrl.searchParams.has('revoked') ||
+      request.nextUrl.searchParams.has('from');
+
+    // Jika sesi dicabut (Single Active Session) atau redirect error,
+    // langsung bersihkan cookie sesi di scope middleware!
+    if (isRevokedOrRedirected && sessionCookieValue) {
+      const response = NextResponse.next();
+      return clearSessionCookie(response);
     }
 
-    // Akses halaman ganti password tanpa login → alihkan ke /login
-    if (pathname === '/login/change-password') {
-      return NextResponse.redirect(new URL('/login', request.url));
+    // Jika sudah login normal & valid tanpa flag revoked/from, baru arahkan ke dashboard
+    if (sessionToken && !requiresPasswordChange && !isRevokedOrRedirected) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
     return NextResponse.next();
   }
 
-  // ── 2. PENGGUNA SUDAH LOGIN TETAPI WAJIB GANTI PASSWORD ────────────────────
+  // ── ATURAN 2: PENGGUNA BELUM LOGIN ATAU SESI HILANG ─────────────────────────
+  if (!sessionToken) {
+    // Akses rute dashboard tanpa sesi → alihkan ke /login dan bersihkan sisa cookie
+    if (isProtected) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('from', pathname);
+      const response = NextResponse.redirect(loginUrl);
+      return clearSessionCookie(response);
+    }
+
+    // Akses ganti password tanpa sesi → alihkan ke /login
+    if (pathname === '/login/change-password') {
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      return clearSessionCookie(response);
+    }
+
+    return NextResponse.next();
+  }
+
+  // ── ATURAN 3: PENGGUNA SUDAH LOGIN TETAPI WAJIB GANTI PASSWORD ──────────────
   if (requiresPasswordChange) {
-    // Izinkan hanya akses ke halaman /login/change-password
     if (pathname === '/login/change-password') {
       return NextResponse.next();
     }
-
-    // Akses rute lain (termasuk /dashboard atau /login) → paksa alihkan ke /login/change-password
     return NextResponse.redirect(new URL('/login/change-password', request.url));
   }
 
-  // ── 3. PENGGUNA SUDAH LOGIN DAN SUDAH PERNAH GANTI PASSWORD (NORMAL) ───────
+  // ── ATURAN 4: PENGGUNA SUDAH LOGIN NORMAL (SUDAH PERNAH GANTI PASSWORD) ─────
   if (!requiresPasswordChange) {
-    // Jika mencoba akses /login/change-password padahal sudah ganti password → alihkan ke /dashboard
     if (pathname === '/login/change-password') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Jika mencoba akses /login biasa → alihkan ke /dashboard
-    if (pathname === '/login') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   }
 
-  // ── 4. RBAC: OTORISASI AKSES RUTE MENU ─────────────────────────────────────
+  // ── ATURAN 5: RBAC: OTORISASI AKSES RUTE MENU ───────────────────────────────
   if (isProtected && userRole && userRole !== 'OWNER') {
     const requiredPermission = getRequiredPermissionForRoute(pathname);
-    // Jika rute ini memerlukan izin khusus dan pengguna tidak memilikinya
     if (requiredPermission && !userPermissions.includes(requiredPermission)) {
-      // Jika mencoba akses /dashboard itu sendiri, biarkan agar tidak terjadi loop
       if (pathname === '/dashboard') {
         return NextResponse.next();
       }
 
-      // Tolak dan alihkan kembali ke /dashboard dengan query parameter forbidden=1
+      // Alihkan kembali ke /dashboard dengan notifikasi forbidden
       const dashboardUrl = new URL('/dashboard', request.url);
       dashboardUrl.searchParams.set('forbidden', '1');
       return NextResponse.redirect(dashboardUrl);

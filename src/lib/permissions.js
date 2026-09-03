@@ -156,10 +156,18 @@ export const ROUTE_PERMISSION_MAP = [
  */
 export function hasPermission(user, requiredPermission) {
   if (!user) return false;
-  if (user.role?.name === 'OWNER') return true;
+
+  const roleName =
+    typeof user.role === 'string'
+      ? user.role
+      : user.role?.name || '';
+
+  if (roleName === 'OWNER') return true;
   if (!requiredPermission) return true;
 
-  const permissions = Array.isArray(user.role?.permissions)
+  const permissions = Array.isArray(user.permissions)
+    ? user.permissions
+    : Array.isArray(user.role?.permissions)
     ? user.role.permissions
     : [];
 

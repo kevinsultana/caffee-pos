@@ -165,6 +165,8 @@ export async function login(username, password) {
       success: true,
       mustChangePassword: Boolean(user.mustChangePassword),
       redirectUrl: user.mustChangePassword ? '/login/change-password' : '/dashboard',
+      role: user.role?.name,
+      permissions: effectivePermissions,
     };
   } catch (error) {
     console.error('[auth/login] Error:', error);
@@ -295,7 +297,16 @@ export async function logout() {
     }
   }
 
-  cookieStore.delete(SESSION_COOKIE);
+  // ── Pembersihan cookie secara tuntas untuk Production ─────────────────
+  cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
+  cookieStore.set(SESSION_COOKIE, '', {
+    path: '/',
+    expires: new Date(0),
+    maxAge: 0,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  });
 }
 
 /**
@@ -337,6 +348,9 @@ export async function verifySession() {
     }
   }
 
+  // Set array permissions langsung di objek user agar selalu tersedia bagi UI & Middleware
+  session.user.permissions = session.user.role?.permissions || [];
+
   return session.user;
 }
 
@@ -367,7 +381,7 @@ export async function verifyCurrentSession() {
       where: { sessionTokenHash: tokenHash },
       include: {
         user: {
-          select: { id: true, status: true },
+          include: { role: true },
         },
       },
     });
@@ -380,7 +394,19 @@ export async function verifyCurrentSession() {
       return { isValid: false, reason: 'REVOKED' };
     }
 
-    return { isValid: true };
+    const effectivePermissions =
+      session.user.role?.name === 'OWNER'
+        ? MENU_PERMISSIONS.map((p) => p.code)
+        : session.user.role?.permissions || [];
+
+    return {
+      isValid: true,
+      user: {
+        id: session.user.id,
+        role: session.user.role?.name,
+        permissions: effectivePermissions,
+      },
+    };
   } catch (error) {
     console.error('[verifyCurrentSession] Error:', error);
     // Jika terjadi galat jaringan sementara, jangan langsung menendang user
