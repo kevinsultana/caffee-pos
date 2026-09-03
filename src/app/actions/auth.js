@@ -64,7 +64,7 @@ export async function login(username, password) {
     }
 
     // ── Revoke semua sesi aktif sebelumnya (aturan: single active session) ─
-    await prisma.userSession.updateMany({
+    const revokedResult = await prisma.userSession.updateMany({
       where: {
         userId: user.id,
         revokedAt: null,
@@ -74,6 +74,20 @@ export async function login(username, password) {
         revokedAt: new Date(),
       },
     });
+
+    if (revokedResult.count > 0) {
+      await prisma.auditLog.create({
+        data: {
+          storeId: user.storeId,
+          userId: user.id,
+          action: 'SESSION_REPLACEMENT',
+          module: 'AUTH',
+          entityType: 'UserSession',
+          entityId: user.id,
+          changeSummary: `Sesi aktif sebelumnya (${revokedResult.count} sesi) dicabut otomatis karena login baru dari perangkat lain.`,
+        },
+      });
+    }
 
     // ── Buat sesi baru ────────────────────────────────────────────────────
     const rawToken = uuidv4();
@@ -254,3 +268,46 @@ export async function verifySession() {
 
   return session.user;
 }
+
+/**
+ * Memeriksa validitas sesi saat ini secara real-time dari cookie browser.
+ * Digunakan oleh SessionGuard untuk mendeteksi pembatalan sesi (kick-out) saat akun login di device lain.
+ * 
+ * @returns {Promise<{ isValid: boolean, reason?: string }>}
+ */
+export async function verifyCurrentSession() {
+  try {
+    const cookieStore = await cookies();
+    const rawToken = cookieStore.get(SESSION_COOKIE)?.value;
+
+    if (!rawToken) {
+      return { isValid: false, reason: 'REVOKED' };
+    }
+
+    const tokenHash = hashToken(rawToken);
+
+    const session = await prisma.userSession.findUnique({
+      where: { sessionTokenHash: tokenHash },
+      include: {
+        user: {
+          select: { id: true, status: true },
+        },
+      },
+    });
+
+    if (!session || session.revokedAt !== null || session.expiresAt < new Date()) {
+      return { isValid: false, reason: 'REVOKED' };
+    }
+
+    if (session.user?.status !== 'ACTIVE') {
+      return { isValid: false, reason: 'REVOKED' };
+    }
+
+    return { isValid: true };
+  } catch (error) {
+    console.error('[verifyCurrentSession] Error:', error);
+    // Jika terjadi galat jaringan sementara, jangan langsung menendang user
+    return { isValid: true };
+  }
+}
+

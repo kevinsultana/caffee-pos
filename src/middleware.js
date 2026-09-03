@@ -26,6 +26,19 @@ export function middleware(request) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // ── Sudah login → akses rute guest (/login) → redirect ke /dashboard ──
+  if (isGuestOnly && sessionToken) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  /**
+   * Catatan Arsitektur Validasi Sesi:
+   * 1. Edge Middleware memeriksa keberadaan session cookie secara cepat tanpa beban query database.
+   * 2. Validasi status sesi mendalam (revokedAt, expired, user active) dieksekusi di Server Component
+   *    (src/app/dashboard/layout.js via verifySession()) pada setiap navigasi server.
+   * 3. Deteksi pembatalan sesi real-time (Single Active Session kick-out saat login di device lain)
+   *    ditangani oleh komponen Client <SessionGuard /> dengan modal SweetAlert2.
+   */
   return NextResponse.next();
 }
 
