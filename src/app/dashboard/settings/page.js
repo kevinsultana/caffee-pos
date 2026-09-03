@@ -66,7 +66,7 @@ function RateInput({ id, label, value, onChange, disabled, suffix = '%', min = 0
 // ── Sub-komponen: Section Card ────────────────────────────────────────────────
 function SettingsCard({ title, description, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
       <div className="px-6 py-4 border-b border-slate-100">
         <h2 className="text-sm font-bold text-slate-900">{title}</h2>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -221,7 +221,7 @@ export default function SettingsPage() {
   const isSaving = isPending || isUploadingLogo;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="p-6 space-y-6 max-w-4xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -512,7 +512,7 @@ export default function SettingsPage() {
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          className="px-6 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+          className="px-6 py-2.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
         >
           {isSaving ? (
             <>

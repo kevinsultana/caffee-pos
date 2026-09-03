@@ -193,7 +193,7 @@ const NAV_GROUPS = [
   },
 ];
 
-export default function Sidebar({ isOpen, onClose, user }) {
+export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCollapse }) {
   const pathname = usePathname();
   const userRole = user?.role?.name;
 
@@ -207,37 +207,56 @@ export default function Sidebar({ isOpen, onClose, user }) {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30 lg:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar Container */}
+      {/* Sidebar Container — Fixed & Independently Scrollable */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-64 z-40 flex flex-col',
-          'bg-white border-r border-slate-200/90 shadow-sm',
-          'transition-transform duration-300 ease-in-out',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
-          'lg:translate-x-0 lg:static lg:z-auto'
+          'fixed inset-y-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col shadow-sm',
+          isCollapsed ? 'w-20' : 'w-64',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
-          <div className="shrink-0 w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-sm flex items-center justify-center">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 01-1.5-2.121V3.104m3 0c.25.023.5.05.75.082M19.5 14.5l-4.091-4.09A2.25 2.25 0 0115 8.818V3.104" />
-            </svg>
+        <div className={cn(
+          'flex items-center border-b border-slate-100 shrink-0 transition-all duration-300',
+          isCollapsed ? 'justify-center p-4' : 'justify-between px-5 py-4'
+        )}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="shrink-0 w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-sm flex items-center justify-center">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 01-1.5-2.121V3.104m3 0c.25.023.5.05.75.082M19.5 14.5l-4.091-4.09A2.25 2.25 0 0115 8.818V3.104" />
+              </svg>
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate">Schaw Cafe</p>
+                <p className="text-[11px] font-medium text-emerald-600 mt-1">Enterprise POS</p>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">Schaw Cafe</p>
-            <p className="text-[11px] font-medium text-emerald-600 mt-1">Enterprise POS</p>
-          </div>
+
+          {/* Desktop collapse toggle inside header (when expanded) */}
+          {!isCollapsed && (
+            <button
+              onClick={onToggleCollapse}
+              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="Kecilkan Sidebar"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
 
           {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors lg:hidden"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors lg:hidden"
+            aria-label="Tutup menu"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -245,8 +264,8 @@ export default function Sidebar({ isOpen, onClose, user }) {
           </button>
         </div>
 
-        {/* Navigation List */}
-        <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {/* Navigation List — Scrollable Mandiri */}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto h-full">
           {NAV_GROUPS.map((group, groupIdx) => {
             // Sembunyikan grup jika role tidak sesuai
             if (group.requiredRole && group.requiredRole !== userRole) {
@@ -264,9 +283,14 @@ export default function Sidebar({ isOpen, onClose, user }) {
 
             return (
               <div key={groupIdx} className="space-y-1">
-                <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  {group.title}
-                </p>
+                {!isCollapsed ? (
+                  <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    {group.title}
+                  </p>
+                ) : (
+                  <div className="border-t border-slate-100 my-2 mx-1" />
+                )}
+
                 {visibleItems.map((item) => {
                   const active = isLinkActive(item.href, item.exact);
                   return (
@@ -274,17 +298,21 @@ export default function Sidebar({ isOpen, onClose, user }) {
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
+                      title={isCollapsed ? item.label : undefined}
                       className={cn(
-                        'flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150',
+                        'flex items-center text-xs font-semibold transition-all duration-150 rounded-xl',
+                        isCollapsed
+                          ? 'justify-center p-2.5'
+                          : 'gap-3 px-3 py-2',
                         active
-                          ? 'bg-emerald-50 text-emerald-800 border-r-4 border-emerald-600 rounded-l-xl rounded-r-none'
-                          : 'text-slate-600 hover:text-emerald-700 hover:bg-slate-100/80 rounded-xl'
+                          ? 'bg-emerald-50 text-emerald-800 font-bold shadow-2xs'
+                          : 'text-slate-600 hover:text-emerald-700 hover:bg-slate-100/80'
                       )}
                     >
-                      <span className={cn('transition-colors', active ? 'text-emerald-600' : 'text-slate-400')}>
+                      <span className={cn('shrink-0 transition-colors', active ? 'text-emerald-600' : 'text-slate-400')}>
                         {item.icon}
                       </span>
-                      <span>{item.label}</span>
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </Link>
                   );
                 })}
@@ -293,13 +321,39 @@ export default function Sidebar({ isOpen, onClose, user }) {
           })}
         </nav>
 
-        {/* User Card / Footer */}
-        <div className="p-3 m-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'Staff'}</p>
-            <p className="text-[10px] text-slate-500 font-medium capitalize">{userRole || 'User'}</p>
-          </div>
-          <span className="w-2 h-2 rounded-full bg-emerald-500" title="Online" />
+        {/* User Card & Collapse Toggle Footer */}
+        <div className="p-3 border-t border-slate-100 shrink-0 bg-slate-50/70 space-y-2">
+          {!isCollapsed ? (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+              <div className="min-w-0 pr-2">
+                <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'Staff'}</p>
+                <p className="text-[10px] text-slate-500 font-medium capitalize truncate">{userRole || 'User'}</p>
+              </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Online" />
+            </div>
+          ) : (
+            <div className="flex justify-center p-1">
+              <div className="relative">
+                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                  {(user?.name || 'U').charAt(0).toUpperCase()}
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 absolute bottom-0 right-0 ring-1 ring-white" title="Online" />
+              </div>
+            </div>
+          )}
+
+          {/* Expand Toggle Button (when collapsed) */}
+          {isCollapsed && (
+            <button
+              onClick={onToggleCollapse}
+              className="hidden lg:flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-emerald-700 hover:bg-white border border-transparent hover:border-slate-200 transition-all w-full"
+              title="Perluas Sidebar"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          )}
         </div>
       </aside>
     </>

@@ -29,7 +29,7 @@ export default function QrGeneratorPage() {
   )}`;
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="p-6 space-y-6 max-w-5xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -44,7 +44,7 @@ export default function QrGeneratorPage() {
           <Link
             href="/menu"
             target="_blank"
-            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 7.5v11.25A2.25 2.25 0 005.25 21h11.25A2.25 2.25 0 0019.5 18.75V10.5M10.5 10.5L20.25 0.75m0 0h-5.25m5.25 0v5.25" />
@@ -53,7 +53,7 @@ export default function QrGeneratorPage() {
           </Link>
           <button
             onClick={handlePrint}
-            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-2"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24-1.04-.37-2.12-.37-3.229 0-4.639 3.58-8.4 8-8.4s8 3.761 8 8.4c0 1.109-.13 2.189-.37 3.229M12 18.6V12m0 6.6l-3-3m3 3l3-3M6.72 13.829A7.962 7.962 0 0112 12c1.92 0 3.68.675 5.08 1.804" />
@@ -67,7 +67,7 @@ export default function QrGeneratorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* Left: Settings & Link */}
         <div className="space-y-4">
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-4">
+          <div className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm space-y-4">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
               Tautan Menu Digital
             </h2>
@@ -101,7 +101,7 @@ export default function QrGeneratorPage() {
             </div>
           </div>
 
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">
+          <div className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm space-y-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
               Petunjuk Penggunaan Tent Card:
             </h3>

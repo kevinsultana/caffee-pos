@@ -183,7 +183,7 @@ export default function ShiftManagementPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="p-6 space-y-6 max-w-6xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -196,7 +196,7 @@ export default function ShiftManagementPage() {
         </div>
         <Link
           href="/dashboard/pos"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all w-fit"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors w-fit"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -207,7 +207,7 @@ export default function ShiftManagementPage() {
 
       {/* ─── KONDISI 1: TIDAK ADA SHIFT AKTIF (BUKA SHIFT) ──────────────────── */}
       {!shift ? (
-        <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-lg mx-auto shadow-sm space-y-6 text-center">
+        <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-lg mx-auto shadow-sm space-y-6 text-center">
           <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-xs">
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
@@ -264,7 +264,7 @@ export default function ShiftManagementPage() {
         /* ─── KONDISI 2: SHIFT AKTIF (MONITOR & TUTUP SHIFT) ──────────────── */
         <div className="space-y-6">
           {/* Active Shift Banner Card */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center font-black">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -299,28 +299,28 @@ export default function ShiftManagementPage() {
 
           {/* KPI Laci Kas Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Modal Awal Kasir</p>
               <p className="text-lg font-bold font-mono text-slate-900 mt-1">
                 {formatRupiah(shift.openingCash)}
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Penjualan Tunai (Cash)</p>
               <p className="text-lg font-bold font-mono text-emerald-700 mt-1">
                 +{formatRupiah(shift.cashSales)}
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kas Masuk/Keluar</p>
               <p className="text-lg font-bold font-mono text-slate-700 mt-1">
                 {formatRupiah(shift.totalCashIn - shift.totalCashOut)}
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 shadow-xs">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 shadow-sm">
               <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Kas Seharusnya di Laci</p>
               <p className="text-xl font-black font-mono text-emerald-700 mt-1">
                 {formatRupiah(shift.expectedCash)}
@@ -331,7 +331,7 @@ export default function ShiftManagementPage() {
           {/* Two Columns: Recent Movements & Close Shift Form */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: Cash Movements List */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900">
                   Arus Kas Masuk / Keluar Shift Ini
@@ -388,7 +388,7 @@ export default function ShiftManagementPage() {
             </div>
 
             {/* Right: Close Shift Form */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-slate-900">
                 Rekonsiliasi & Penutupan Shift
               </h3>

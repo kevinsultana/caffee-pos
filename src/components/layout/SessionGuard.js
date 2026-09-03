@@ -4,19 +4,24 @@ import { useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 import { verifyCurrentSession, logout } from '@/app/actions/auth';
 
+const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
+const FOCUS_COOLDOWN_MS = 5 * 60 * 1000; // Minimal jeda 5 menit untuk trigger event focus/tab
+
 /**
  * SessionGuard — Komponen penjaga sesi aktif tunggal (Single Active Session Guard).
  *
  * Berjalan di background dashboard untuk mendeteksi apakah sesi login pengguna
  * telah dicabut (revoked) karena akun login di perangkat/browser lain.
- * Menggunakan polling 15 detik dan event window focus / tab visibility change.
+ * Interval polling disetel per 15 menit agar hemat kuota request API/database.
  */
 export default function SessionGuard() {
   const isKickedOutRef = useRef(false);
+  const lastCheckedRef = useRef(Date.now());
 
   useEffect(() => {
     async function checkSession() {
       if (isKickedOutRef.current) return;
+      lastCheckedRef.current = Date.now();
 
       try {
         const res = await verifyCurrentSession();
@@ -29,7 +34,7 @@ export default function SessionGuard() {
           window.removeEventListener('focus', handleFocus);
           document.removeEventListener('visibilitychange', handleVisibilityChange);
 
-          // Bersihkan local storage jika ada cache lokal
+          // Bersihkan local/session storage jika ada cache lokal
           if (typeof window !== 'undefined') {
             try {
               sessionStorage.clear();
@@ -73,17 +78,19 @@ export default function SessionGuard() {
       }
     }
 
-    // 1. Polling setiap 15 detik
-    const intervalId = setInterval(checkSession, 15000);
+    // 1. Polling setiap 15 menit
+    const intervalId = setInterval(checkSession, POLL_INTERVAL_MS);
 
-    // 2. Trigger saat window kembali fokus (pindah window/aplikasi)
+    // 2. Trigger saat window kembali fokus (dengan throttle minimal jeda 5 menit)
     const handleFocus = () => {
-      checkSession();
+      if (Date.now() - lastCheckedRef.current >= FOCUS_COOLDOWN_MS) {
+        checkSession();
+      }
     };
 
-    // 3. Trigger saat tab browser kembali aktif
+    // 3. Trigger saat tab browser kembali aktif (dengan throttle minimal jeda 5 menit)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && Date.now() - lastCheckedRef.current >= FOCUS_COOLDOWN_MS) {
         checkSession();
       }
     };
@@ -100,3 +107,4 @@ export default function SessionGuard() {
 
   return null;
 }
+

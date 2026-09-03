@@ -131,7 +131,7 @@ export default function CustomersManagementPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="p-6 space-y-6 max-w-6xl">
       <Toaster position="top-right" />
 
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
@@ -147,7 +147,7 @@ export default function CustomersManagementPage() {
 
         <button
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all w-fit"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors w-fit"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -157,7 +157,7 @@ export default function CustomersManagementPage() {
       </div>
 
       {/* ─── SEARCH BAR ───────────────────────────────────────────────────── */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+      <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
         <div className="relative">
           <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -167,13 +167,13 @@ export default function CustomersManagementPage() {
             placeholder="Cari nama pelanggan, nomor WhatsApp, atau email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">

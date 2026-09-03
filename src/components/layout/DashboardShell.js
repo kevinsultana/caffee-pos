@@ -4,12 +4,14 @@ import { useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import DashboardHeader from '@/components/layout/DashboardHeader';
 import { Toaster } from 'react-hot-toast';
+import { cn } from '@/lib/utils';
 
 /**
- * Client shell yang mengelola state sidebar open/close.
+ * Client shell yang mengelola state sidebar open/close (mobile) dan collapsed (desktop).
  */
 export default function DashboardShell({ user, children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <>
@@ -35,20 +37,29 @@ export default function DashboardShell({ user, children }) {
         }}
       />
 
-      {/* Sidebar */}
+      {/* Fixed Sidebar */}
       <Sidebar
         user={user}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        isOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
       />
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen">
+      {/* Main content area dengan margin-left dinamis */}
+      <div
+        className={cn(
+          'flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen transition-all duration-300 ease-in-out',
+          isCollapsed ? 'lg:ml-20' : 'lg:ml-64'
+        )}
+      >
         <DashboardHeader
           user={user}
-          onMenuToggle={() => setSidebarOpen((v) => !v)}
+          onMenuToggle={() => setMobileOpen((v) => !v)}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
         />
-        <main className="flex-1 p-4 lg:p-8 overflow-auto">
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
       </div>

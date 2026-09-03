@@ -125,7 +125,7 @@ export default function PosCashMovementPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="p-6 space-y-6 max-w-6xl">
       <Toaster position="top-right" />
 
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
@@ -145,7 +145,7 @@ export default function PosCashMovementPage() {
         </div>
 
         {/* Shift Badge Indicator */}
-        <div className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-3 shadow-2xs">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center gap-3 shadow-2xs">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <div className="text-xs">
             <p className="font-bold text-slate-900">Shift #{shiftData.id.slice(-6).toUpperCase()}</p>
@@ -159,7 +159,7 @@ export default function PosCashMovementPage() {
       {/* ─── GRID LAYOUT ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Form Input Kas (1 Col) */}
-        <div className="lg:col-span-1 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="lg:col-span-1 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-bold text-slate-900">
             Formulir Arus Kas
           </h2>
@@ -272,7 +272,7 @@ export default function PosCashMovementPage() {
 
         {/* Tabel Riwayat Arus Kas Shift Ini (2 Cols) */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-slate-900">

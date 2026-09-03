@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation';
 import { logout } from '@/app/actions/auth';
 
-export default function DashboardHeader({ user, onMenuToggle }) {
+export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onToggleCollapse }) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -62,16 +62,30 @@ export default function DashboardHeader({ user, onMenuToggle }) {
 
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 lg:px-8 py-3.5 bg-white border-b border-slate-200/80 shadow-2xs">
-      {/* Left: Mobile hamburger & breadcrumb */}
+      {/* Left: Mobile hamburger, Desktop collapse toggle & breadcrumb */}
       <div className="flex items-center gap-3">
+        {/* Mobile hamburger */}
         <button
-          id="btn-sidebar-toggle"
+          id="btn-sidebar-toggle-mobile"
           onClick={onMenuToggle}
           className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-          aria-label="Toggle sidebar"
+          aria-label="Toggle sidebar mobile"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+
+        {/* Desktop collapse toggle */}
+        <button
+          id="btn-sidebar-toggle-desktop"
+          onClick={onToggleCollapse}
+          className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+          title={isCollapsed ? "Perluas Sidebar" : "Kecilkan Sidebar"}
+          aria-label="Toggle sidebar desktop"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
           </svg>
         </button>
 
