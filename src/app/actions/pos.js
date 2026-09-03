@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { revalidatePath } from 'next/cache';
+import { getCachedProductCategories } from '@/app/actions/product';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -42,6 +43,14 @@ export async function getPosInitData() {
           variants: {
             where: { discontinued: false },
             orderBy: { name: 'asc' },
+            include: {
+              inventoryItem: {
+                include: {
+                  baseUnit: true,
+                  balance: true,
+                },
+              },
+            },
           },
           inventoryItem: {
             include: {
@@ -51,10 +60,7 @@ export async function getPosInitData() {
           },
         },
       }),
-      prisma.productCategory.findMany({
-        where: { storeId },
-        orderBy: { name: 'asc' },
-      }),
+      getCachedProductCategories(storeId),
       prisma.store.findUnique({
         where: { id: storeId },
         include: { settings: true },
@@ -74,6 +80,17 @@ export async function getPosInitData() {
       variants: p.variants?.map((v) => ({
         ...v,
         price: Number(v.price),
+        inventoryItem: v.inventoryItem
+          ? {
+              ...v.inventoryItem,
+              balance: v.inventoryItem.balance
+                ? {
+                    quantity: Number(v.inventoryItem.balance.quantity),
+                    averageCost: Number(v.inventoryItem.balance.averageCost),
+                  }
+                : null,
+            }
+          : null,
       })) || [],
       inventoryItem: p.inventoryItem
         ? {

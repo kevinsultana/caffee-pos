@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 
 const DEFAULT_SYSTEM_UNITS = [
   { code: 'g', name: 'Gram' },
@@ -25,28 +25,9 @@ async function getAuthenticatedUserAndStore() {
 // 1. UNIT ACTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function getUnits() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-
-    // Auto-seed default system units if none exist for this store
-    const count = await prisma.unit.count({ where: { storeId } });
-    if (count === 0) {
-      for (const u of DEFAULT_SYSTEM_UNITS) {
-        await prisma.unit.upsert({
-          where: { storeId_code: { storeId, code: u.code } },
-          update: {},
-          create: {
-            storeId,
-            code: u.code,
-            name: u.name,
-            isSystem: true,
-          },
-        });
-      }
-    }
-
-    const units = await prisma.unit.findMany({
+export const getCachedUnits = unstable_cache(
+  async (storeId) => {
+    return await prisma.unit.findMany({
       where: { storeId },
       orderBy: [{ isSystem: 'desc' }, { code: 'asc' }],
       include: {
@@ -59,6 +40,34 @@ export async function getUnits() {
         },
       },
     });
+  },
+  ['units'],
+  { tags: ['units'], revalidate: 3600 }
+);
+
+export async function getUnits() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    let units = await getCachedUnits(storeId);
+
+    // Auto-seed default system units if none exist for this store
+    if (!units || units.length === 0) {
+      for (const u of DEFAULT_SYSTEM_UNITS) {
+        await prisma.unit.upsert({
+          where: { storeId_code: { storeId, code: u.code } },
+          update: {},
+          create: {
+            storeId,
+            code: u.code,
+            name: u.name,
+            isSystem: true,
+          },
+        });
+      }
+      revalidateTag('units');
+      units = await getCachedUnits(storeId);
+    }
 
     return { data: units };
   } catch (error) {
@@ -95,6 +104,7 @@ export async function createUnit({ code, name }) {
       },
     });
 
+    revalidateTag('units');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: unit };
   } catch (error) {
@@ -124,6 +134,7 @@ export async function updateUnit(id, { name }) {
       data: { name: name.trim() },
     });
 
+    revalidateTag('units');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: updated };
   } catch (error) {
@@ -170,6 +181,7 @@ export async function deleteUnit(id) {
 
     await prisma.unit.delete({ where: { id } });
 
+    revalidateTag('units');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true };
   } catch (error) {
@@ -182,11 +194,9 @@ export async function deleteUnit(id) {
 // 2. INVENTORY CATEGORY ACTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function getInventoryCategories() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-
-    const categories = await prisma.inventoryCategory.findMany({
+export const getCachedInventoryCategories = unstable_cache(
+  async (storeId) => {
+    return await prisma.inventoryCategory.findMany({
       where: { storeId },
       orderBy: { name: 'asc' },
       include: {
@@ -195,7 +205,15 @@ export async function getInventoryCategories() {
         },
       },
     });
+  },
+  ['inventory-categories'],
+  { tags: ['inventory-categories'], revalidate: 3600 }
+);
 
+export async function getInventoryCategories() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const categories = await getCachedInventoryCategories(storeId);
     return { data: categories };
   } catch (error) {
     console.error('[getInventoryCategories] Error:', error);
@@ -228,6 +246,7 @@ export async function createInventoryCategory({ name }) {
       },
     });
 
+    revalidateTag('inventory-categories');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: category };
   } catch (error) {
@@ -263,6 +282,7 @@ export async function updateInventoryCategory(id, { name }) {
       data: { name: cleanName },
     });
 
+    revalidateTag('inventory-categories');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: category };
   } catch (error) {
@@ -296,6 +316,7 @@ export async function deleteInventoryCategory(id) {
 
     await prisma.inventoryCategory.delete({ where: { id } });
 
+    revalidateTag('inventory-categories');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true };
   } catch (error) {

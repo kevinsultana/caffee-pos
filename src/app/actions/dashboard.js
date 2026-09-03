@@ -49,78 +49,150 @@ export async function getDashboardMetrics(period = 'TODAY') {
     const { storeId } = await getAuthenticatedUserAndStore();
     const { start, end } = getDateRange(period);
 
-    // 1. Ambil Order dengan status PAID dalam rentang periode
-    const paidOrders = await prisma.order.findMany({
-      where: {
-        storeId,
-        status: 'PAID',
-        createdAt: { gte: start, lte: end },
+    // Filter umum untuk order berstatus PAID dalam rentang waktu yang dipilih
+    const orderWherePaid = {
+      storeId,
+      status: 'PAID',
+      createdAt: { gte: start, lte: end },
+    };
+
+    // 1. Order Aggregates (Gross Sales, Diskon, Pajak, Service Charge, Grand Total, Order Count)
+    // Dieksekusi langsung oleh PostgreSQL via prisma.order.aggregate
+    const orderAggPromise = prisma.order.aggregate({
+      where: orderWherePaid,
+      _count: {
+        id: true,
       },
-      include: {
-        items: true,
-        payment: true,
+      _sum: {
+        productSubtotal: true,
+        promotionDiscount: true,
+        taxAmount: true,
+        serviceChargeAmount: true,
+        grandTotal: true,
       },
-      orderBy: { createdAt: 'desc' },
     });
 
-    // 2. Kalkulasi Metrik Penjualan & Profit
-    let grossSales = 0;
-    let totalDiscount = 0;
-    let totalHpp = 0;
-    let totalTax = 0;
-    let totalServiceCharge = 0;
-    let totalGrandTotal = 0;
+    // 2. HPP (Cost of Goods Sold) Aggregate dari OrderItem
+    // Dieksekusi langsung oleh PostgreSQL via prisma.orderItem.aggregate
+    const hppAggPromise = prisma.orderItem.aggregate({
+      where: {
+        order: orderWherePaid,
+      },
+      _sum: {
+        hppTotal: true,
+      },
+    });
+
+    // 3. Breakdown Pembayaran (CASH vs QRIS)
+    // Dikelompokkan oleh PostgreSQL via prisma.payment.groupBy
+    const paymentGroupPromise = prisma.payment.groupBy({
+      by: ['method'],
+      where: {
+        order: orderWherePaid,
+        status: 'PAID',
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+
+    // 4. Top 5 Produk Terlaris (Berdasarkan Kuantitas & Pendapatan)
+    // Dikelompokkan & diurutkan langsung oleh PostgreSQL via prisma.orderItem.groupBy
+    const topProductsGroupPromise = prisma.orderItem.groupBy({
+      by: ['productNameSnapshot'],
+      where: {
+        order: orderWherePaid,
+      },
+      _sum: {
+        quantity: true,
+        subtotal: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc',
+        },
+      },
+      take: 5,
+    });
+
+    // 5. 10 Transaksi Terbaru (Lean Select)
+    const recentOrdersPromise = prisma.order.findMany({
+      where: orderWherePaid,
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderNumber: true,
+        queueNumber: true,
+        customerNameSnapshot: true,
+        grandTotal: true,
+        createdAt: true,
+        payment: {
+          select: {
+            method: true,
+          },
+        },
+      },
+    });
+
+    // 6. Low Stock Alerts (Bahan Baku Inventaris)
+    const inventoryItemsPromise = prisma.inventoryItem.findMany({
+      where: { storeId },
+      select: {
+        id: true,
+        name: true,
+        minimumStock: true,
+        baseUnit: { select: { code: true } },
+        balance: { select: { quantity: true } },
+      },
+    });
+
+    // Jalankan seluruh query di atas secara paralel (Concurrent DB Execution)
+    const [
+      orderAgg,
+      hppAgg,
+      paymentGroups,
+      topItemGroups,
+      recentOrdersData,
+      inventoryItems,
+    ] = await Promise.all([
+      orderAggPromise,
+      hppAggPromise,
+      paymentGroupPromise,
+      topProductsGroupPromise,
+      recentOrdersPromise,
+      inventoryItemsPromise,
+    ]);
+
+    // Format hasil agregasi matematis
+    const grossSales = Number(orderAgg._sum.productSubtotal || 0);
+    const totalDiscount = Number(orderAgg._sum.promotionDiscount || 0);
+    const totalTax = Number(orderAgg._sum.taxAmount || 0);
+    const totalServiceCharge = Number(orderAgg._sum.serviceChargeAmount || 0);
+    const totalGrandTotal = Number(orderAgg._sum.grandTotal || 0);
+    const orderCount = orderAgg._count.id || 0;
+
+    const totalHpp = Number(hppAgg._sum.hppTotal || 0);
+
     let cashSales = 0;
     let qrisSales = 0;
-
-    const productSalesMap = new Map();
-
-    for (const order of paidOrders) {
-      grossSales += Number(order.productSubtotal);
-      totalDiscount += Number(order.promotionDiscount);
-      totalTax += Number(order.taxAmount);
-      totalServiceCharge += Number(order.serviceChargeAmount);
-      totalGrandTotal += Number(order.grandTotal);
-
-      if (order.payment?.status === 'PAID') {
-        if (order.payment.method === 'CASH') {
-          cashSales += Number(order.payment.amount);
-        } else if (order.payment.method === 'QRIS') {
-          qrisSales += Number(order.payment.amount);
-        }
-      }
-
-      for (const item of order.items) {
-        totalHpp += Number(item.hppTotal);
-
-        // Agregasi top products
-        const prev = productSalesMap.get(item.productNameSnapshot) || {
-          name: item.productNameSnapshot,
-          quantity: 0,
-          revenue: 0,
-        };
-        prev.quantity += item.quantity;
-        prev.revenue += Number(item.subtotal);
-        productSalesMap.set(item.productNameSnapshot, prev);
+    for (const pg of paymentGroups) {
+      if (pg.method === 'CASH') {
+        cashSales = Number(pg._sum.amount || 0);
+      } else if (pg.method === 'QRIS') {
+        qrisSales = Number(pg._sum.amount || 0);
       }
     }
 
-    const orderCount = paidOrders.length;
     const netSales = Math.max(0, grossSales - totalDiscount);
-    // Gross Profit = Net Sales - HPP (Pajak & Service Charge BUKAN revenue Gross Profit)
     const grossProfit = netSales - totalHpp;
     const aov = orderCount > 0 ? Math.round(netSales / orderCount) : 0;
 
-    // Top Selling Products (Sorted by Quantity)
-    const topProducts = Array.from(productSalesMap.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
-
-    // 3. Low Stock Alerts (Bahan baku yang stoknya <= minimumStock atau minus)
-    const inventoryItems = await prisma.inventoryItem.findMany({
-      where: { storeId },
-      include: { balance: true, baseUnit: true },
-    });
+    const topProducts = topItemGroups.map((g) => ({
+      name: g.productNameSnapshot,
+      quantity: g._sum.quantity || 0,
+      revenue: Number(g._sum.subtotal || 0),
+    }));
 
     const stockAlerts = inventoryItems
       .filter((it) => {
@@ -137,8 +209,7 @@ export async function getDashboardMetrics(period = 'TODAY') {
         isNegative: it.balance ? Number(it.balance.quantity) < 0 : false,
       }));
 
-    // 4. Recent Transactions (10 transaksi terbaru)
-    const recentOrders = paidOrders.slice(0, 10).map((o) => ({
+    const recentOrders = recentOrdersData.map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
       queueNumber: o.queueNumber,

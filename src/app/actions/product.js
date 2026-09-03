@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { supabase } from '@/lib/supabase';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -15,11 +15,9 @@ async function getAuthenticatedUserAndStore() {
 // 1. PRODUCT CATEGORY ACTIONS (Kategori Menu Jual)
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function getProductCategories() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-
-    const categories = await prisma.productCategory.findMany({
+export const getCachedProductCategories = unstable_cache(
+  async (storeId) => {
+    return await prisma.productCategory.findMany({
       where: { storeId },
       orderBy: { name: 'asc' },
       include: {
@@ -28,7 +26,15 @@ export async function getProductCategories() {
         },
       },
     });
+  },
+  ['product-categories'],
+  { tags: ['product-categories'], revalidate: 3600 }
+);
 
+export async function getProductCategories() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const categories = await getCachedProductCategories(storeId);
     return { data: categories };
   } catch (error) {
     console.error('[getProductCategories] Error:', error);
@@ -61,6 +67,7 @@ export async function createProductCategory({ name }) {
       },
     });
 
+    revalidateTag('product-categories');
     revalidatePath('/dashboard/products/categories');
     return { success: true, data: category };
   } catch (error) {
@@ -96,6 +103,7 @@ export async function updateProductCategory(id, { name }) {
       data: { name: cleanName },
     });
 
+    revalidateTag('product-categories');
     revalidatePath('/dashboard/products/categories');
     return { success: true, data: category };
   } catch (error) {
@@ -129,6 +137,7 @@ export async function deleteProductCategory(id) {
 
     await prisma.productCategory.delete({ where: { id } });
 
+    revalidateTag('product-categories');
     revalidatePath('/dashboard/products/categories');
     return { success: true };
   } catch (error) {
@@ -195,7 +204,17 @@ export async function getProducts() {
             balance: true,
           },
         },
-        variants: true,
+        variants: {
+          orderBy: { name: 'asc' },
+          include: {
+            inventoryItem: {
+              include: {
+                baseUnit: true,
+                balance: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             orderItems: true,

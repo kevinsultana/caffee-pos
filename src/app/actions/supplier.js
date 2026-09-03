@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -10,11 +10,9 @@ async function getAuthenticatedUserAndStore() {
   return { user, storeId: user.storeId };
 }
 
-export async function getSuppliers() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-
-    const suppliers = await prisma.supplier.findMany({
+export const getCachedSuppliers = unstable_cache(
+  async (storeId) => {
+    return await prisma.supplier.findMany({
       where: { storeId },
       orderBy: { name: 'asc' },
       include: {
@@ -23,7 +21,15 @@ export async function getSuppliers() {
         },
       },
     });
+  },
+  ['suppliers'],
+  { tags: ['suppliers'], revalidate: 3600 }
+);
 
+export async function getSuppliers() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const suppliers = await getCachedSuppliers(storeId);
     return { data: suppliers };
   } catch (error) {
     console.error('[getSuppliers] Error:', error);
@@ -58,6 +64,7 @@ export async function createSupplier({ name, phone, address }) {
       },
     });
 
+    revalidateTag('suppliers');
     revalidatePath('/dashboard/inventory/suppliers');
     return { success: true, data: supplier };
   } catch (error) {
@@ -97,6 +104,7 @@ export async function updateSupplier(id, { name, phone, address }) {
       },
     });
 
+    revalidateTag('suppliers');
     revalidatePath('/dashboard/inventory/suppliers');
     return { success: true, data: updated };
   } catch (error) {
@@ -130,6 +138,7 @@ export async function deleteSupplier(id) {
 
     await prisma.supplier.delete({ where: { id } });
 
+    revalidateTag('suppliers');
     revalidatePath('/dashboard/inventory/suppliers');
     return { success: true };
   } catch (error) {

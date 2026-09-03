@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import bcrypt from 'bcryptjs';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 
 async function getAuthenticatedOwner() {
   const user = await verifySession();
@@ -12,6 +12,33 @@ async function getAuthenticatedOwner() {
     throw new Error('Akses ditolak. Fitur ini hanya untuk Owner / Super Admin.');
   }
   return { user, storeId: user.storeId };
+}
+
+export const getCachedRoles = unstable_cache(
+  async (storeId) => {
+    return await prisma.role.findMany({
+      where: { storeId },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+      },
+    });
+  },
+  ['roles'],
+  { tags: ['roles'], revalidate: 3600 }
+);
+
+export async function getRoles() {
+  try {
+    const { storeId } = await getAuthenticatedOwner();
+    const roles = await getCachedRoles(storeId);
+    return { data: roles };
+  } catch (error) {
+    console.error('[getRoles] Error:', error);
+    return { error: error.message || 'Gagal memuat data peran.' };
+  }
 }
 
 /**
@@ -37,10 +64,7 @@ export async function getUsers() {
           },
         },
       }),
-      prisma.role.findMany({
-        where: { storeId },
-        orderBy: { name: 'asc' },
-      }),
+      getCachedRoles(storeId),
     ]);
 
     const serializedUsers = users.map((u) => ({
