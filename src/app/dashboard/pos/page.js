@@ -12,6 +12,7 @@ import {
 } from '@/app/actions/publicQr';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function PosScreenPage() {
   const [loading, setLoading] = useState(true);
@@ -741,13 +742,20 @@ export default function PosScreenPage() {
                       + Member Baru
                     </Link>
                   </div>
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { value: '', label: '👤 Guest (Bukan Member)' },
+                      ...customers.map((c) => ({
+                        value: c.id,
+                        label: `★ ${c.name} ${c.phone ? `(${c.phone})` : ''}`,
+                      })),
+                    ]}
                     value={selectedCustomerId}
-                    onChange={(e) => {
-                      const cid = e.target.value;
-                      setSelectedCustomerId(cid);
-                      if (cid) {
-                        const c = customers.find((cust) => cust.id === cid);
+                    onChange={(cid) => {
+                      const idVal = cid || '';
+                      setSelectedCustomerId(idVal);
+                      if (idVal) {
+                        const c = customers.find((cust) => cust.id === idVal);
                         if (c) {
                           setCustomerName(c.name);
                           setCustomerPhone(c.phone || '');
@@ -757,15 +765,8 @@ export default function PosScreenPage() {
                         setCustomerPhone('');
                       }
                     }}
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="">👤 Guest (Bukan Member)</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        ★ {c.name} {c.phone ? `(${c.phone})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Pilih Pelanggan / Member..."
+                  />
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">

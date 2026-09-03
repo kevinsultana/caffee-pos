@@ -11,6 +11,8 @@ import {
 import { getProducts } from '@/app/actions/product';
 import { formatRupiah, formatDate, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import FormattedInput from '@/components/ui/FormattedInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function PromotionsPage() {
   const [promotions, setPromotions] = useState([]);
@@ -246,15 +248,16 @@ export default function PromotionsPage() {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: 'Semua Status' },
+            { value: 'ACTIVE', label: 'ACTIVE (Aktif)' },
+            { value: 'INACTIVE', label: 'INACTIVE (Non-Aktif)' },
+          ]}
           value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Status</option>
-          <option value="ACTIVE">ACTIVE (Aktif)</option>
-          <option value="INACTIVE">INACTIVE (Non-Aktif)</option>
-        </select>
+          onChange={(val) => setSelectedStatus(val || 'ALL')}
+          className="w-full sm:w-48"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
@@ -442,14 +445,14 @@ export default function PromotionsPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Status Promosi
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { value: 'ACTIVE', label: 'ACTIVE (Aktif)' },
+                      { value: 'INACTIVE', label: 'INACTIVE (Non-Aktif)' },
+                    ]}
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="ACTIVE">ACTIVE (Aktif)</option>
-                    <option value="INACTIVE">INACTIVE (Non-Aktif)</option>
-                  </select>
+                    onChange={(val) => setStatus(val || 'ACTIVE')}
+                  />
                 </div>
               </div>
 
@@ -462,25 +465,25 @@ export default function PromotionsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] text-slate-500 font-bold mb-1">Cakupan (Scope)</label>
-                    <select
+                    <SearchableSelect
+                      options={[
+                        { value: 'ORDER', label: 'ORDER (Seluruh Tagihan)' },
+                        { value: 'PRODUCT', label: 'PRODUCT (Menu Tertentu)' },
+                      ]}
                       value={scope}
-                      onChange={(e) => setScope(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    >
-                      <option value="ORDER">ORDER (Seluruh Tagihan)</option>
-                      <option value="PRODUCT">PRODUCT (Menu Tertentu)</option>
-                    </select>
+                      onChange={(val) => setScope(val || 'ORDER')}
+                    />
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-500 font-bold mb-1">Tipe Diskon</label>
-                    <select
+                    <SearchableSelect
+                      options={[
+                        { value: 'PERCENTAGE', label: 'PERCENTAGE (%)' },
+                        { value: 'FIXED_AMOUNT', label: 'FIXED AMOUNT (Rp Potongan)' },
+                      ]}
                       value={discountType}
-                      onChange={(e) => setDiscountType(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    >
-                      <option value="PERCENTAGE">PERCENTAGE (%)</option>
-                      <option value="FIXED_AMOUNT">FIXED AMOUNT (Rp Potongan)</option>
-                    </select>
+                      onChange={(val) => setDiscountType(val || 'PERCENTAGE')}
+                    />
                   </div>
                 </div>
 
@@ -530,18 +533,15 @@ export default function PromotionsPage() {
                     <label className="block text-[10px] text-emerald-800 font-bold mb-1">
                       Pilih Menu Target Diskon *
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={products.map((p) => ({
+                        value: p.id,
+                        label: `${p.name} (${formatRupiah(p.price)})`,
+                      }))}
                       value={targetProductId}
-                      onChange={(e) => setTargetProductId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    >
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({formatRupiah(p.price)})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => setTargetProductId(val)}
+                      placeholder="Pilih Menu Target..."
+                    />
                   </div>
                 )}
               </div>
@@ -562,13 +562,10 @@ export default function PromotionsPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Batas Kuota Pemakaian (Kali)
                   </label>
-                  <input
-                    type="number"
-                    min="1"
+                  <FormattedInput
                     placeholder="contoh: 100 (Kosong = Tak Terbatas)"
                     value={usageLimit}
-                    onChange={(e) => setUsageLimit(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onChange={(val) => setUsageLimit(val)}
                   />
                 </div>
               </div>

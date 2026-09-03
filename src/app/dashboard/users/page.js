@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { getUsers, createUser, updateUser, deleteUser } from '@/app/actions/user';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function UsersManagementPage() {
   const [data, setData] = useState({ users: [], roles: [] });
@@ -239,29 +240,27 @@ export default function UsersManagementPage() {
           />
         </div>
 
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: 'Semua Peran (Role)' },
+            ...data.roles.map((r) => ({ value: r.name, label: r.name })),
+          ]}
           value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Peran (Role)</option>
-          {data.roles.map((r) => (
-            <option key={r.id} value={r.name}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+          onChange={(val) => setFilterRole(val || 'ALL')}
+          className="w-full sm:w-52"
+        />
 
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: 'Semua Status' },
+            { value: 'ACTIVE', label: 'ACTIVE' },
+            { value: 'INACTIVE', label: 'INACTIVE' },
+            { value: 'RESIGNED', label: 'RESIGNED' },
+          ]}
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Status</option>
-          <option value="ACTIVE">ACTIVE</option>
-          <option value="INACTIVE">INACTIVE</option>
-          <option value="RESIGNED">RESIGNED</option>
-        </select>
+          onChange={(val) => setFilterStatus(val || 'ALL')}
+          className="w-full sm:w-44"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
@@ -461,36 +460,30 @@ export default function UsersManagementPage() {
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                         Hak Akses (Role) *
                       </label>
-                      <select
+                      <SearchableSelect
+                        options={data.roles.map((r) => ({ value: r.id, label: r.name }))}
                         value={formData.roleId}
-                        onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}
+                        onChange={(val) => setFormData({ ...formData, roleId: val })}
                         disabled={isPending}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        required
-                      >
-                        {data.roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Pilih Peran..."
+                      />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                         Status Karyawan *
                       </label>
-                      <select
+                      <SearchableSelect
+                        options={[
+                          { value: 'ACTIVE', label: 'ACTIVE (Bisa Login)' },
+                          { value: 'INACTIVE', label: 'INACTIVE (Dibekukan)' },
+                          { value: 'RESIGNED', label: 'RESIGNED (Keluar)' },
+                        ]}
                         value={formData.status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                        onChange={(val) => setFormData({ ...formData, status: val })}
                         disabled={isPending}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        required
-                      >
-                        <option value="ACTIVE">ACTIVE (Bisa Login)</option>
-                        <option value="INACTIVE">INACTIVE (Dibekukan)</option>
-                        <option value="RESIGNED">RESIGNED (Keluar)</option>
-                      </select>
+                        placeholder="Pilih Status..."
+                      />
                     </div>
                   </div>
                 </>

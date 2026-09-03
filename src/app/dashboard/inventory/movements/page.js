@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { getStockMovements } from '@/app/actions/purchasing';
 import { getInventoryItems } from '@/app/actions/inventory';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 const MOVEMENT_TYPE_BADGES = {
   PURCHASE: { label: 'PURCHASE (Beli)', color: 'bg-blue-100 text-blue-800 border-blue-200' },
@@ -84,51 +85,47 @@ export default function StockMovementsPage() {
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             Filter Bahan Baku
           </label>
-          <select
+          <SearchableSelect
+            options={[
+              { value: 'ALL', label: `Semua Bahan Baku (${inventoryItems.length})` },
+              ...inventoryItems.map((inv) => ({ value: inv.id, label: inv.name })),
+            ]}
             value={selectedItem}
-            onChange={(e) => setSelectedItem(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="ALL">Semua Bahan Baku ({inventoryItems.length})</option>
-            {inventoryItems.map((inv) => (
-              <option key={inv.id} value={inv.id}>
-                {inv.name}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => setSelectedItem(val || 'ALL')}
+          />
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             Filter Tipe Mutasi
           </label>
-          <select
+          <SearchableSelect
+            options={[
+              { value: 'ALL', label: 'Semua Tipe Mutasi' },
+              { value: 'PURCHASE', label: 'PURCHASE (Penerimaan Beli)' },
+              { value: 'SALE', label: 'SALE (Penjualan Kasir)' },
+              { value: 'ADJUSTMENT', label: 'ADJUSTMENT (Stock Opname)' },
+              { value: 'WASTE', label: 'WASTE (Bahan Rusak)' },
+              { value: 'OPENING_STOCK', label: 'OPENING_STOCK (Saldo Awal)' },
+            ]}
             value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="ALL">Semua Tipe Mutasi</option>
-            <option value="PURCHASE">PURCHASE (Penerimaan Beli)</option>
-            <option value="SALE">SALE (Penjualan Kasir)</option>
-            <option value="ADJUSTMENT">ADJUSTMENT (Stock Opname)</option>
-            <option value="WASTE">WASTE (Bahan Rusak)</option>
-            <option value="OPENING_STOCK">OPENING_STOCK (Saldo Awal)</option>
-          </select>
+            onChange={(val) => setSelectedType(val || 'ALL')}
+          />
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             Batas Tampilan
           </label>
-          <select
+          <SearchableSelect
+            options={[
+              { value: 50, label: '50 Mutasi Terakhir' },
+              { value: 100, label: '100 Mutasi Terakhir' },
+              { value: 250, label: '250 Mutasi Terakhir' },
+            ]}
             value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value={50}>50 Mutasi Terakhir</option>
-            <option value={100}>100 Mutasi Terakhir</option>
-            <option value={250}>250 Mutasi Terakhir</option>
-          </select>
+            onChange={(val) => setLimit(Number(val) || 50)}
+          />
         </div>
       </div>
 

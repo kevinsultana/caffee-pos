@@ -11,6 +11,7 @@ import {
   getUnits,
 } from '@/app/actions/inventory';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function InventoryItemDetailPage() {
   const params = useParams();
@@ -208,19 +209,13 @@ export default function InventoryItemDetailPage() {
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
               Satuan Beli (Purchase Unit)
             </label>
-            <select
+            <SearchableSelect
+              options={units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))}
               value={selectedUnitId}
-              onChange={(e) => setSelectedUnitId(e.target.value)}
+              onChange={(val) => setSelectedUnitId(val)}
               disabled={isPending || units.length === 0}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              required
-            >
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.code})
-                </option>
-              ))}
-            </select>
+              placeholder="Pilih Satuan Beli..."
+            />
           </div>
 
           <div className="w-full sm:w-56">

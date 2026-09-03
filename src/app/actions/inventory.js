@@ -332,24 +332,29 @@ export async function getInventoryItems() {
     });
 
     // Format serialized Decimal values for clean client serialization
-    const serializedItems = items.map((item) => ({
-      ...item,
-      minimumStock: Number(item.minimumStock),
-      balance: item.balance
-        ? {
-            ...item.balance,
-            quantity: Number(item.balance.quantity),
-            averageCost: Number(item.balance.averageCost),
-            stockValue: Number(item.balance.stockValue),
-          }
-        : { quantity: 0, averageCost: 0, stockValue: 0 },
-    }));
+    const serializedItems = items.map((item) => serializeInventoryItem(item));
 
     return { data: serializedItems };
   } catch (error) {
     console.error('[getInventoryItems] Error:', error);
     return { error: error.message || 'Gagal memuat daftar inventaris.' };
   }
+}
+
+function serializeInventoryItem(item) {
+  if (!item) return null;
+  return {
+    ...item,
+    minimumStock: item.minimumStock != null ? Number(item.minimumStock) : 0,
+    balance: item.balance
+      ? {
+          ...item.balance,
+          quantity: Number(item.balance.quantity),
+          averageCost: Number(item.balance.averageCost),
+          stockValue: Number(item.balance.stockValue),
+        }
+      : { quantity: 0, averageCost: 0, stockValue: 0 },
+  };
 }
 
 export async function createInventoryItem({ name, categoryId, baseUnitId, minimumStock = 0 }) {
@@ -399,7 +404,7 @@ export async function createInventoryItem({ name, categoryId, baseUnitId, minimu
     });
 
     revalidatePath('/dashboard/inventory/items');
-    return { success: true, data: item };
+    return { success: true, data: serializeInventoryItem(item) };
   } catch (error) {
     console.error('[createInventoryItem] Error:', error);
     return { error: error.message || 'Gagal menambahkan barang inventaris.' };
@@ -449,7 +454,7 @@ export async function updateInventoryItem(id, { name, categoryId, baseUnitId, mi
     });
 
     revalidatePath('/dashboard/inventory/items');
-    return { success: true, data: updated };
+    return { success: true, data: serializeInventoryItem(updated) };
   } catch (error) {
     console.error('[updateInventoryItem] Error:', error);
     return { error: error.message || 'Gagal memperbarui barang inventaris.' };

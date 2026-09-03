@@ -141,6 +141,45 @@ export async function deleteProductCategory(id) {
 // 2. PRODUCT ACTIONS (Menu Jual Kasir)
 // ══════════════════════════════════════════════════════════════════════════════
 
+function serializeProduct(product) {
+  if (!product) return null;
+  return {
+    ...product,
+    price: product.price != null ? Number(product.price) : 0,
+    variants: product.variants
+      ? product.variants.map((v) => ({
+          ...v,
+          price: v.price != null ? Number(v.price) : 0,
+        }))
+      : product.variants,
+    inventoryItem: product.inventoryItem
+      ? {
+          ...product.inventoryItem,
+          minimumStock:
+            product.inventoryItem.minimumStock != null
+              ? Number(product.inventoryItem.minimumStock)
+              : 0,
+          balance: product.inventoryItem.balance
+            ? {
+                ...product.inventoryItem.balance,
+                quantity: Number(product.inventoryItem.balance.quantity),
+                averageCost: Number(product.inventoryItem.balance.averageCost),
+                stockValue: Number(product.inventoryItem.balance.stockValue),
+              }
+            : null,
+        }
+      : null,
+  };
+}
+
+function serializeVariant(variant) {
+  if (!variant) return null;
+  return {
+    ...variant,
+    price: variant.price != null ? Number(variant.price) : 0,
+  };
+}
+
 export async function getProducts() {
   try {
     const { storeId } = await getAuthenticatedUserAndStore();
@@ -167,24 +206,7 @@ export async function getProducts() {
       },
     });
 
-    const serializedProducts = products.map((p) => ({
-      ...p,
-      price: Number(p.price),
-      inventoryItem: p.inventoryItem
-        ? {
-            ...p.inventoryItem,
-            minimumStock: Number(p.inventoryItem.minimumStock),
-            balance: p.inventoryItem.balance
-              ? {
-                  ...p.inventoryItem.balance,
-                  quantity: Number(p.inventoryItem.balance.quantity),
-                  averageCost: Number(p.inventoryItem.balance.averageCost),
-                  stockValue: Number(p.inventoryItem.balance.stockValue),
-                }
-              : null,
-          }
-        : null,
-    }));
+    const serializedProducts = products.map((p) => serializeProduct(p));
 
     return { data: serializedProducts };
   } catch (error) {
@@ -348,7 +370,7 @@ export async function createProduct({
 
     revalidatePath('/dashboard/products/list');
     revalidatePath('/dashboard/pos');
-    return { success: true, data: product };
+    return { success: true, data: serializeProduct(product) };
   } catch (error) {
     console.error('[createProduct] Error:', error);
     return { error: error.message || 'Gagal menambahkan produk.' };
@@ -460,7 +482,7 @@ export async function updateProduct(
 
     revalidatePath('/dashboard/products/list');
     revalidatePath('/dashboard/pos');
-    return { success: true, data: updated };
+    return { success: true, data: serializeProduct(updated) };
   } catch (error) {
     console.error('[updateProduct] Error:', error);
     return { error: error.message || 'Gagal memperbarui produk.' };
@@ -798,7 +820,7 @@ export async function createProductVariant({
     revalidatePath('/dashboard/pos');
     revalidatePath('/menu');
 
-    return { success: true, data: createdVariant };
+    return { success: true, data: serializeVariant(createdVariant) };
   } catch (error) {
     console.error('[createProductVariant] Error:', error);
     return { error: error.message || 'Gagal menambahkan varian produk.' };
@@ -882,7 +904,7 @@ export async function updateProductVariant({
     revalidatePath('/dashboard/pos');
     revalidatePath('/menu');
 
-    return { success: true, data: updated };
+    return { success: true, data: serializeVariant(updated) };
   } catch (error) {
     console.error('[updateProductVariant] Error:', error);
     return { error: error.message || 'Gagal memperbarui varian produk.' };

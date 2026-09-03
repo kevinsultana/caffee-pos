@@ -14,6 +14,7 @@ import {
 import { getInventoryItems } from '@/app/actions/inventory';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function ProductsListPage() {
   const [products, setProducts] = useState([]);
@@ -273,27 +274,25 @@ export default function ProductsListPage() {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: `Semua Kategori (${categories.length})` },
+            ...categories.map((c) => ({ value: c.id, label: c.name })),
+          ]}
           value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Kategori ({categories.length})</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
+          onChange={(val) => setSelectedCategory(val || 'ALL')}
+          className="w-full sm:w-56"
+        />
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: 'Semua Tipe Produk' },
+            { value: 'RECIPE', label: 'RECIPE (Komposisi Resep)' },
+            { value: 'DIRECT_STOCK', label: 'DIRECT_STOCK (Stok Langsung)' },
+          ]}
           value={selectedType}
-          onChange={(e) => setSelectedType(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Tipe Produk</option>
-          <option value="RECIPE">RECIPE (Komposisi Resep)</option>
-          <option value="DIRECT_STOCK">DIRECT_STOCK (Stok Langsung)</option>
-        </select>
+          onChange={(val) => setSelectedType(val || 'ALL')}
+          className="w-full sm:w-56"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
@@ -561,22 +560,13 @@ export default function ProductsListPage() {
                     Belum ada kategori menu. Buat kategori terlebih dahulu di tab &quot;Kategori Menu&quot;.
                   </div>
                 ) : (
-                  <select
+                  <SearchableSelect
+                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
                     value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
+                    onChange={(val) => setCategoryId(val)}
                     disabled={isPending}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    required
-                  >
-                    <option value="" disabled>
-                      Pilih Kategori Menu
-                    </option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Pilih Kategori Menu..."
+                  />
                 )}
               </div>
 
@@ -629,22 +619,16 @@ export default function ProductsListPage() {
                         Belum ada barang inventaris terdaftar. Tambahkan barang di modul Inventaris terlebih dahulu.
                       </div>
                     ) : (
-                      <select
+                      <SearchableSelect
+                        options={inventoryItems.map((inv) => ({
+                          value: inv.id,
+                          label: `${inv.name} (Kategori: ${inv.category?.name || '-'}, Stok: ${inv.balance?.quantity || 0} ${inv.baseUnit?.code || ''})`,
+                        }))}
                         value={inventoryItemId}
-                        onChange={(e) => setInventoryItemId(e.target.value)}
+                        onChange={(val) => setInventoryItemId(val)}
                         disabled={isPending}
-                        className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        required
-                      >
-                        <option value="" disabled>
-                          -- Pilih Barang Inventaris --
-                        </option>
-                        {inventoryItems.map((inv) => (
-                          <option key={inv.id} value={inv.id}>
-                            {inv.name} (Kategori: {inv.category?.name}, Stok: {inv.balance?.quantity || 0} {inv.baseUnit?.code})
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Pilih Barang Inventaris..."
+                      />
                     )}
                   </div>
                 )}
@@ -656,15 +640,15 @@ export default function ProductsListPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Ketersediaan Menu
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { value: 'AVAILABLE', label: 'AVAILABLE (Tersedia)' },
+                      { value: 'OUT_OF_STOCK', label: 'OUT_OF_STOCK (Habis)' },
+                    ]}
                     value={availability}
-                    onChange={(e) => setAvailability(e.target.value)}
+                    onChange={(val) => setAvailability(val || 'AVAILABLE')}
                     disabled={isPending}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
-                    <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
-                  </select>
+                  />
                 </div>
                 <div className="flex items-center gap-2.5 pt-6">
                   <input

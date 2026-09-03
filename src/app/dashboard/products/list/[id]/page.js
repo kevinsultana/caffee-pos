@@ -18,6 +18,7 @@ import {
 import { getInventoryItems } from '@/app/actions/inventory';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -708,19 +709,16 @@ export default function ProductDetailPage() {
                           <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
                             Bahan Baku
                           </label>
-                          <select
+                          <SearchableSelect
+                            options={inventoryItems.map((it) => ({
+                              value: it.id,
+                              label: `${it.name} (${it.category?.name || 'Inventaris'}) — Unit: ${it.baseUnit?.code || ''}`,
+                            }))}
                             value={ing.inventoryItemId}
-                            onChange={(e) => updateIngredientField(idx, 'inventoryItemId', e.target.value)}
+                            onChange={(val) => updateIngredientField(idx, 'inventoryItemId', val)}
                             disabled={isPending}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            required
-                          >
-                            {inventoryItems.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.name} ({it.category?.name || 'Inventaris'}) — Unit: {it.baseUnit?.code}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="Pilih Bahan Baku..."
+                          />
                         </div>
 
                         {/* Quantity Input */}
@@ -1022,18 +1020,12 @@ export default function ProductDetailPage() {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Kategori Menu *
               </label>
-              <select
+              <SearchableSelect
+                options={categories.map((c) => ({ value: c.id, label: c.name }))}
                 value={prodForm.categoryId}
-                onChange={(e) => setProdForm({ ...prodForm, categoryId: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                required
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setProdForm({ ...prodForm, categoryId: val })}
+                placeholder="Pilih Kategori Menu..."
+              />
             </div>
           </div>
 
@@ -1042,18 +1034,16 @@ export default function ProductDetailPage() {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Barang Inventaris Terhubung (Direct Stock)
               </label>
-              <select
+              <SearchableSelect
+                options={inventoryItems.map((it) => ({
+                  value: it.id,
+                  label: `${it.name} (Stok: ${it.balance?.quantity || 0} ${it.baseUnit?.code || ''})`,
+                }))}
                 value={prodForm.inventoryItemId}
-                onChange={(e) => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">-- Pilih Barang Inventaris --</option>
-                {inventoryItems.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name} (Stok: {it.balance?.quantity || 0} {it.baseUnit?.code})
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setProdForm({ ...prodForm, inventoryItemId: val })}
+                isClearable={true}
+                placeholder="-- Pilih Barang Inventaris --"
+              />
             </div>
           )}
 
@@ -1062,14 +1052,14 @@ export default function ProductDetailPage() {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Ketersediaan Menu
               </label>
-              <select
+              <SearchableSelect
+                options={[
+                  { value: 'AVAILABLE', label: 'AVAILABLE (Tersedia)' },
+                  { value: 'OUT_OF_STOCK', label: 'OUT_OF_STOCK (Habis)' },
+                ]}
                 value={prodForm.availability}
-                onChange={(e) => setProdForm({ ...prodForm, availability: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
-                <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
-              </select>
+                onChange={(val) => setProdForm({ ...prodForm, availability: val || 'AVAILABLE' })}
+              />
             </div>
             <div className="flex items-center gap-2.5 pt-6">
               <input
@@ -1162,19 +1152,15 @@ export default function ProductDetailPage() {
                   <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1.5">
                     Pilih Bahan Baku Inventaris *
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={inventoryItems.map((it) => ({
+                      value: it.id,
+                      label: `${it.name} (Stok: ${it.balance?.quantity || 0} ${it.baseUnit?.code || ''})`,
+                    }))}
                     value={variantForm.inventoryItemId}
-                    onChange={(e) => setVariantForm({ ...variantForm, inventoryItemId: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    required
-                  >
-                    <option value="" disabled>-- Pilih Barang Inventaris --</option>
-                    {inventoryItems.map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name} (Stok: {it.balance?.quantity || 0} {it.baseUnit?.code})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setVariantForm({ ...variantForm, inventoryItemId: val })}
+                    placeholder="-- Pilih Barang Inventaris --"
+                  />
                 </div>
               )}
 
@@ -1183,14 +1169,14 @@ export default function ProductDetailPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Ketersediaan
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={[
+                      { value: 'AVAILABLE', label: 'AVAILABLE (Tersedia)' },
+                      { value: 'OUT_OF_STOCK', label: 'OUT_OF_STOCK (Habis)' },
+                    ]}
                     value={variantForm.availability}
-                    onChange={(e) => setVariantForm({ ...variantForm, availability: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="AVAILABLE">AVAILABLE (Tersedia)</option>
-                    <option value="OUT_OF_STOCK">OUT_OF_STOCK (Habis)</option>
-                  </select>
+                    onChange={(val) => setVariantForm({ ...variantForm, availability: val || 'AVAILABLE' })}
+                  />
                 </div>
                 {editingVariant && (
                   <div className="flex items-center gap-2 pt-6">

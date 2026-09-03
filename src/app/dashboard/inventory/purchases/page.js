@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPurchases, confirmPurchase, deletePurchase } from '@/app/actions/purchasing';
 import { formatRupiah, formatDate, cn } from '@/lib/utils';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function PurchasesListPage() {
   const [purchases, setPurchases] = useState([]);
@@ -149,15 +150,16 @@ export default function PurchasesListPage() {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: 'Semua Status' },
+            { value: 'DRAFT', label: 'DRAFT (Belum Konfirmasi)' },
+            { value: 'CONFIRMED', label: 'CONFIRMED (Stok & WAC Diposting)' },
+          ]}
           value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Status</option>
-          <option value="DRAFT">DRAFT (Belum Konfirmasi)</option>
-          <option value="CONFIRMED">CONFIRMED (Stok & WAC Diposting)</option>
-        </select>
+          onChange={(val) => setSelectedStatus(val || 'ALL')}
+          className="w-full sm:w-60"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}

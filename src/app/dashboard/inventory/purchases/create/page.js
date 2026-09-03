@@ -9,6 +9,7 @@ import { getSuppliers } from '@/app/actions/supplier';
 import { getInventoryItems, getUnits } from '@/app/actions/inventory';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function CreatePurchasePage() {
   const router = useRouter();
@@ -214,19 +215,16 @@ export default function CreatePurchasePage() {
                   terlebih dahulu.
                 </div>
               ) : (
-                <select
+                <SearchableSelect
+                  options={suppliers.map((s) => ({
+                    value: s.id,
+                    label: `${s.name} ${s.phone ? `(${s.phone})` : ''}`,
+                  }))}
                   value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
+                  onChange={(val) => setSupplierId(val)}
                   disabled={isPending}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                >
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.phone ? `(${s.phone})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Pilih Supplier..."
+                />
               )}
             </div>
 
@@ -283,22 +281,16 @@ export default function CreatePurchasePage() {
                     <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
                       Bahan Baku #{idx + 1}
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={inventoryItems.map((inv) => ({
+                        value: inv.id,
+                        label: `${inv.name} (${inv.category?.name || 'Bahan'}) — Base: ${inv.baseUnit?.code || ''}`,
+                      }))}
                       value={row.inventoryItemId}
-                      onChange={(e) =>
-                        handleItemChange(idx, 'inventoryItemId', e.target.value)
-                      }
+                      onChange={(val) => handleItemChange(idx, 'inventoryItemId', val)}
                       disabled={isPending}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    >
-                      <option value="" disabled>-- Pilih Bahan Baku --</option>
-                      {inventoryItems.map((inv) => (
-                        <option key={inv.id} value={inv.id}>
-                          {inv.name} ({inv.category?.name || 'Bahan'}) — Base: {inv.baseUnit?.code}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Pilih Bahan Baku..."
+                    />
                   </div>
 
                   {/* Purchase Unit */}
@@ -306,22 +298,16 @@ export default function CreatePurchasePage() {
                     <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
                       Satuan Beli
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={units.map((u) => ({
+                        value: u.id,
+                        label: `${u.code} (${u.name})`,
+                      }))}
                       value={row.purchaseUnitId}
-                      onChange={(e) =>
-                        handleItemChange(idx, 'purchaseUnitId', e.target.value)
-                      }
+                      onChange={(val) => handleItemChange(idx, 'purchaseUnitId', val)}
                       disabled={isPending}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    >
-                      <option value="" disabled>-- Satuan --</option>
-                      {units.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.code} ({u.name})
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Satuan..."
+                    />
                   </div>
 
                   {/* Quantity */}

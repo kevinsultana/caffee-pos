@@ -142,7 +142,13 @@ export async function openShift({ openingCash }) {
 
     revalidatePath('/dashboard/pos');
     revalidatePath('/dashboard/pos/shift');
-    return { success: true, data: shift };
+    return {
+      success: true,
+      data: {
+        ...shift,
+        openingCash: Number(shift.openingCash),
+      },
+    };
   } catch (error) {
     console.error('[openShift] Error:', error);
     return { error: error.message || 'Gagal membuka shift kasir.' };
@@ -188,6 +194,7 @@ export async function closeShift({ actualCash }) {
       success: true,
       data: {
         ...closed,
+        openingCash: Number(closed.openingCash),
         expectedCash: expected,
         actualCash: actual,
         difference: difference,

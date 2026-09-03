@@ -3,6 +3,18 @@
 import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { getAuditLogs } from '@/app/actions/audit';
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
+const MODULE_OPTIONS = [
+  { value: 'ALL', label: 'Semua Modul' },
+  { value: 'AUTH', label: 'AUTH (Autentikasi & Keamanan)' },
+  { value: 'USER_MANAGEMENT', label: 'USER_MANAGEMENT (Karyawan & Akses)' },
+  { value: 'POS', label: 'POS (Transaksi Penjualan)' },
+  { value: 'INVENTORY', label: 'INVENTORY (Bahan Baku & Stok)' },
+  { value: 'PURCHASING', label: 'PURCHASING (Pembelian & Supplier)' },
+  { value: 'PROMOTION', label: 'PROMOTION (Diskon & Promo)' },
+  { value: 'STORE_SETTINGS', label: 'STORE_SETTINGS (Pengaturan Toko)' },
+];
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState([]);
@@ -89,20 +101,12 @@ export default function AuditLogsPage() {
           />
         </div>
 
-        <select
+        <SearchableSelect
+          options={MODULE_OPTIONS}
           value={selectedModule}
-          onChange={(e) => setSelectedModule(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Modul</option>
-          <option value="AUTH">AUTH (Autentikasi & Keamanan)</option>
-          <option value="USER_MANAGEMENT">USER_MANAGEMENT (Karyawan & Akses)</option>
-          <option value="POS">POS (Transaksi Penjualan)</option>
-          <option value="INVENTORY">INVENTORY (Bahan Baku & Stok)</option>
-          <option value="PURCHASING">PURCHASING (Pembelian & Supplier)</option>
-          <option value="PROMOTION">PROMOTION (Diskon & Promo)</option>
-          <option value="STORE_SETTINGS">STORE_SETTINGS (Pengaturan Toko)</option>
-        </select>
+          onChange={(val) => setSelectedModule(val || 'ALL')}
+          className="w-full sm:w-64"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}

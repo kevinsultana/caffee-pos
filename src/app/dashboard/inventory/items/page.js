@@ -11,6 +11,8 @@ import {
   getInventoryCategories,
   getUnits,
 } from '@/app/actions/inventory';
+import FormattedInput from '@/components/ui/FormattedInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 export default function InventoryItemsPage() {
   const [items, setItems] = useState([]);
@@ -206,18 +208,15 @@ export default function InventoryItemsPage() {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
-        <select
+        <SearchableSelect
+          options={[
+            { value: 'ALL', label: `Semua Kategori (${categories.length})` },
+            ...categories.map((c) => ({ value: c.id, label: c.name })),
+          ]}
           value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="ALL">Semua Kategori ({categories.length})</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          onChange={(val) => setSelectedCategory(val || 'ALL')}
+          className="w-full sm:w-60"
+        />
       </div>
 
       {/* ─── DATA TABLE ───────────────────────────────────────────────────── */}
@@ -366,19 +365,13 @@ export default function InventoryItemsPage() {
                       Belum ada kategori bahan. Buat di modul Unit & Kategori.
                     </div>
                   ) : (
-                    <select
+                    <SearchableSelect
+                      options={categories.map((c) => ({ value: c.id, label: c.name }))}
                       value={categoryId}
-                      onChange={(e) => setCategoryId(e.target.value)}
+                      onChange={(val) => setCategoryId(val)}
                       disabled={isPending}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      required
-                    >
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Pilih Kategori..."
+                    />
                   )}
                 </div>
 
@@ -391,19 +384,13 @@ export default function InventoryItemsPage() {
                       Belum ada unit satuan.
                     </div>
                   ) : (
-                    <select
+                    <SearchableSelect
+                      options={units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))}
                       value={baseUnitId}
-                      onChange={(e) => setBaseUnitId(e.target.value)}
+                      onChange={(val) => setBaseUnitId(val)}
                       disabled={isPending || Boolean(editingItem)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                      required
-                    >
-                      {units.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.code})
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Pilih Satuan..."
+                    />
                   )}
                   {editingItem && (
                     <p className="text-[10px] text-slate-400 mt-1">
@@ -417,15 +404,11 @@ export default function InventoryItemsPage() {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                   Batas Stok Minimum (Peringatan Menipis)
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
+                <FormattedInput
                   placeholder="10"
                   value={minimumStock}
-                  onChange={(e) => setMinimumStock(e.target.value)}
+                  onChange={(val) => setMinimumStock(val)}
                   disabled={isPending}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 

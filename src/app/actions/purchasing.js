@@ -22,6 +22,24 @@ function generatePONumber() {
   return `PO-${yy}${mm}${dd}-${rand}`;
 }
 
+function serializePurchase(p) {
+  if (!p) return null;
+  return {
+    ...p,
+    totalAmount: p.totalAmount != null ? Number(p.totalAmount) : 0,
+    items: p.items
+      ? p.items.map((it) => ({
+          ...it,
+          quantity: it.quantity != null ? Number(it.quantity) : 0,
+          unitPrice: it.unitPrice != null ? Number(it.unitPrice) : 0,
+          baseQuantity: it.baseQuantity != null ? Number(it.baseQuantity) : 0,
+          baseUnitCost: it.baseUnitCost != null ? Number(it.baseUnitCost) : 0,
+          subtotal: it.subtotal != null ? Number(it.subtotal) : 0,
+        }))
+      : undefined,
+  };
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. GET PURCHASES
 // ══════════════════════════════════════════════════════════════════════════════
@@ -190,7 +208,7 @@ export async function createPurchase({ supplierId, purchasedAt, items }) {
     });
 
     revalidatePath('/dashboard/inventory/purchases');
-    return { success: true, data: purchase };
+    return { success: true, data: serializePurchase(purchase) };
   } catch (error) {
     console.error('[createPurchase] Error:', error);
     return { error: error.message || 'Gagal membuat draft pembelian.' };
@@ -316,7 +334,7 @@ export async function confirmPurchase(id) {
     revalidatePath('/dashboard/inventory/items');
     revalidatePath('/dashboard/inventory/movements');
 
-    return { success: true, data: result };
+    return { success: true, data: serializePurchase(result) };
   } catch (error) {
     console.error('[confirmPurchase] Error:', error);
     return { error: error.message || 'Gagal mengonfirmasi pembelian.' };
