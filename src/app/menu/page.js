@@ -294,7 +294,7 @@ export default function PublicMenuPage() {
         </header>
 
         {/* ─── 2. CATEGORY PILLS FILTER ─────────────────────────────────────── */}
-        <div className="sticky top-[57px] z-30 bg-white/95 backdrop-blur-md px-4 py-2.5 border-b border-slate-100 flex gap-2 overflow-x-auto scrollbar-none">
+        <div className="sticky top-14.25 z-30 bg-white/95 backdrop-blur-md px-4 py-2.5 border-b border-slate-100 flex gap-2 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setSelectedCategory('ALL')}
             className={cn(
@@ -520,7 +520,7 @@ export default function PublicMenuPage() {
                       placeholder="Catatan menu (contoh: less sugar, es sedikit)..."
                       value={item.notes}
                       onChange={(e) => updateNotes(item.productId, e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                 ))}
