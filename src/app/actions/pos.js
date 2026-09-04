@@ -170,6 +170,7 @@ export async function processPosCheckout({
   promoCode = '',
   cashReceived = 0,
   items,
+  qrOrderId = null,
 }) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
@@ -197,6 +198,20 @@ export async function processPosCheckout({
 
     if (!['CASH', 'QRIS'].includes(paymentMethod)) {
       return { error: 'Metode pembayaran tidak valid.' };
+    }
+
+    // Validasi pesanan QR jika ditautkan
+    let existingQrOrder = null;
+    if (qrOrderId) {
+      existingQrOrder = await prisma.order.findUnique({
+        where: { id: qrOrderId },
+      });
+      if (!existingQrOrder || existingQrOrder.storeId !== storeId) {
+        return { error: 'Pesanan QR tidak ditemukan atau bukan milik cabang ini.' };
+      }
+      if (existingQrOrder.status !== 'PENDING_PAYMENT') {
+        return { error: 'Pesanan QR ini sudah pernah diproses atau kedaluwarsa.' };
+      }
     }
 
     // 2. Ambil Pengaturan Toko
@@ -467,32 +482,64 @@ export async function processPosCheckout({
 
     // ── 7. EKSEKUSI PRISMA TRANSACTION ATOMIC ────────────────────────────────
     const transactionResult = await prisma.$transaction(async (tx) => {
-      // a. Buat Order
-      const order = await tx.order.create({
-        data: {
-          storeId,
-          customerId: customerId || null,
-          createdById: user.id,
-          orderNumber,
-          queueNumber: queueNumber.trim(),
-          source: 'POS',
-          status: 'PAID',
-          customerNameSnapshot: customerName.trim() || 'Pelanggan',
-          customerPhoneSnapshot: customerPhone?.trim() || null,
-          productSubtotal,
-          promotionDiscount: totalPromoDiscount,
-          taxableSubtotal,
-          serviceChargeRate: scRate,
-          serviceChargeAmount: scAmount,
-          taxRate,
-          taxBase,
-          taxAmount,
-          grandTotal,
-          roundingAmount,
-          cashPayable,
-          paidAt: new Date(),
-        },
-      });
+      // a. Buat Order baru atau Update Order QR yang sudah ada
+      let order;
+      if (existingQrOrder) {
+        // Hapus detail item lama dari pesanan QR ini sebelum menyimpan item final kasir
+        await tx.orderItem.deleteMany({
+          where: { orderId: existingQrOrder.id },
+        });
+
+        order = await tx.order.update({
+          where: { id: existingQrOrder.id },
+          data: {
+            customerId: customerId || null,
+            createdById: user.id,
+            queueNumber: queueNumber.trim(),
+            status: 'PAID',
+            customerNameSnapshot: customerName.trim() || 'Pelanggan',
+            customerPhoneSnapshot: customerPhone?.trim() || null,
+            productSubtotal,
+            promotionDiscount: totalPromoDiscount,
+            taxableSubtotal,
+            serviceChargeRate: scRate,
+            serviceChargeAmount: scAmount,
+            taxRate,
+            taxBase,
+            taxAmount,
+            grandTotal,
+            roundingAmount,
+            cashPayable,
+            paidAt: new Date(),
+          },
+        });
+      } else {
+        order = await tx.order.create({
+          data: {
+            storeId,
+            customerId: customerId || null,
+            createdById: user.id,
+            orderNumber,
+            queueNumber: queueNumber.trim(),
+            source: 'POS',
+            status: 'PAID',
+            customerNameSnapshot: customerName.trim() || 'Pelanggan',
+            customerPhoneSnapshot: customerPhone?.trim() || null,
+            productSubtotal,
+            promotionDiscount: totalPromoDiscount,
+            taxableSubtotal,
+            serviceChargeRate: scRate,
+            serviceChargeAmount: scAmount,
+            taxRate,
+            taxBase,
+            taxAmount,
+            grandTotal,
+            roundingAmount,
+            cashPayable,
+            paidAt: new Date(),
+          },
+        });
+      }
 
       // b. Buat OrderItems dan Potong Stok Inventaris
       for (const item of orderItemsData) {
@@ -653,6 +700,7 @@ export async function processPosCheckout({
 
     revalidatePath('/dashboard/pos');
     revalidatePath('/dashboard/pos/shift');
+    revalidatePath('/dashboard/pos/history');
     revalidatePath('/dashboard/inventory/items');
     revalidatePath('/dashboard/inventory/movements');
     revalidatePath('/dashboard/promotions');
@@ -662,6 +710,7 @@ export async function processPosCheckout({
       data: {
         orderNumber: transactionResult.order.orderNumber,
         queueNumber: transactionResult.order.queueNumber,
+        publicQrToken: transactionResult.order.publicQrToken || null,
         grandTotal,
         promotionDiscount: totalPromoDiscount,
         cashPayable,

@@ -596,3 +596,35 @@ export async function confirmPublicQrPayment({
     return { error: error.message || 'Gagal mengonfirmasi pembayaran pesanan QR.' };
   }
 }
+
+/**
+ * Batalkan Pesanan QR Online (oleh Kasir jika batal/pelanggan pergi)
+ */
+export async function cancelPublicQrOrder(orderId) {
+  try {
+    const user = await verifySession();
+    if (!user) throw new Error('Sesi tidak valid.');
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order || order.storeId !== user.storeId) {
+      return { error: 'Pesanan tidak ditemukan.' };
+    }
+
+    if (order.status !== 'PENDING_PAYMENT') {
+      return { error: 'Hanya pesanan menunggu pembayaran yang dapat dibatalkan.' };
+    }
+
+    await prisma.order.delete({
+      where: { id: orderId },
+    });
+
+    revalidatePath('/dashboard/pos');
+    return { success: true };
+  } catch (error) {
+    console.error('[cancelPublicQrOrder] Error:', error);
+    return { error: error.message || 'Gagal membatalkan pesanan QR.' };
+  }
+}

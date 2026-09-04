@@ -8,7 +8,7 @@ import { validatePromoCode } from '@/app/actions/promotion';
 import { getCustomers, createCustomer } from '@/app/actions/customer';
 import {
   getPublicPendingOrders,
-  confirmPublicQrPayment,
+  cancelPublicQrOrder,
 } from '@/app/actions/publicQr';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
@@ -31,11 +31,7 @@ export default function PosScreenPage() {
 
   // Online Orders State
   const [pendingOrders, setPendingOrders] = useState([]);
-  const [selectedQrOrder, setSelectedQrOrder] = useState(null);
-  const [qrCheckoutModalOpen, setQrCheckoutModalOpen] = useState(false);
-  const [qrQueueNumber, setQrQueueNumber] = useState('A-01');
-  const [qrPaymentMethod, setQrPaymentMethod] = useState('CASH');
-  const [qrCashReceived, setQrCashReceived] = useState(0);
+  const [activeQrOrder, setActiveQrOrder] = useState(null);
 
   // Variant Modal State
   const [variantModalProduct, setVariantModalProduct] = useState(null);
@@ -65,11 +61,15 @@ export default function PosScreenPage() {
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustEmail, setNewCustEmail] = useState('');
   const [isCreatingCust, setIsCreatingCust] = useState(false);
 
-  function openCustomerModal(initialName = '') {
-    setNewCustName(initialName);
-    setNewCustPhone('');
+  function openCustomerModal(initialName = '', initialPhone = '', initialEmail = '') {
+    setNewCustName(
+      initialName || (customerName && customerName !== 'Pelanggan' ? customerName : '')
+    );
+    setNewCustPhone(initialPhone || customerPhone || '');
+    setNewCustEmail(initialEmail || '');
     setCustomerModalOpen(true);
   }
 
@@ -85,6 +85,7 @@ export default function PosScreenPage() {
       const res = await createCustomer({
         name: newCustName.trim(),
         phone: newCustPhone.trim() || null,
+        email: newCustEmail.trim() || null,
       });
 
       if (res.error) {
@@ -99,6 +100,7 @@ export default function PosScreenPage() {
         setCustomerModalOpen(false);
         setNewCustName('');
         setNewCustPhone('');
+        setNewCustEmail('');
       }
     } catch (err) {
       console.error('[handleCreateCustomerSubmit] Error:', err);
@@ -131,9 +133,10 @@ export default function PosScreenPage() {
 
   async function loadData() {
     setLoading(true);
-    const [initRes, custRes] = await Promise.all([
+    const [initRes, custRes, pendingRes] = await Promise.all([
       getPosInitData(),
       getCustomers(),
+      getPublicPendingOrders(),
     ]);
 
     if (initRes.error) {
@@ -155,6 +158,10 @@ export default function PosScreenPage() {
 
     if (custRes.data) {
       setCustomers(custRes.data);
+    }
+
+    if (pendingRes?.data) {
+      setPendingOrders(pendingRes.data);
     }
 
     setLoading(false);
@@ -238,6 +245,10 @@ export default function PosScreenPage() {
     setCart([]);
     setAppliedPromo(null);
     setInputPromoCode('');
+    setActiveQrOrder(null);
+    setSelectedCustomerId('');
+    setCustomerName('Pelanggan');
+    setCustomerPhone('');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -365,6 +376,7 @@ export default function PosScreenPage() {
           unitPrice: it.price,
           notes: it.notes,
         })),
+        qrOrderId: activeQrOrder ? activeQrOrder.id : null,
       };
 
       const res = await processPosCheckout(payload);
@@ -383,6 +395,7 @@ export default function PosScreenPage() {
         toast.dismiss(toastId);
         setCheckoutModalOpen(false);
         clearCart();
+        loadPendingOrders();
 
         const nextQNum = String(parseInt(queueNumber.replace(/\D/g, '') || '1') + 1).padStart(2, '0');
         setQueueNumber(`A-${nextQNum}`);
@@ -396,7 +409,7 @@ export default function PosScreenPage() {
               <div class="text-center py-3 border-b border-slate-200">
                 <p class="text-xs text-slate-500 font-sans">Nomor Antrean:</p>
                 <p class="text-3xl font-extrabold text-emerald-600 my-1">${res.data.queueNumber}</p>
-                <p class="text-xs text-slate-400">Order #${res.data.orderNumber}</p>
+                <p class="text-xs text-slate-400">Order #${res.data.orderNumber} ${res.data.publicQrToken ? `&bull; QR ${res.data.publicQrToken}` : ''}</p>
               </div>
               <div class="space-y-1 pt-2">
                 ${
@@ -446,96 +459,98 @@ export default function PosScreenPage() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // PUBLIC QR ORDER CHECKOUT HANDLERS
+  // PUBLIC QR ORDER INTEGRATION (OPSI 1: LANGSUNG KE KERANJANG KASIR)
   // ══════════════════════════════════════════════════════════════════════════
 
   function openQrOrderCheckout(order) {
-    setSelectedQrOrder(order);
-    setQrQueueNumber(`A-${String(pendingOrders.length).padStart(2, '0')}`);
-    setQrPaymentMethod('CASH');
-    setQrCashReceived(order.grandTotal);
-    setQrCheckoutModalOpen(true);
-  }
-
-  function handleProcessQrCheckout(e) {
-    e.preventDefault();
-    if (!selectedQrOrder) return;
-
-    if (qrPaymentMethod === 'CASH' && Number(qrCashReceived) < selectedQrOrder.grandTotal) {
-      toast.error('Uang tunai kurang dari total tagihan.');
-      return;
+    if (cart.length > 0 && !activeQrOrder) {
+      const confirmReplace = window.confirm(
+        'Keranjang kasir saat ini memiliki pesanan lain. Timpa isi keranjang dengan pesanan QR ini?'
+      );
+      if (!confirmReplace) return;
     }
 
-    startTransition(async () => {
-      const toastId = toast.loading('Memproses pembayaran pesanan QR...');
-      const res = await confirmPublicQrPayment({
-        orderId: selectedQrOrder.id,
-        queueNumber: qrQueueNumber.trim(),
-        paymentMethod: qrPaymentMethod,
-        cashReceived: Number(qrCashReceived),
-      });
-
-      if (res.error) {
-        if (res.sessionRevoked || res.error.includes('Sesi tidak valid')) {
-          try {
-            sessionStorage.clear();
-            localStorage.clear();
-          } catch {}
-          window.location.replace('/api/auth/clear-session');
-          return;
-        }
-        toast.error(res.error, { id: toastId, duration: 4500 });
-      } else {
-        toast.dismiss(toastId);
-        setQrCheckoutModalOpen(false);
-        setSelectedQrOrder(null);
-
-        const Swal = (await import('sweetalert2')).default;
-        await Swal.fire({
-          icon: 'success',
-          title: 'Pembayaran QR Selesai! 🎉',
-          html: `
-            <div class="text-left text-xs text-slate-700 space-y-2 p-2 font-mono">
-              <div class="text-center py-3 border-b border-slate-200">
-                <p class="text-xs text-slate-500 font-sans">Nomor Antrean:</p>
-                <p class="text-3xl font-extrabold text-emerald-600 my-1">${res.data.queueNumber}</p>
-                <p class="text-xs text-slate-400">Order #${res.data.orderNumber}</p>
-              </div>
-              <div class="space-y-1 pt-2">
-                <div class="flex justify-between font-bold text-sm text-slate-900">
-                  <span>Total Tagihan:</span>
-                  <span class="text-emerald-700">${formatRupiah(res.data.grandTotal)}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-500">Metode Bayar:</span>
-                  <span class="font-bold">${res.data.paymentMethod}</span>
-                </div>
-                ${
-                  res.data.paymentMethod === 'CASH'
-                    ? `
-                  <div class="flex justify-between">
-                    <span class="text-slate-500">Uang Diterima:</span>
-                    <span>${formatRupiah(res.data.cashReceived)}</span>
-                  </div>
-                  <div class="flex justify-between text-emerald-700 font-bold text-sm pt-1 border-t border-slate-200">
-                    <span>Kembalian:</span>
-                    <span>${formatRupiah(res.data.changeAmount)}</span>
-                  </div>
-                `
-                    : ''
-                }
-              </div>
-            </div>
-          `,
-          confirmButtonText: 'Selesai',
-          confirmButtonColor: '#059669',
-          background: '#ffffff',
-          color: '#0f172a',
-        });
-
-        loadData();
-      }
+    // 1. Map items dari pesanan QR ke format cart POS
+    const mappedItems = order.items.map((it) => {
+      const displayName = it.variantNameSnapshot
+        ? `${it.productNameSnapshot} (${it.variantNameSnapshot})`
+        : it.productNameSnapshot;
+      return {
+        productId: it.productId,
+        variantId: it.variantId || null,
+        variantName: it.variantNameSnapshot || null,
+        name: displayName,
+        price: Number(it.unitPrice),
+        quantity: it.quantity,
+        notes: it.notes || '',
+      };
     });
+    setCart(mappedItems);
+
+    // 2. Set nama & nomor HP pelanggan dari snapshot QR
+    const cName = order.customerNameSnapshot?.trim() || 'Pelanggan';
+    const cPhone = order.customerPhoneSnapshot?.trim() || '';
+    setCustomerName(cName);
+    setCustomerPhone(cPhone);
+
+    // 3. Cek otomatis apakah pelanggan ini sudah terdaftar sebagai member
+    const matched = customers.find((c) => {
+      if (cPhone && c.phone && c.phone.trim() === cPhone) return true;
+      if (cName && cName.toLowerCase() !== 'pelanggan' && c.name.toLowerCase() === cName.toLowerCase()) return true;
+      return false;
+    });
+
+    if (matched) {
+      setSelectedCustomerId(matched.id);
+      setCustomerName(matched.name);
+      setCustomerPhone(matched.phone || '');
+      toast.success(
+        `Pesanan QR #${order.publicQrToken} dimuat! Member "${matched.name}" teridentifikasi.`,
+        { duration: 3500 }
+      );
+    } else {
+      setSelectedCustomerId('');
+      toast.success(
+        `Pesanan QR #${order.publicQrToken} dimuat ke keranjang kasir.`,
+        { duration: 3000 }
+      );
+    }
+
+    // 4. Simpan referensi pesanan QR aktif
+    setActiveQrOrder(order);
+
+    // 5. Reset promo agar kasir bisa input kode promo baru jika pelanggan memiliki voucher
+    setAppliedPromo(null);
+    setInputPromoCode('');
+
+    // 6. Alihkan langsung ke tab KATALOG POS agar kasir melihat keranjang di sebelah kanan
+    setActiveTab('CATALOG');
+  }
+
+  function detachQrOrder() {
+    setActiveQrOrder(null);
+    toast('Tautan pesanan QR dilepas. Keranjang beralih ke pesanan kasir biasa.', { icon: 'ℹ️' });
+  }
+
+  async function handleCancelPendingOrder(orderId) {
+    const confirmCancel = window.confirm('Yakin ingin membatalkan dan menghapus pesanan QR ini?');
+    if (!confirmCancel) return;
+
+    try {
+      const res = await cancelPublicQrOrder(orderId);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        toast.success('Pesanan QR berhasil dibatalkan.');
+        if (activeQrOrder?.id === orderId) {
+          clearCart();
+        }
+        loadPendingOrders();
+      }
+    } catch (err) {
+      console.error('[handleCancelPendingOrder] Error:', err);
+      toast.error('Gagal membatalkan pesanan QR.');
+    }
   }
 
   // Filter products by category & search query
@@ -817,6 +832,33 @@ export default function PosScreenPage() {
                 )}
               </div>
 
+              {/* Active QR Order Indicator */}
+              {activeQrOrder && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 flex items-center justify-between text-xs text-amber-900 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-mono font-bold text-[11px] shrink-0">
+                      {activeQrOrder.publicQrToken}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-xs truncate">
+                        Meja: {activeQrOrder.customerNameSnapshot}
+                      </p>
+                      <p className="text-[10px] text-amber-800 font-mono">
+                        #{activeQrOrder.orderNumber}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={detachQrOrder}
+                    className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline shrink-0 ml-2 cursor-pointer"
+                    title="Lepas tautan dan jadikan transaksi kasir biasa"
+                  >
+                    Lepas Tautan
+                  </button>
+                </div>
+              )}
+
               {/* Customer / Member Selection & Queue Inputs */}
               <div className="space-y-2">
                 <div>
@@ -841,7 +883,7 @@ export default function PosScreenPage() {
                       { value: '', label: '👤 Guest (Bukan Member)' },
                       ...customers.map((c) => ({
                         value: c.id,
-                        label: `★ ${c.name} ${c.phone ? `(${c.phone})` : ''}`,
+                        label: `★ ${c.name} ${c.phone ? `(${c.phone})` : ''} ${c.email ? `• ${c.email}` : ''}`.trim(),
                       })),
                     ]}
                     value={selectedCustomerId}
@@ -1165,12 +1207,25 @@ export default function PosScreenPage() {
                           {formatRupiah(ord.grandTotal)}
                         </span>
                       </div>
-                      <button
-                        onClick={() => openQrOrderCheckout(ord)}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all"
-                      >
-                        Terima Bayar &rarr;
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCancelPendingOrder(ord.id)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Batalkan / Hapus pesanan QR ini"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => openQrOrderCheckout(ord)}
+                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Buka di Kasir</span>
+                          <span>&rarr;</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1425,144 +1480,6 @@ export default function PosScreenPage() {
         </div>
       )}
 
-      {/* ─── MODAL QR ORDER CHECKOUT ────────────────────────────────────────── */}
-      {qrCheckoutModalOpen && selectedQrOrder && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="text-center pb-3 border-b border-slate-100">
-              <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {selectedQrOrder.publicQrToken}
-              </span>
-              <p className="text-2xl font-extrabold font-mono text-emerald-700 mt-2">
-                {formatRupiah(selectedQrOrder.grandTotal)}
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {selectedQrOrder.customerNameSnapshot} &bull; Order #{selectedQrOrder.orderNumber}
-              </p>
-            </div>
-
-            <form onSubmit={handleProcessQrCheckout} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Nomor Antrean Kasir *
-                </label>
-                <input
-                  type="text"
-                  value={qrQueueNumber}
-                  onChange={(e) => setQrQueueNumber(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Metode Bayar
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQrPaymentMethod('CASH');
-                      setQrCashReceived(selectedQrOrder.grandTotal);
-                    }}
-                    className={cn(
-                      'py-2.5 rounded-xl text-xs font-bold border transition-all',
-                      qrPaymentMethod === 'CASH'
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    )}
-                  >
-                    💵 Tunai (CASH)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQrPaymentMethod('QRIS');
-                      setQrCashReceived(selectedQrOrder.grandTotal);
-                    }}
-                    className={cn(
-                      'py-2.5 rounded-xl text-xs font-bold border transition-all',
-                      qrPaymentMethod === 'QRIS'
-                        ? 'bg-blue-50 border-blue-500 text-blue-800'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    )}
-                  >
-                    📱 QRIS
-                  </button>
-                </div>
-              </div>
-
-              {qrPaymentMethod === 'CASH' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Uang Diterima (Rp) *
-                  </label>
-                  <CurrencyInput
-                    placeholder="0"
-                    value={qrCashReceived}
-                    onChange={(val) => setQrCashReceived(val)}
-                    className="text-xl font-bold py-2.5 pl-10 bg-slate-50 border-slate-300 rounded-xl text-slate-900"
-                    required
-                  />
-                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex justify-between text-xs font-mono">
-                    <span className="font-sans text-emerald-800">Kembalian:</span>
-                    <span className="font-bold text-emerald-700">
-                      {formatRupiah(Math.max(0, Number(qrCashReceived) - selectedQrOrder.grandTotal))}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {qrPaymentMethod === 'QRIS' && (
-                <div className="p-3.5 bg-linear-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-2.5">
-                  {settings?.qrisImageUrl ? (
-                    <div className="space-y-2">
-                      <div className="relative mx-auto w-40 h-40 bg-white rounded-xl p-2 border border-blue-100 shadow-2xs flex items-center justify-center overflow-hidden group">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={settings.qrisImageUrl}
-                          alt="QRIS Barcode"
-                          className="w-full h-full object-contain cursor-pointer transition-transform duration-200 group-hover:scale-105"
-                          onClick={() => setZoomQrisUrl(settings.qrisImageUrl)}
-                          title="Klik untuk memperbesar QRIS"
-                        />
-                      </div>
-                      <p className="text-xs text-slate-700 font-semibold">
-                        Tagihan: <span className="font-mono font-extrabold text-emerald-700">{formatRupiah(selectedQrOrder.grandTotal)}</span>
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Scan QRIS pelanggan dan pastikan saldo masuk sebelum klik terima pembayaran.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="py-2 text-center text-xs text-slate-500">
-                      Barcode QRIS belum dikonfigurasi di Pengaturan Toko.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setQrCheckoutModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
-                >
-                  {isPending ? 'Menyelesaikan...' : 'Terima Pembayaran & Cetak'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* ─── MODAL: TAMBAH MEMBER / PELANGGAN CEPAT ────────────────────────── */}
       {customerModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -1621,6 +1538,22 @@ export default function PosScreenPage() {
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
                   Bisa dikosongkan atau diisi untuk memudahkan pencarian di kemudian hari.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Pelanggan <span className="text-slate-400 font-normal">(Opsional)</span>
+                </label>
+                <input
+                  type="email"
+                  value={newCustEmail}
+                  onChange={(e) => setNewCustEmail(e.target.value)}
+                  placeholder="Contoh: pelanggan@gmail.com"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Bisa dikosongkan atau diisi untuk pengiriman info promo dan struk digital.
                 </p>
               </div>
 
