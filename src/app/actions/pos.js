@@ -679,3 +679,173 @@ export async function processPosCheckout({
     };
   }
 }
+
+/**
+ * Mengambil riwayat transaksi Order pada shift kasir yang sedang aktif (OPEN).
+ * Digunakan untuk pemantauan transaksi kasir dan cetak ulang struk thermal.
+ */
+export async function getShiftTransactions() {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    // 1. Ambil data shift aktif saat ini
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        storeId,
+        userId: user.id,
+        status: 'OPEN',
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true } },
+      },
+    });
+
+    // Ambil info store & settings untuk pencetakan struk
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      include: { settings: true },
+    });
+
+    const storeInfo = {
+      name: store?.name || 'Schaw Cafe',
+      code: store?.code || 'MAIN',
+      logoUrl: store?.logoUrl || null,
+      printerWidth: store?.settings?.printerWidth || 58,
+      taxRate: Number(store?.settings?.taxRate || 0),
+      taxEnabled: store?.settings?.taxEnabled || false,
+      serviceChargeRate: Number(store?.settings?.serviceChargeRate || 0),
+      serviceChargeEnabled: store?.settings?.serviceChargeEnabled || false,
+      timezone: store?.settings?.timezone || 'Asia/Jakarta',
+    };
+
+    if (!activeShift) {
+      return {
+        data: {
+          shift: null,
+          store: storeInfo,
+          transactions: [],
+        },
+      };
+    }
+
+    // 2. Ambil transaksi pesanan yang pembayarannya tercatat pada shift ini
+    const orders = await prisma.order.findMany({
+      where: {
+        storeId,
+        payment: {
+          shiftId: activeShift.id,
+        },
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+            variant: true,
+          },
+        },
+        customer: true,
+        payment: true,
+        promotions: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // 3. Serialisasi Decimal fields ke Number agar aman dikirim ke Client Components
+    const serializedOrders = orders.map((order) => ({
+      ...order,
+      createdAt: order.createdAt?.toISOString?.() || null,
+      updatedAt: order.updatedAt?.toISOString?.() || null,
+      paidAt: order.paidAt?.toISOString?.() || null,
+      productSubtotal: Number(order.productSubtotal || 0),
+      promotionDiscount: Number(order.promotionDiscount || 0),
+      taxableSubtotal: Number(order.taxableSubtotal || 0),
+      serviceChargeRate: Number(order.serviceChargeRate || 0),
+      serviceChargeAmount: Number(order.serviceChargeAmount || 0),
+      taxRate: Number(order.taxRate || 0),
+      taxBase: Number(order.taxBase || 0),
+      taxAmount: Number(order.taxAmount || 0),
+      grandTotal: Number(order.grandTotal || 0),
+      roundingAmount: Number(order.roundingAmount || 0),
+      cashPayable: Number(order.cashPayable || 0),
+      payment: order.payment
+        ? {
+            ...order.payment,
+            amount: Number(order.payment.amount || 0),
+            cashReceived: order.payment.cashReceived ? Number(order.payment.cashReceived) : null,
+            changeAmount: order.payment.changeAmount ? Number(order.payment.changeAmount) : null,
+            paidAt: order.payment.paidAt?.toISOString?.() || null,
+            createdAt: order.payment.createdAt?.toISOString?.() || null,
+          }
+        : null,
+      items: (order.items || []).map((item) => ({
+        ...item,
+        createdAt: item.createdAt?.toISOString?.() || null,
+        unitPrice: Number(item.unitPrice || 0),
+        promotionDiscount: Number(item.promotionDiscount || 0),
+        subtotal: Number(item.subtotal || 0),
+        hppUnit: Number(item.hppUnit || 0),
+        hppTotal: Number(item.hppTotal || 0),
+        product: item.product
+          ? {
+              ...item.product,
+              price: Number(item.product.price || 0),
+              createdAt: item.product.createdAt?.toISOString?.() || null,
+              updatedAt: item.product.updatedAt?.toISOString?.() || null,
+            }
+          : null,
+        variant: item.variant
+          ? {
+              ...item.variant,
+              price: Number(item.variant.price || 0),
+              createdAt: item.variant.createdAt?.toISOString?.() || null,
+              updatedAt: item.variant.updatedAt?.toISOString?.() || null,
+            }
+          : null,
+      })),
+      promotions: (order.promotions || []).map((promo) => ({
+        ...promo,
+        valueSnapshot: Number(promo.valueSnapshot || 0),
+        maxDiscountSnapshot: promo.maxDiscountSnapshot ? Number(promo.maxDiscountSnapshot) : null,
+        discountAmount: Number(promo.discountAmount || 0),
+        createdAt: promo.createdAt?.toISOString?.() || null,
+      })),
+      customer: order.customer
+        ? {
+            ...order.customer,
+            createdAt: order.customer.createdAt?.toISOString?.() || null,
+            updatedAt: order.customer.updatedAt?.toISOString?.() || null,
+          }
+        : null,
+    }));
+
+    return {
+      data: {
+        shift: {
+          id: activeShift.id,
+          openedAt: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
+          startTime: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
+          openingCash: Number(activeShift.openingCash || 0),
+          user: activeShift.user,
+        },
+        store: storeInfo,
+        transactions: serializedOrders,
+      },
+    };
+  } catch (error) {
+    console.error('[getShiftTransactions] Error:', error);
+    const isSessionError = Boolean(error.message?.includes('Sesi tidak valid'));
+    return {
+      error: error.message || 'Gagal memuat riwayat transaksi shift.',
+      sessionRevoked: isSessionError,
+    };
+  }
+}

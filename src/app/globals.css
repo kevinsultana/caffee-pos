@@ -23,3 +23,42 @@ input::placeholder, textarea::placeholder {
   color: #94a3b8;
 }
 
+/* ─── Thermal Print Rules ─────────────────────────────────────────────── */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Sembunyikan seluruh UI dashboard saat window.print() */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Tampilkan hanya wadah struk thermal */
+  #thermal-receipt-print-area,
+  #thermal-receipt-print-area * {
+    visibility: visible !important;
+  }
+
+  #thermal-receipt-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
