@@ -66,6 +66,7 @@ export async function createSupplier({ name, phone, address }) {
 
     revalidateTag('suppliers');
     revalidatePath('/dashboard/inventory/suppliers');
+    revalidatePath('/dashboard/inventory/purchases/create');
     return { success: true, data: supplier };
   } catch (error) {
     console.error('[createSupplier] Error:', error);

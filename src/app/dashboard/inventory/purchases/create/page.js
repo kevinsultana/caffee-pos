@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createPurchase } from '@/app/actions/purchasing';
-import { getSuppliers } from '@/app/actions/supplier';
+import { getSuppliers, createSupplier } from '@/app/actions/supplier';
 import { getInventoryItems, getUnits } from '@/app/actions/inventory';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
@@ -25,6 +25,54 @@ export default function CreatePurchasePage() {
   const [purchasedAt, setPurchasedAt] = useState(
     new Date().toISOString().split('T')[0]
   );
+
+  // Modal Pendaftaran Supplier Baru
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [newSupplierPhone, setNewSupplierPhone] = useState('');
+  const [newSupplierAddress, setNewSupplierAddress] = useState('');
+  const [savingSupplier, setSavingSupplier] = useState(false);
+
+  async function handleSaveNewSupplier(e) {
+    e.preventDefault();
+    if (!newSupplierName.trim()) {
+      toast.error('Nama supplier wajib diisi.');
+      return;
+    }
+
+    setSavingSupplier(true);
+    const toastId = toast.loading('Menyimpan supplier baru...');
+    const res = await createSupplier({
+      name: newSupplierName.trim(),
+      phone: newSupplierPhone.trim(),
+      address: newSupplierAddress.trim(),
+    });
+
+    setSavingSupplier(false);
+
+    if (res?.error) {
+      toast.error(res.error, { id: toastId });
+      return;
+    }
+
+    toast.success(`Supplier "${res.data.name}" berhasil didaftarkan!`, { id: toastId });
+
+    // Tambahkan ke daftar options supplier jika belum ada
+    setSuppliers((prev) => {
+      const exists = prev.some((s) => s.id === res.data.id);
+      if (exists) return prev;
+      return [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    // Otomatis pilih supplier baru ini
+    setSupplierId(res.data.id);
+
+    // Tutup modal dan reset input
+    setSupplierModalOpen(false);
+    setNewSupplierName('');
+    setNewSupplierPhone('');
+    setNewSupplierAddress('');
+  }
 
   // Dynamic rows of items
   const [items, setItems] = useState([
@@ -203,29 +251,53 @@ export default function CreatePurchasePage() {
           <h2 className="text-sm font-bold text-slate-900">Informasi Supplier & Faktur</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Pilih Supplier / Vendor *
-              </label>
-              {suppliers.length === 0 ? (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
-                  Belum ada supplier terdaftar.{' '}
-                  <Link href="/dashboard/inventory/suppliers" className="underline font-bold">
-                    Tambah supplier
-                  </Link>{' '}
-                  terlebih dahulu.
-                </div>
-              ) : (
-                <SearchableSelect
-                  options={suppliers.map((s) => ({
-                    value: s.id,
-                    label: `${s.name} ${s.phone ? `(${s.phone})` : ''}`,
-                  }))}
-                  value={supplierId}
-                  onChange={(val) => setSupplierId(val)}
-                  disabled={isPending}
-                  placeholder="Pilih Supplier..."
-                />
-              )}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Pilih Supplier / Vendor *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewSupplierName('');
+                    setNewSupplierPhone('');
+                    setNewSupplierAddress('');
+                    setSupplierModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  + Tambah Supplier Baru
+                </button>
+              </div>
+
+              <SearchableSelect
+                isCreatable={true}
+                onCreateOption={(inputVal) => {
+                  setNewSupplierName(inputVal || '');
+                  setNewSupplierPhone('');
+                  setNewSupplierAddress('');
+                  setSupplierModalOpen(true);
+                }}
+                formatCreateLabel={(inputVal) => `+ Daftarkan supplier baru "${inputVal}"`}
+                options={suppliers.map((s) => ({
+                  value: s.id,
+                  label: `${s.name}${s.phone ? ` (${s.phone})` : ''}`,
+                }))}
+                value={supplierId}
+                onChange={(val) => setSupplierId(val)}
+                disabled={isPending}
+                placeholder="Cari atau ketik nama supplier baru..."
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue
+                    ? `Tekan Enter untuk mendaftarkan "${inputValue}"`
+                    : 'Belum ada supplier terdaftar'
+                }
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Ketik nama supplier baru lalu tekan Enter, atau klik tombol di atas untuk mendaftarkan langsung.
+              </p>
             </div>
 
             <div>
@@ -389,7 +461,7 @@ export default function CreatePurchasePage() {
               </Link>
               <button
                 type="submit"
-                disabled={isPending || suppliers.length === 0}
+                disabled={isPending || !supplierId}
                 className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
               >
                 {isPending ? 'Menyimpan PO...' : 'Simpan Draft Pembelian'}
@@ -398,6 +470,111 @@ export default function CreatePurchasePage() {
           </div>
         </div>
       </form>
+
+      {/* ─── MODAL POPUP TAMBAH SUPPLIER BARU ─────────────────────────────── */}
+      {supplierModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.765z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Daftarkan Supplier Baru</h3>
+                  <p className="text-xs text-slate-500">
+                    Tersimpan langsung ke database dan otomatis terpilih.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSupplierModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveNewSupplier} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Nama Supplier / Vendor *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Contoh: PT Kopi Harapan / Toko Sumber Jaya"
+                  value={newSupplierName}
+                  onChange={(e) => setNewSupplierName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Nomor Telepon / WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Contoh: 0812-3456-7890"
+                  value={newSupplierPhone}
+                  onChange={(e) => setNewSupplierPhone(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Alamat Lengkap
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Contoh: Jl. Sudirman No. 12, Jakarta"
+                  value={newSupplierAddress}
+                  onChange={(e) => setNewSupplierAddress(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSupplierModalOpen(false)}
+                  disabled={savingSupplier}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSupplier}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {savingSupplier ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan & Pilih Supplier'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

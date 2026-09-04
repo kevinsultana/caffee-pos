@@ -337,15 +337,20 @@ export default function InventoryItemDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono">
-              {item.movements?.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
-                    Belum ada riwayat mutasi stok untuk bahan baku ini.
-                  </td>
-                </tr>
-              ) : (
-                item.movements.map((m) => {
-                  const isPositive = m.quantityDelta > 0;
+              {(() => {
+                const movementsList = item.movements || item.stockMovements || [];
+                if (movementsList.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-400 text-xs font-sans">
+                        Belum ada riwayat mutasi stok untuk bahan baku ini.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return movementsList.map((m) => {
+                  const isPositive = Number(m.quantityDelta) > 0;
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-4 text-slate-500 text-xs font-mono">
@@ -358,7 +363,8 @@ export default function InventoryItemDetailPage() {
                             m.type === 'PURCHASE' && 'bg-blue-50 text-blue-800 border-blue-200',
                             m.type === 'SALE' && 'bg-emerald-50 text-emerald-800 border-emerald-200',
                             m.type === 'ADJUSTMENT' && 'bg-purple-50 text-purple-800 border-purple-200',
-                            m.type === 'WASTE' && 'bg-rose-50 text-rose-800 border-rose-200'
+                            m.type === 'WASTE' && 'bg-rose-50 text-rose-800 border-rose-200',
+                            m.type === 'OPENING_STOCK' && 'bg-amber-50 text-amber-800 border-amber-200'
                           )}
                         >
                           {m.type}
@@ -385,8 +391,8 @@ export default function InventoryItemDetailPage() {
                       </td>
                     </tr>
                   );
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>
