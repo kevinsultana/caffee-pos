@@ -216,6 +216,20 @@ export async function processPosCheckout({
       return { error: 'Metode pembayaran tidak valid.' };
     }
 
+    // ── Validasi panjang input (anti payload abuse) ──────────────────────
+    if (customerName && customerName.length > 100) {
+      return { error: 'Nama pelanggan terlalu panjang (maks 100 karakter).' };
+    }
+    if (customerPhone && customerPhone.length > 50) {
+      return { error: 'Nomor telepon terlalu panjang (maks 50 karakter).' };
+    }
+    if (promoCode && promoCode.length > 50) {
+      return { error: 'Kode promo tidak valid.' };
+    }
+    if (items.length > 50) {
+      return { error: 'Terlalu banyak item dalam satu transaksi (maks 50 item).' };
+    }
+
     // Validasi pesanan QR jika ditautkan
     let existingQrOrder = null;
     if (qrOrderId) {
@@ -355,7 +369,7 @@ export async function processPosCheckout({
         subtotal,
         hppUnit,
         hppTotal,
-        notes: item.notes?.trim() || null,
+        notes: item.notes?.trim()?.slice(0, 500) || null,
         productRef: dbProd,
         effectiveRecipe,
       });

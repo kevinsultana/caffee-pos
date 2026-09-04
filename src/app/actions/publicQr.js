@@ -115,8 +115,20 @@ export async function createPublicQrOrder({
       return { error: 'Nama pemesan wajib diisi.' };
     }
 
+    // ── Validasi panjang input (endpoint publik tanpa auth — risiko tinggi spam) ─
+    if (customerName.length > 100) {
+      return { error: 'Nama pemesan terlalu panjang (maks 100 karakter).' };
+    }
+    if (customerPhone && customerPhone.length > 50) {
+      return { error: 'Nomor telepon terlalu panjang (maks 50 karakter).' };
+    }
+
     if (!items || !Array.isArray(items) || items.length === 0) {
       return { error: 'Keranjang belanja Anda masih kosong.' };
+    }
+
+    if (items.length > 30) {
+      return { error: 'Terlalu banyak item dalam satu pesanan (maks 30 item).' };
     }
 
     const settings = store.settings || {
@@ -163,7 +175,7 @@ export async function createPublicQrOrder({
         subtotal,
         hppUnit: 0, // Akan dihitung saat kasir konfirmasi bayar
         hppTotal: 0,
-        notes: it.notes?.trim() || null,
+        notes: it.notes?.trim()?.slice(0, 500) || null,
       });
     }
 

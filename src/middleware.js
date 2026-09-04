@@ -6,6 +6,56 @@ const SESSION_COOKIE = 'schaw_session';
 // Rute yang memerlukan autentikasi
 const PROTECTED_PREFIXES = ['/dashboard'];
 
+// ── RATE LIMITER (In-Memory, Edge-Compatible) ─────────────────────────────────
+// Map: ip -> { count: number, resetAt: number }
+const rateLimitStore = new Map();
+
+const RATE_LIMIT_RULES = {
+  '/login':  { max: 10,  windowMs: 60_000 }, // 10 req/menit per IP
+  '/menu':   { max: 60,  windowMs: 60_000 }, // 60 req/menit per IP (public QR)
+};
+
+/**
+ * Cek apakah request dari IP tertentu melebihi batas rate limit.
+ * Mengembalikan true jika harus di-block, false jika boleh lanjut.
+ */
+function isRateLimited(ip, pathname) {
+  // Cari rule yang cocok (prefix match)
+  const matchedPath = Object.keys(RATE_LIMIT_RULES).find((p) => pathname.startsWith(p));
+  if (!matchedPath) return false;
+
+  const rule = RATE_LIMIT_RULES[matchedPath];
+  const key = `${matchedPath}:${ip}`;
+  const now = Date.now();
+
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    // Window baru
+    rateLimitStore.set(key, { count: 1, resetAt: now + rule.windowMs });
+    return false;
+  }
+
+  if (entry.count >= rule.max) {
+    return true; // Rate limit terlampaui
+  }
+
+  entry.count += 1;
+  return false;
+}
+
+/**
+ * Tambahkan security headers ke response.
+ * Headers ini tidak mengubah alur bisnis, hanya memperkuat postur keamanan.
+ */
+function addSecurityHeaders(response) {
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  return response;
+}
+
 /**
  * Parsing payload session cookie yang dapat berupa string token tunggal
  * atau JSON object { token, requiresPasswordChange, role, permissions }.
@@ -50,6 +100,29 @@ function clearSessionCookie(response) {
 
 export function middleware(request) {
   const { pathname } = request.nextUrl;
+
+  // ── RATE LIMITING ─────────────────────────────────────────────────────────────
+  const clientIp =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+
+  if (isRateLimited(clientIp, pathname)) {
+    const retryAfter = '60';
+    return addSecurityHeaders(
+      new NextResponse(
+        JSON.stringify({ error: 'Terlalu banyak permintaan. Coba lagi dalam 1 menit.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': retryAfter,
+          },
+        }
+      )
+    );
+  }
+
   const sessionCookieValue = request.cookies.get(SESSION_COOKIE)?.value;
   const session = parseSessionCookie(sessionCookieValue);
   const sessionToken = session?.token;
@@ -74,16 +147,16 @@ export function middleware(request) {
     // langsung bersihkan cookie sesi di scope middleware!
     if (isRevokedOrRedirected && sessionCookieValue) {
       const response = NextResponse.next();
-      return clearSessionCookie(response);
+      return addSecurityHeaders(clearSessionCookie(response));
     }
 
     // Jika sudah login normal & valid tanpa flag revoked/from, arahkan ke landing page hak aksesnya
     if (sessionToken && !requiresPasswordChange && !isRevokedOrRedirected) {
       const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
-      return NextResponse.redirect(new URL(targetRoute, request.url));
+      return addSecurityHeaders(NextResponse.redirect(new URL(targetRoute, request.url)));
     }
 
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // ── ATURAN 2: PENGGUNA BELUM LOGIN ATAU SESI HILANG ─────────────────────────
@@ -93,31 +166,33 @@ export function middleware(request) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('from', pathname);
       const response = NextResponse.redirect(loginUrl);
-      return clearSessionCookie(response);
+      return addSecurityHeaders(clearSessionCookie(response));
     }
 
     // Akses ganti password tanpa sesi → alihkan ke /login
     if (pathname === '/login/change-password') {
       const response = NextResponse.redirect(new URL('/login', request.url));
-      return clearSessionCookie(response);
+      return addSecurityHeaders(clearSessionCookie(response));
     }
 
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // ── ATURAN 3: PENGGUNA SUDAH LOGIN TETAPI WAJIB GANTI PASSWORD ──────────────
   if (requiresPasswordChange) {
     if (pathname === '/login/change-password') {
-      return NextResponse.next();
+      return addSecurityHeaders(NextResponse.next());
     }
-    return NextResponse.redirect(new URL('/login/change-password', request.url));
+    return addSecurityHeaders(
+      NextResponse.redirect(new URL('/login/change-password', request.url))
+    );
   }
 
   // ── ATURAN 4: PENGGUNA SUDAH LOGIN NORMAL (SUDAH PERNAH GANTI PASSWORD) ─────
   if (!requiresPasswordChange) {
     if (pathname === '/login/change-password') {
       const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
-      return NextResponse.redirect(new URL(targetRoute, request.url));
+      return addSecurityHeaders(NextResponse.redirect(new URL(targetRoute, request.url)));
     }
   }
 
@@ -131,7 +206,7 @@ export function middleware(request) {
   ) {
     const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
     if (targetRoute !== '/dashboard') {
-      return NextResponse.redirect(new URL(targetRoute, request.url));
+      return addSecurityHeaders(NextResponse.redirect(new URL(targetRoute, request.url)));
     }
   }
 
@@ -140,11 +215,13 @@ export function middleware(request) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
 
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+  return addSecurityHeaders(
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    })
+  );
 }
 
 export const config = {

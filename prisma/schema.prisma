@@ -879,6 +879,7 @@ model Shift {
   cashMovements CashMovement[]
 
   @@index([storeId, openedAt])
+  @@index([storeId, status])
   @@index([userId, status])
 }
 

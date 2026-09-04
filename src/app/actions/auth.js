@@ -51,6 +51,14 @@ export async function login(username, password) {
     return { error: 'Username dan password wajib diisi.' };
   }
 
+  // ── Validasi panjang input (cegah oversized payload / bcrypt hanging) ──────
+  if (username.length > 100) {
+    return { error: 'Username tidak valid.' };
+  }
+  if (password.length > 200) {
+    return { error: 'Password tidak valid.' };
+  }
+
   try {
     const cleanUsername = username.trim().toLowerCase();
 

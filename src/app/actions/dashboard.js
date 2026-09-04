@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { hasPermission } from '@/lib/permissions';
+import { unstable_cache } from 'next/cache';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -45,147 +46,88 @@ function getDateRange(period = 'TODAY') {
 }
 
 /**
- * Mengambil metrik analitik dashboard utama:
- * Sesuai dokumen 05-REPORTS-DASHBOARD.md
+ * Cached DB query untuk metrics dashboard.
+ * Hanya menerima primitive args (storeId, period) — tidak ada cookies/headers di dalam scope ini.
+ * Cache TTL: 60 detik per kombinasi (storeId, period).
  */
-export async function getDashboardMetrics(period = 'TODAY') {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
+const _getCachedMetrics = unstable_cache(
+  async (storeId, period) => {
     const { start, end } = getDateRange(period);
 
-    // Filter umum untuk order berstatus PAID dalam rentang waktu yang dipilih
     const orderWherePaid = {
       storeId,
       status: 'PAID',
       createdAt: { gte: start, lte: end },
     };
 
-    // 1. Order Aggregates (Gross Sales, Diskon, Pajak, Service Charge, Grand Total, Order Count)
-    // Dieksekusi langsung oleh PostgreSQL via prisma.order.aggregate
-    const orderAggPromise = prisma.order.aggregate({
-      where: orderWherePaid,
-      _count: {
-        id: true,
-      },
-      _sum: {
-        productSubtotal: true,
-        promotionDiscount: true,
-        taxAmount: true,
-        serviceChargeAmount: true,
-        grandTotal: true,
-      },
-    });
-
-    // 2. HPP (Cost of Goods Sold) Aggregate dari OrderItem
-    // Dieksekusi langsung oleh PostgreSQL via prisma.orderItem.aggregate
-    const hppAggPromise = prisma.orderItem.aggregate({
-      where: {
-        order: orderWherePaid,
-      },
-      _sum: {
-        hppTotal: true,
-      },
-    });
-
-    // 3. Breakdown Pembayaran (CASH vs QRIS)
-    // Dikelompokkan oleh PostgreSQL via prisma.payment.groupBy
-    const paymentGroupPromise = prisma.payment.groupBy({
-      by: ['method'],
-      where: {
-        order: orderWherePaid,
-        status: 'PAID',
-      },
-      _sum: {
-        amount: true,
-      },
-    });
-
-    // 4. Top 5 Produk Terlaris (Berdasarkan Kuantitas & Pendapatan)
-    // Dikelompokkan & diurutkan langsung oleh PostgreSQL via prisma.orderItem.groupBy
-    const topProductsGroupPromise = prisma.orderItem.groupBy({
-      by: ['productNameSnapshot'],
-      where: {
-        order: orderWherePaid,
-      },
-      _sum: {
-        quantity: true,
-        subtotal: true,
-      },
-      orderBy: {
-        _sum: {
-          quantity: 'desc',
-        },
-      },
-      take: 5,
-    });
-
-    // 5. 10 Transaksi Terbaru (Lean Select)
-    const recentOrdersPromise = prisma.order.findMany({
-      where: orderWherePaid,
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        orderNumber: true,
-        queueNumber: true,
-        customerNameSnapshot: true,
-        grandTotal: true,
-        createdAt: true,
-        payment: {
-          select: {
-            method: true,
+    const [orderAgg, hppAgg, paymentGroups, topItemGroups, recentOrdersData, inventoryItems] =
+      await Promise.all([
+        prisma.order.aggregate({
+          where: orderWherePaid,
+          _count: { id: true },
+          _sum: {
+            productSubtotal: true,
+            promotionDiscount: true,
+            taxAmount: true,
+            serviceChargeAmount: true,
+            grandTotal: true,
           },
-        },
-      },
-    });
+        }),
+        prisma.orderItem.aggregate({
+          where: { order: orderWherePaid },
+          _sum: { hppTotal: true },
+        }),
+        prisma.payment.groupBy({
+          by: ['method'],
+          where: { order: orderWherePaid, status: 'PAID' },
+          _sum: { amount: true },
+        }),
+        prisma.orderItem.groupBy({
+          by: ['productNameSnapshot'],
+          where: { order: orderWherePaid },
+          _sum: { quantity: true, subtotal: true },
+          orderBy: { _sum: { quantity: 'desc' } },
+          take: 5,
+        }),
+        prisma.order.findMany({
+          where: orderWherePaid,
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            orderNumber: true,
+            queueNumber: true,
+            customerNameSnapshot: true,
+            grandTotal: true,
+            createdAt: true,
+            payment: { select: { method: true } },
+          },
+        }),
+        prisma.inventoryItem.findMany({
+          where: { storeId },
+          select: {
+            id: true,
+            name: true,
+            minimumStock: true,
+            baseUnit: { select: { code: true } },
+            balance: { select: { quantity: true } },
+          },
+        }),
+      ]);
 
-    // 6. Low Stock Alerts (Bahan Baku Inventaris)
-    const inventoryItemsPromise = prisma.inventoryItem.findMany({
-      where: { storeId },
-      select: {
-        id: true,
-        name: true,
-        minimumStock: true,
-        baseUnit: { select: { code: true } },
-        balance: { select: { quantity: true } },
-      },
-    });
-
-    // Jalankan seluruh query di atas secara paralel (Concurrent DB Execution)
-    const [
-      orderAgg,
-      hppAgg,
-      paymentGroups,
-      topItemGroups,
-      recentOrdersData,
-      inventoryItems,
-    ] = await Promise.all([
-      orderAggPromise,
-      hppAggPromise,
-      paymentGroupPromise,
-      topProductsGroupPromise,
-      recentOrdersPromise,
-      inventoryItemsPromise,
-    ]);
-
-    // Format hasil agregasi matematis
     const grossSales = Number(orderAgg._sum.productSubtotal || 0);
     const totalDiscount = Number(orderAgg._sum.promotionDiscount || 0);
     const totalTax = Number(orderAgg._sum.taxAmount || 0);
     const totalServiceCharge = Number(orderAgg._sum.serviceChargeAmount || 0);
     const totalGrandTotal = Number(orderAgg._sum.grandTotal || 0);
     const orderCount = orderAgg._count.id || 0;
-
     const totalHpp = Number(hppAgg._sum.hppTotal || 0);
 
     let cashSales = 0;
     let qrisSales = 0;
     for (const pg of paymentGroups) {
-      if (pg.method === 'CASH') {
-        cashSales = Number(pg._sum.amount || 0);
-      } else if (pg.method === 'QRIS') {
-        qrisSales = Number(pg._sum.amount || 0);
-      }
+      if (pg.method === 'CASH') cashSales = Number(pg._sum.amount || 0);
+      else if (pg.method === 'QRIS') qrisSales = Number(pg._sum.amount || 0);
     }
 
     const netSales = Math.max(0, grossSales - totalDiscount);
@@ -224,26 +166,40 @@ export async function getDashboardMetrics(period = 'TODAY') {
     }));
 
     return {
-      data: {
-        period,
-        grossSales,
-        totalDiscount,
-        netSales,
-        totalHpp,
-        grossProfit,
-        profitMargin: netSales > 0 ? Math.round((grossProfit / netSales) * 100) : 0,
-        totalTax,
-        totalServiceCharge,
-        totalGrandTotal,
-        orderCount,
-        aov,
-        cashSales,
-        qrisSales,
-        topProducts,
-        stockAlerts,
-        recentOrders,
-      },
+      period,
+      grossSales,
+      totalDiscount,
+      netSales,
+      totalHpp,
+      grossProfit,
+      profitMargin: netSales > 0 ? Math.round((grossProfit / netSales) * 100) : 0,
+      totalTax,
+      totalServiceCharge,
+      totalGrandTotal,
+      orderCount,
+      aov,
+      cashSales,
+      qrisSales,
+      topProducts,
+      stockAlerts,
+      recentOrders,
     };
+  },
+  ['dashboard-metrics'],
+  { revalidate: 60 }
+);
+
+/**
+ * Mengambil metrik analitik dashboard utama:
+ * Sesuai dokumen 05-REPORTS-DASHBOARD.md
+ * - Auth check berjalan setiap request (tidak di-cache)
+ * - DB queries di-cache 60 detik per (storeId, period) oleh _getCachedMetrics
+ */
+export async function getDashboardMetrics(period = 'TODAY') {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const data = await _getCachedMetrics(storeId, period);
+    return { data };
   } catch (error) {
     console.error('[getDashboardMetrics] Error:', error);
     return { error: error.message || 'Gagal memuat metrik dashboard.' };
