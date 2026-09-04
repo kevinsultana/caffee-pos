@@ -45,16 +45,16 @@ async function main() {
       name: 'MANAGER',
       description: 'Operations manager with operational and reporting access',
       permissions: [
-        'MENU_DASHBOARD', 'MENU_POS', 'MENU_CASH_FLOW', 'MENU_QR_TABLE',
+        'MENU_DASHBOARD', 'MENU_POS', 'MENU_POS_HISTORY', 'MENU_CASH_FLOW', 'MENU_QR_TABLE',
         'MENU_PRODUCTS', 'MENU_CATEGORIES', 'MENU_PROMOTIONS', 'MENU_CUSTOMERS',
         'MENU_INVENTORY', 'MENU_PURCHASING', 'MENU_STOCK_CARD', 'MENU_OPNAME',
-        'MENU_SUPPLIERS', 'MENU_INVENTORY_SETUP', 'MENU_AUDIT'
+        'MENU_SUPPLIERS', 'MENU_INVENTORY_SETUP', 'MENU_ROLES', 'MENU_AUDIT'
       ],
     },
     {
       name: 'CASHIER',
       description: 'Front-desk cashier with POS and cash handling access',
-      permissions: ['MENU_POS', 'MENU_CASH_FLOW', 'MENU_CUSTOMERS'],
+      permissions: ['MENU_POS', 'MENU_POS_HISTORY', 'MENU_CASH_FLOW', 'MENU_CUSTOMERS'],
     },
     {
       name: 'INVENTORY_STAFF',

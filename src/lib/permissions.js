@@ -19,6 +19,13 @@ export const MENU_PERMISSIONS = [
     defaultRoute: '/dashboard/pos',
   },
   {
+    code: 'MENU_POS_HISTORY',
+    label: 'Akses Riwayat Transaksi Shift',
+    description: 'Melihat riwayat pesanan shift berjalan dan mencetak struk thermal pelanggan/dapur.',
+    category: 'Utama',
+    defaultRoute: '/dashboard/pos/history',
+  },
+  {
     code: 'MENU_CASH_FLOW',
     label: 'Akses Arus Kas Kasir (In/Out)',
     description: 'Mencatat kas masuk modal tambahan dan pengeluaran kas kecil kasir.',
@@ -104,10 +111,17 @@ export const MENU_PERMISSIONS = [
   },
   {
     code: 'MENU_USERS',
-    label: 'Akses Karyawan & Hak Akses (Roles)',
-    description: 'Mengelola akun staf karyawan dan membuat peran serta permissions kustom.',
+    label: 'Akses Karyawan (Staff)',
+    description: 'Melihat, menambah, dan mengedit data akun staf karyawan cafe.',
     category: 'Administrasi Sistem',
     defaultRoute: '/dashboard/users',
+  },
+  {
+    code: 'MENU_ROLES',
+    label: 'Akses Peran & Hak Akses (Roles)',
+    description: 'Mengatur peran karyawan dan izin akses per menu secara spesifik.',
+    category: 'Administrasi Sistem',
+    defaultRoute: '/dashboard/roles',
   },
   {
     code: 'MENU_AUDIT',
@@ -131,6 +145,7 @@ export const MENU_PERMISSIONS = [
  */
 export const ROUTE_PERMISSION_MAP = [
   { prefix: '/dashboard/pos/cash', permission: 'MENU_CASH_FLOW' },
+  { prefix: '/dashboard/pos/history', permission: 'MENU_POS_HISTORY' },
   { prefix: '/dashboard/pos', permission: 'MENU_POS' },
   { prefix: '/dashboard/qr', permission: 'MENU_QR_TABLE' },
   { prefix: '/dashboard/products/categories', permission: 'MENU_CATEGORIES' },
@@ -143,7 +158,7 @@ export const ROUTE_PERMISSION_MAP = [
   { prefix: '/dashboard/inventory/suppliers', permission: 'MENU_SUPPLIERS' },
   { prefix: '/dashboard/inventory/setup', permission: 'MENU_INVENTORY_SETUP' },
   { prefix: '/dashboard/inventory', permission: 'MENU_INVENTORY' },
-  { prefix: '/dashboard/roles', permission: 'MENU_USERS' },
+  { prefix: '/dashboard/roles', permission: 'MENU_ROLES' },
   { prefix: '/dashboard/users', permission: 'MENU_USERS' },
   { prefix: '/dashboard/audit', permission: 'MENU_AUDIT' },
   { prefix: '/dashboard/settings', permission: 'MENU_SETTINGS' },
@@ -171,7 +186,19 @@ export function hasPermission(user, requiredPermission) {
     ? user.role.permissions
     : [];
 
-  return permissions.includes(requiredPermission);
+  if (permissions.includes(requiredPermission)) return true;
+
+  // Backward-compatibility: Jika user/role sudah punya MENU_POS, izinkan juga MENU_POS_HISTORY
+  if (requiredPermission === 'MENU_POS_HISTORY' && permissions.includes('MENU_POS')) {
+    return true;
+  }
+
+  // Backward-compatibility: Jika user/role sudah punya MENU_USERS, izinkan juga MENU_ROLES
+  if (requiredPermission === 'MENU_ROLES' && permissions.includes('MENU_USERS')) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
