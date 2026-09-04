@@ -267,6 +267,7 @@ model UserSession {
 
   auditLogs AuditLog[]
 
+  // sessionTokenHash @unique otomatis membuat B-Tree index unik untuk token lookups
   @@index([userId])
   @@index([deviceId])
 }
@@ -300,6 +301,7 @@ model AuditLog {
   session UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([storeId, createdAt])
+  @@index([createdAt])
   @@index([storeId, module])
   @@index([storeId, entityType, entityId])
 }
@@ -652,6 +654,7 @@ model StockMovement {
   responsibleUser User? @relation("StockMovementResponsibleUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
 
   @@index([storeId, createdAt])
+  @@index([inventoryItemId])
   @@index([inventoryItemId, createdAt])
   @@index([referenceType, referenceId])
   @@index([responsibleUserId])
@@ -776,8 +779,10 @@ model Order {
   payment    Payment?
   promotions OrderPromotion[]
 
+  // Catatan: Order berelasi dengan Shift melalui Payment(shiftId) yang diindeks via @@index([shiftId])
   @@unique([storeId, orderNumber])
   @@index([storeId, createdAt])
+  @@index([createdAt])
   @@index([storeId, status])
   @@index([customerId])
   @@index([createdById])

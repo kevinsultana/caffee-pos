@@ -11,7 +11,7 @@ const PROTECTED_PREFIXES = ['/dashboard'];
 const rateLimitStore = new Map();
 
 const RATE_LIMIT_RULES = {
-  '/login':  { max: 10,  windowMs: 60_000 }, // 10 req/menit per IP
+  '/login':  { max: 5,   windowMs: 60_000 }, // Maksimal 5 percobaan per menit per IP
   '/menu':   { max: 60,  windowMs: 60_000 }, // 60 req/menit per IP (public QR)
 };
 
@@ -103,20 +103,19 @@ export function middleware(request) {
 
   // ── RATE LIMITING ─────────────────────────────────────────────────────────────
   const clientIp =
+    request.ip ||
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
-    'unknown';
+    '127.0.0.1';
 
   if (isRateLimited(clientIp, pathname)) {
-    const retryAfter = '60';
     return addSecurityHeaders(
-      new NextResponse(
-        JSON.stringify({ error: 'Terlalu banyak permintaan. Coba lagi dalam 1 menit.' }),
+      NextResponse.json(
+        { error: 'Terlalu banyak percobaan, coba lagi nanti.' },
         {
           status: 429,
           headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': retryAfter,
+            'Retry-After': '60',
           },
         }
       )
