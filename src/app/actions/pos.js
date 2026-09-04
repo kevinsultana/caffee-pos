@@ -83,10 +83,14 @@ export async function getPosInitData() {
         inventoryItem: v.inventoryItem
           ? {
               ...v.inventoryItem,
+              minimumStock:
+                v.inventoryItem.minimumStock != null
+                  ? Number(v.inventoryItem.minimumStock)
+                  : 0,
               balance: v.inventoryItem.balance
                 ? {
-                    quantity: Number(v.inventoryItem.balance.quantity),
-                    averageCost: Number(v.inventoryItem.balance.averageCost),
+                    quantity: Number(v.inventoryItem.balance.quantity || 0),
+                    averageCost: Number(v.inventoryItem.balance.averageCost || 0),
                   }
                 : null,
             }
@@ -95,10 +99,14 @@ export async function getPosInitData() {
       inventoryItem: p.inventoryItem
         ? {
             ...p.inventoryItem,
+            minimumStock:
+              p.inventoryItem.minimumStock != null
+                ? Number(p.inventoryItem.minimumStock)
+                : 0,
             balance: p.inventoryItem.balance
               ? {
-                  quantity: Number(p.inventoryItem.balance.quantity),
-                  averageCost: Number(p.inventoryItem.balance.averageCost),
+                  quantity: Number(p.inventoryItem.balance.quantity || 0),
+                  averageCost: Number(p.inventoryItem.balance.averageCost || 0),
                 }
               : null,
           }

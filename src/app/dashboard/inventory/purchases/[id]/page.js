@@ -115,7 +115,7 @@ export default function PurchaseDetailPage({ params }) {
   const isDraft = purchase.status === 'DRAFT';
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-7xl">
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -35,6 +35,23 @@ function serializePurchase(p) {
           baseQuantity: it.baseQuantity != null ? Number(it.baseQuantity) : 0,
           baseUnitCost: it.baseUnitCost != null ? Number(it.baseUnitCost) : 0,
           subtotal: it.subtotal != null ? Number(it.subtotal) : 0,
+          inventoryItem: it.inventoryItem
+            ? {
+                ...it.inventoryItem,
+                minimumStock:
+                  it.inventoryItem.minimumStock != null
+                    ? Number(it.inventoryItem.minimumStock)
+                    : 0,
+                balance: it.inventoryItem.balance
+                  ? {
+                      ...it.inventoryItem.balance,
+                      quantity: Number(it.inventoryItem.balance.quantity || 0),
+                      averageCost: Number(it.inventoryItem.balance.averageCost || 0),
+                      stockValue: Number(it.inventoryItem.balance.stockValue || 0),
+                    }
+                  : null,
+              }
+            : undefined,
         }))
       : undefined,
   };
@@ -119,17 +136,23 @@ export async function getPurchaseById(id) {
           baseQuantity: Number(it.baseQuantity),
           baseUnitCost: Number(it.baseUnitCost),
           subtotal: Number(it.subtotal),
-          inventoryItem: {
-            ...it.inventoryItem,
-            balance: it.inventoryItem.balance
-              ? {
-                  ...it.inventoryItem.balance,
-                  quantity: Number(it.inventoryItem.balance.quantity),
-                  averageCost: Number(it.inventoryItem.balance.averageCost),
-                  stockValue: Number(it.inventoryItem.balance.stockValue),
-                }
-              : null,
-          },
+          inventoryItem: it.inventoryItem
+            ? {
+                ...it.inventoryItem,
+                minimumStock:
+                  it.inventoryItem.minimumStock != null
+                    ? Number(it.inventoryItem.minimumStock)
+                    : 0,
+                balance: it.inventoryItem.balance
+                  ? {
+                      ...it.inventoryItem.balance,
+                      quantity: Number(it.inventoryItem.balance.quantity || 0),
+                      averageCost: Number(it.inventoryItem.balance.averageCost || 0),
+                      stockValue: Number(it.inventoryItem.balance.stockValue || 0),
+                    }
+                  : null,
+              }
+            : null,
         })),
       },
     };
