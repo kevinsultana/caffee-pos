@@ -1344,7 +1344,7 @@ export default function PosScreenPage() {
                 </div>
               ) : (
                 /* QRIS Dynamic Display */
-                <div className="p-4 bg-gradient-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-3">
+                <div className="p-4 bg-linear-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-3">
                   {settings?.qrisImageUrl ? (
                     <div className="space-y-3">
                       <div className="relative mx-auto w-52 h-52 sm:w-56 sm:h-56 bg-white rounded-2xl p-2.5 border-2 border-blue-100 shadow-xs flex items-center justify-center group overflow-hidden">
@@ -1515,7 +1515,7 @@ export default function PosScreenPage() {
               )}
 
               {qrPaymentMethod === 'QRIS' && (
-                <div className="p-3.5 bg-gradient-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-2.5">
+                <div className="p-3.5 bg-linear-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-2.5">
                   {settings?.qrisImageUrl ? (
                     <div className="space-y-2">
                       <div className="relative mx-auto w-40 h-40 bg-white rounded-xl p-2 border border-blue-100 shadow-2xs flex items-center justify-center overflow-hidden group">
