@@ -467,6 +467,33 @@ export async function verifyCurrentSession() {
         ? MENU_PERMISSIONS.map((p) => p.code)
         : session.user.role?.permissions || [];
 
+    // Perbarui cookie sesi jika permissions atau role di database telah berubah
+    try {
+      const cachedPermissions = Array.isArray(sessionData?.permissions) ? sessionData.permissions : [];
+      const hasChanged =
+        sessionData?.role !== session.user.role?.name ||
+        cachedPermissions.length !== effectivePermissions.length ||
+        cachedPermissions.some((p) => !effectivePermissions.includes(p));
+
+      if (hasChanged) {
+        const updatedPayload = JSON.stringify({
+          token: rawToken,
+          requiresPasswordChange: Boolean(session.user.mustChangePassword),
+          role: session.user.role?.name,
+          permissions: effectivePermissions,
+        });
+        cookieStore.set(SESSION_COOKIE, updatedPayload, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          expires: session.expiresAt,
+          path: '/',
+        });
+      }
+    } catch (cookieErr) {
+      console.warn('[verifyCurrentSession] Gagal update cookie permissions:', cookieErr);
+    }
+
     return {
       isValid: true,
       user: {

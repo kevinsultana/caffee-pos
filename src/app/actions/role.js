@@ -237,6 +237,7 @@ export async function updateRole(id, { name, description = '', permissions = [] 
     });
 
     revalidateTag('roles');
+    revalidatePath('/dashboard', 'layout');
     revalidatePath('/dashboard/roles');
     revalidatePath('/dashboard/users');
 

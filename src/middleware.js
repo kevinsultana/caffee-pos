@@ -121,26 +121,30 @@ export function middleware(request) {
     }
   }
 
-  // ── ATURAN 5: RBAC: OTORISASI AKSES RUTE MENU ───────────────────────────────
-  if (isProtected && userRole && userRole !== 'OWNER') {
-    const requiredPermission = getRequiredPermissionForRoute(pathname);
-    if (requiredPermission && !userPermissions.includes(requiredPermission)) {
-      const allowedRoute = getDefaultRouteForUser(userRole, userPermissions);
-
-      // Cegah loop redirect jika rute yang diizinkan sama dengan pathname
-      if (pathname !== allowedRoute) {
-        const redirectUrl = new URL(allowedRoute, request.url);
-        // Tampilkan forbidden toast hanya jika user membuka rute menu lain yang diblokir,
-        // bukan saat otomatis dialihkan dari landing /dashboard
-        if (pathname !== '/dashboard') {
-          redirectUrl.searchParams.set('forbidden', '1');
-        }
-        return NextResponse.redirect(redirectUrl);
-      }
+  // ── ATURAN 5: LANDING ROUTE REDIRECT UNTUK /dashboard ────────────────────────
+  // Jika user bukan OWNER dan tidak memiliki izin MENU_DASHBOARD, arahkan ke rute default-nya (misal /dashboard/pos)
+  if (
+    pathname === '/dashboard' &&
+    userRole &&
+    userRole !== 'OWNER' &&
+    !userPermissions.includes('MENU_DASHBOARD')
+  ) {
+    const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
+    if (targetRoute !== '/dashboard') {
+      return NextResponse.redirect(new URL(targetRoute, request.url));
     }
   }
 
-  return NextResponse.next();
+  // Teruskan x-pathname di request headers agar Server Components (DashboardLayout)
+  // dapat mengevaluasi otorisasi RBAC menggunakan data database terbaru (Real-Time).
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', pathname);
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 export const config = {

@@ -1,15 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import DashboardHeader from '@/components/layout/DashboardHeader';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
+import { getRequiredPermissionForRoute, hasPermission, getDefaultRouteForUser } from '@/lib/permissions';
 
 /**
  * Client shell yang mengelola state sidebar open/close (mobile) dan collapsed (desktop).
  */
 export default function DashboardShell({ user, children }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -28,6 +32,25 @@ export default function DashboardShell({ user, children }) {
       }
     }
   }, []);
+
+  // Client-Side RBAC Guard untuk navigasi SPA
+  useEffect(() => {
+    if (!user) return;
+    const isOwner = user.role === 'OWNER' || user.role?.name === 'OWNER';
+    if (isOwner) return;
+
+    const requiredPermission = getRequiredPermissionForRoute(pathname);
+    if (requiredPermission && !hasPermission(user, requiredPermission)) {
+      const userRole = typeof user.role === 'string' ? user.role : user.role?.name || '';
+      const allowedRoute = getDefaultRouteForUser(userRole, user.permissions);
+      if (pathname !== allowedRoute) {
+        toast.error('Akses Ditolak: Peran akun Anda tidak memiliki hak akses untuk membuka menu tersebut.', {
+          id: 'forbidden-client-toast',
+        });
+        router.replace(allowedRoute);
+      }
+    }
+  }, [pathname, user, router]);
 
   return (
     <>
