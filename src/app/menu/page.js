@@ -182,7 +182,7 @@ export default function PublicMenuPage() {
     const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex items-center justify-center p-4 pt-[max(1.5rem,calc(1.5rem+env(safe-area-inset-top,0px)))] pb-[max(1.5rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))]">
         <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm text-center space-y-6">
           {/* Success Icon */}
           <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shadow-2xs">
@@ -247,79 +247,81 @@ export default function PublicMenuPage() {
       <Toaster position="top-center" />
 
       {/* Mobile-App Frame Constraint for Desktop */}
-      <div className="max-w-md mx-auto sm:max-w-xl md:max-w-2xl bg-white/80 shadow-sm border-x border-slate-200 min-h-screen relative flex flex-col pb-28">
+      <div className="max-w-md mx-auto sm:max-w-xl md:max-w-2xl bg-white/80 shadow-sm border-x border-slate-200 min-h-screen relative flex flex-col pb-36 sm:pb-40">
 
-        {/* ─── 1. STICKY HEADER ────────────────────────────────────────────── */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3 min-w-0">
-            {data?.store?.logoUrl ? (
-              <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.store.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+        {/* ─── 1. STICKY HEADER & CATEGORY FILTER ────────────────────────────── */}
+        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs pt-[env(safe-area-inset-top,0px)]">
+          <header className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              {data?.store?.logoUrl ? (
+                <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={data.store.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                </div>
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-xs flex items-center justify-center font-bold text-sm shrink-0">
+                  ☕
+                </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="text-sm font-bold text-slate-900 leading-none truncate">
+                  {data?.store?.name || 'Schaw Cafe'}
+                </h1>
+                <p className="text-[11px] font-medium text-emerald-600 mt-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                  Menu Meja Digital
+                </p>
               </div>
-            ) : (
-              <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-xs flex items-center justify-center font-bold text-sm shrink-0">
-                ☕
-              </div>
-            )}
-            <div className="min-w-0">
-              <h1 className="text-sm font-bold text-slate-900 leading-none truncate">
-                {data?.store?.name || 'Schaw Cafe'}
-              </h1>
-              <p className="text-[11px] font-medium text-emerald-600 mt-1 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                Menu Meja Digital
-              </p>
             </div>
-          </div>
 
-          {/* Cart Icon in Header */}
-          <button
-            onClick={() => {
-              if (cart.length > 0) setCartModalOpen(true);
-              else toast('Keranjang Anda masih kosong.', { icon: '🛒' });
-            }}
-            className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-            aria-label="Keranjang"
-          >
-            <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-            </svg>
-            {totalItemCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center animate-in zoom-in-50">
-                {totalItemCount}
-              </span>
-            )}
-          </button>
-        </header>
-
-        {/* ─── 2. CATEGORY PILLS FILTER ─────────────────────────────────────── */}
-        <div className="sticky top-14.25 z-30 bg-white/95 backdrop-blur-md px-4 py-2.5 border-b border-slate-100 flex gap-2 overflow-x-auto scrollbar-none">
-          <button
-            onClick={() => setSelectedCategory('ALL')}
-            className={cn(
-              'px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer',
-              selectedCategory === 'ALL'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/80'
-            )}
-          >
-            Semua Menu
-          </button>
-          {data?.categories?.map((cat) => (
+            {/* Cart Icon in Header */}
             <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
+              onClick={() => {
+                if (cart.length > 0) setCartModalOpen(true);
+                else toast('Keranjang Anda masih kosong.', { icon: '🛒' });
+              }}
+              className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Keranjang"
+            >
+              <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+              </svg>
+              {totalItemCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center animate-in zoom-in-50">
+                  {totalItemCount}
+                </span>
+              )}
+            </button>
+          </header>
+
+          {/* ─── 2. CATEGORY PILLS FILTER ─────────────────────────────────────── */}
+          <div className="px-4 pb-2.5 pt-0.5 flex gap-2 overflow-x-auto scrollbar-none border-t border-slate-100/80">
+            <button
+              onClick={() => setSelectedCategory('ALL')}
               className={cn(
                 'px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer',
-                selectedCategory === cat.id
+                selectedCategory === 'ALL'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/80'
               )}
             >
-              {cat.name}
+              Semua Menu
             </button>
-          ))}
+            {data?.categories?.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={cn(
+                  'px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer',
+                  selectedCategory === cat.id
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/80'
+                )}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ─── 3. PRODUCT CATALOG (2-COLUMN GRID) ───────────────────────────── */}
@@ -431,9 +433,9 @@ export default function PublicMenuPage() {
 
         {/* ─── 4. FLOATING CART BAR (BOTTOM FIXED) ─────────────────────────── */}
         {cart.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none p-4">
+          <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none px-4 pb-[max(1rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))]">
             <div className="max-w-md sm:max-w-xl md:max-w-2xl w-full pointer-events-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xl shadow-slate-900/10 flex items-center justify-between gap-4">
+              <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3.5 shadow-xl shadow-slate-900/15 flex items-center justify-between gap-4">
                 <div className="min-w-0 pl-1">
                   <p className="text-[11px] font-semibold text-slate-500">
                     {totalItemCount} Item Dipilih
@@ -461,7 +463,7 @@ export default function PublicMenuPage() {
         {/* ─── 5. MODAL CHECKOUT & CUSTOMER INFO ────────────────────────────── */}
         {cartModalOpen && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200">
+            <div className="bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[85dvh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200">
               
               {/* Modal Header */}
               <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -527,7 +529,7 @@ export default function PublicMenuPage() {
               </div>
 
               {/* Form Input Pelanggan & Kalkulasi Finansial */}
-              <form onSubmit={handleSubmitOrder} className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
+              <form onSubmit={handleSubmitOrder} className="p-4 pb-[max(1.25rem,calc(1rem+env(safe-area-inset-bottom,0px)))] border-t border-slate-100 bg-slate-50/50 space-y-3">
                 <div className="space-y-2.5">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
