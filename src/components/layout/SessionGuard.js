@@ -1,115 +1,103 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import Swal from 'sweetalert2';
 import { verifyCurrentSession, logout } from '@/app/actions/auth';
 
-const POLL_INTERVAL_MS = 20 * 1000; // Cek setiap 20 detik
-const FOCUS_COOLDOWN_MS = 5 * 1000; // Minimal jeda 5 detik untuk event focus/tab aktif
-
 /**
- * SessionGuard — Komponen penjaga sesi aktif tunggal (Single Active Session Guard).
+ * SessionGuard — Komponen penjaga sesi aktif yang sangat hemat resource (On-Demand).
  *
- * Berjalan di background dashboard untuk mendeteksi secara real-time apakah sesi login
- * pengguna telah dicabut (revoked) karena akun login di perangkat/browser lain.
+ * Efisiensi kerja server:
+ * - TIDAK ADA background polling berkala (setInterval 100% dihapus).
+ * - Verifikasi sesi dijalankan saat berpindah halaman (perubahan pathname).
+ * - Saat user melakukan aksi (POST/GET/PUT/DELETE), Server Actions secara otomatis
+ *   memvalidasi sesi di database secara on-demand.
+ * - Jika sesi terdeteksi tidak valid / dicabut, cookie & storage langsung dibersihkan
+ *   dan user dialihkan ke halaman login.
  */
 export default function SessionGuard() {
+  const pathname = usePathname();
   const isKickedOutRef = useRef(false);
-  const lastCheckedRef = useRef(0);
+  const prevPathnameRef = useRef(pathname);
 
   useEffect(() => {
-    lastCheckedRef.current = Date.now();
-
-    async function checkSession() {
+    async function handleKickOut() {
       if (isKickedOutRef.current) return;
-      lastCheckedRef.current = Date.now();
+      isKickedOutRef.current = true;
+
+      const cleanupAndRedirect = async () => {
+        try {
+          // 1. Panggil Server Action logout untuk memastikan sesi bersih di sisi server
+          await logout();
+        } catch (err) {
+          console.error('[SessionGuard] Error calling logout:', err);
+        }
+
+        // 2. Pembersihan cookie browser lokal jika ada sisa
+        if (typeof document !== 'undefined') {
+          document.cookie = 'schaw_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0';
+        }
+
+        // 3. Bersihkan storage lokal & session storage
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.clear();
+            localStorage.clear();
+          } catch {
+            // Abaikan error storage
+          }
+          // 4. Hard redirect ke route handler pembersih sesi
+          window.location.replace('/api/auth/clear-session');
+        }
+      };
+
+      // Tampilkan modal peringatan SweetAlert2
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sesi Telah Berakhir',
+        text: 'Akun Anda telah login di perangkat lain atau sesi telah kedaluwarsa. Anda dialihkan ke halaman login.',
+        confirmButtonText: 'Login Kembali',
+        confirmButtonColor: '#059669',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        customClass: {
+          popup: 'rounded-2xl shadow-xl font-sans',
+          confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
+        },
+      }).then(cleanupAndRedirect);
+
+      // Fallback otomatis jika pengguna tidak mengklik tombol
+      setTimeout(cleanupAndRedirect, 3500);
+    }
+
+    async function checkSessionOnNavigation() {
+      if (isKickedOutRef.current) return;
 
       try {
         const res = await verifyCurrentSession();
-
         if (!res.isValid && res.reason === 'REVOKED') {
-          isKickedOutRef.current = true;
-
-          // Bersihkan interval & event listener
-          clearInterval(intervalId);
-          window.removeEventListener('focus', handleFocus);
-          document.removeEventListener('visibilitychange', handleVisibilityChange);
-
-          const cleanupAndRedirect = async () => {
-            try {
-              // 1. Eksekusi Server Action logout untuk membersihkan sesi di server & cookie
-              await logout();
-            } catch (err) {
-              console.error('[SessionGuard] Error calling logout:', err);
-            }
-
-            // 2. Pembersihan cookie browser lokal jika ada sisa
-            if (typeof document !== 'undefined') {
-              document.cookie = 'schaw_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0';
-            }
-
-            // 3. Bersihkan storage lokal & session storage
-            if (typeof window !== 'undefined') {
-              try {
-                sessionStorage.clear();
-                localStorage.clear();
-              } catch {
-                // Abaikan error storage
-              }
-              // 4. Hard redirect ke route handler pembersih sesi untuk menghindari cache router
-              window.location.replace('/api/auth/clear-session');
-            }
-          };
-
-          // Tampilkan modal SweetAlert2 pemblokir layar
-          Swal.fire({
-            icon: 'warning',
-            title: 'Sesi Telah Berakhir',
-            text: 'Akun Anda telah login di perangkat lain. Anda akan dialihkan ke halaman login.',
-            confirmButtonText: 'Login Kembali',
-            confirmButtonColor: '#059669', // Emerald-600
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            customClass: {
-              popup: 'rounded-2xl shadow-xl font-sans',
-              confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
-            },
-          }).then(cleanupAndRedirect);
-
-          // Fallback auto-redirect setelah 4 detik jika user tidak mengklik tombol
-          setTimeout(cleanupAndRedirect, 4000);
+          handleKickOut();
         }
       } catch (err) {
-        console.error('[SessionGuard] Error checking session:', err);
+        console.error('[SessionGuard] Error verifying session on navigation:', err);
       }
     }
 
-    // 1. Polling setiap 20 detik
-    const intervalId = setInterval(checkSession, POLL_INTERVAL_MS);
+    // Jalankan cek sesi HANYA saat berpindah halaman
+    if (prevPathnameRef.current !== pathname) {
+      prevPathnameRef.current = pathname;
+      checkSessionOnNavigation();
+    }
 
-    // 2. Trigger saat window kembali fokus
-    const handleFocus = () => {
-      if (Date.now() - lastCheckedRef.current >= FOCUS_COOLDOWN_MS) {
-        checkSession();
-      }
-    };
-
-    // 3. Trigger saat tab browser kembali aktif
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastCheckedRef.current >= FOCUS_COOLDOWN_MS) {
-        checkSession();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Dengarkan event global dari aksi Server jika ada respons sesi revoked
+    const onSessionRevoked = () => handleKickOut();
+    window.addEventListener('schaw:session-revoked', onSessionRevoked);
 
     return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('schaw:session-revoked', onSessionRevoked);
     };
-  }, []);
+  }, [pathname]);
 
   return null;
 }

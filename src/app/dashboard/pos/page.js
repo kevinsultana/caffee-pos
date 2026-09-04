@@ -107,11 +107,31 @@ export default function PosScreenPage() {
     }
   }
 
+  async function loadPendingOrders() {
+    try {
+      const res = await getPublicPendingOrders();
+      if (res?.error) {
+        if (res.sessionRevoked || res.error.includes('Sesi tidak valid')) {
+          try {
+            sessionStorage.clear();
+            localStorage.clear();
+          } catch {}
+          window.location.replace('/api/auth/clear-session');
+          return;
+        }
+        toast.error(res.error);
+      } else if (res.data) {
+        setPendingOrders(res.data);
+      }
+    } catch (err) {
+      console.error('[loadPendingOrders] Error:', err);
+    }
+  }
+
   async function loadData() {
     setLoading(true);
-    const [initRes, pendingRes, custRes] = await Promise.all([
+    const [initRes, custRes] = await Promise.all([
       getPosInitData(),
-      getPublicPendingOrders(),
       getCustomers(),
     ]);
 
@@ -132,10 +152,6 @@ export default function PosScreenPage() {
       setActiveShift(initRes.data.activeShift);
     }
 
-    if (pendingRes.data) {
-      setPendingOrders(pendingRes.data);
-    }
-
     if (custRes.data) {
       setCustomers(custRes.data);
     }
@@ -143,24 +159,17 @@ export default function PosScreenPage() {
     setLoading(false);
   }
 
+  // Load katalog dan master data kasir saat pertama kali halaman dimuat
   useEffect(() => {
     loadData();
-    // Poll pending orders every 30s
-    const timer = setInterval(async () => {
-      const res = await getPublicPendingOrders();
-      if (res?.error && (res.sessionRevoked || res.error.includes('Sesi tidak valid'))) {
-        clearInterval(timer);
-        try {
-          sessionStorage.clear();
-          localStorage.clear();
-        } catch {}
-        window.location.replace('/api/auth/clear-session');
-        return;
-      }
-      if (res.data) setPendingOrders(res.data);
-    }, 30000);
-    return () => clearInterval(timer);
   }, []);
+
+  // Hanya ambil data pesanan QR online saat kasir membuka tab ONLINE_ORDERS
+  useEffect(() => {
+    if (activeTab === 'ONLINE_ORDERS') {
+      loadPendingOrders();
+    }
+  }, [activeTab]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // CART OPERATIONS
@@ -1068,7 +1077,7 @@ export default function PosScreenPage() {
               </p>
             </div>
             <button
-              onClick={loadData}
+              onClick={loadPendingOrders}
               className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-2xs"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
