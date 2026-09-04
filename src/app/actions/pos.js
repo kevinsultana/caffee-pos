@@ -130,6 +130,14 @@ export async function getPosInitData() {
               cashRoundingEnabled: false,
               cashRoundingUnit: 0,
             },
+        storeInfo: store
+          ? {
+              name: store.name,
+              code: store.code,
+              logoUrl: store.logoUrl || null,
+              printerWidth: store.settings?.printerWidth || 58,
+            }
+          : null,
         activeShift: shift
           ? {
               id: shift.id,
@@ -717,6 +725,38 @@ export async function processPosCheckout({
         cashReceived: numCashReceived,
         changeAmount,
         paymentMethod,
+        orderForPrint: {
+          id: transactionResult.order.id,
+          orderNumber: transactionResult.order.orderNumber,
+          queueNumber: transactionResult.order.queueNumber,
+          createdAt: transactionResult.order.createdAt,
+          paidAt: transactionResult.order.paidAt,
+          customerNameSnapshot: transactionResult.order.customerNameSnapshot,
+          customerPhoneSnapshot: transactionResult.order.customerPhoneSnapshot,
+          source: transactionResult.order.source,
+          productSubtotal: Number(transactionResult.order.productSubtotal),
+          promotionDiscount: Number(transactionResult.order.promotionDiscount),
+          serviceChargeAmount: Number(transactionResult.order.serviceChargeAmount),
+          taxAmount: Number(transactionResult.order.taxAmount),
+          grandTotal: Number(transactionResult.order.grandTotal),
+          cashPayable: Number(transactionResult.order.cashPayable),
+          roundingAmount: Number(transactionResult.order.roundingAmount),
+          createdBy: { name: user.name },
+          items: orderItemsData.map((it) => ({
+            quantity: it.quantity,
+            productNameSnapshot: it.productNameSnapshot,
+            variantNameSnapshot: it.variantNameSnapshot || null,
+            unitPrice: it.unitPrice,
+            subtotal: it.subtotal,
+            promotionDiscount: it.promotionDiscount,
+            notes: it.notes,
+          })),
+          payment: {
+            method: paymentMethod,
+            cashReceived: numCashReceived,
+            changeAmount: changeAmount,
+          },
+        },
       },
     };
   } catch (error) {

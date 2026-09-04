@@ -124,12 +124,31 @@ export default function ShiftHistoryPage() {
 
   // Eksekusi Cetak Thermal
   const handlePrint = (order, mode) => {
-    setPrintOrder(order);
-    setPrintMode(mode);
-    // Timeout microtask agar elemen struk selesai dirender ke DOM sebelum browser print dialog aktif
-    setTimeout(() => {
-      window.print();
-    }, 80);
+    try {
+      setPrintOrder(order);
+      setPrintMode(mode);
+      toast.loading('Mengirim ke printer thermal...', { id: 'thermal-print', duration: 1500 });
+      // Timeout microtask agar elemen struk selesai dirender ke DOM sebelum browser print dialog/kiosk printing aktif
+      setTimeout(() => {
+        try {
+          window.print();
+          toast.success(
+            mode === 'KITCHEN'
+              ? 'Perintah cetak tiket dapur berhasil dikirim!'
+              : 'Perintah cetak struk berhasil dikirim!',
+            { id: 'thermal-print', duration: 3000 }
+          );
+        } catch (err) {
+          console.error('[window.print Error]', err);
+          toast.error('Gagal mencetak: ' + (err.message || 'Periksa koneksi printer Bluetooth.'), {
+            id: 'thermal-print',
+          });
+        }
+      }, 120);
+    } catch (err) {
+      console.error('[handlePrint Error]', err);
+      toast.error('Gagal memproses cetak struk.', { id: 'thermal-print' });
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import toast, { Toaster } from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
@@ -10,6 +10,7 @@ import {
   getPublicPendingOrders,
   cancelPublicQrOrder,
 } from '@/app/actions/publicQr';
+import ThermalReceipt from '@/components/pos/ThermalReceipt';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
@@ -26,8 +27,14 @@ export default function PosScreenPage() {
   const [categories, setCategories] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [storeInfo, setStoreInfo] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+
+  // Thermal Printing State
+  const [printOrder, setPrintOrder] = useState(null);
+  const [printMode, setPrintMode] = useState('CUSTOMER');
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState(true);
 
   // Online Orders State
   const [pendingOrders, setPendingOrders] = useState([]);
@@ -118,7 +125,7 @@ export default function PosScreenPage() {
           try {
             sessionStorage.clear();
             localStorage.clear();
-          } catch {}
+          } catch { }
           window.location.replace('/api/auth/clear-session');
           return;
         }
@@ -144,7 +151,7 @@ export default function PosScreenPage() {
         try {
           sessionStorage.clear();
           localStorage.clear();
-        } catch {}
+        } catch { }
         window.location.replace('/api/auth/clear-session');
         return;
       }
@@ -153,6 +160,7 @@ export default function PosScreenPage() {
       setProducts(initRes.data.products || []);
       setCategories(initRes.data.categories || []);
       setSettings(initRes.data.settings);
+      if (initRes.data.storeInfo) setStoreInfo(initRes.data.storeInfo);
       setActiveShift(initRes.data.activeShift);
     }
 
@@ -333,6 +341,56 @@ export default function PosScreenPage() {
       ? Number(cashReceived) - effectiveTotal
       : 0;
 
+  // Pecahan Uang Rupiah Dinamis (Quick Cash Suggestions)
+  const suggestedCashAmounts = useMemo(() => {
+    const numTotal = Number(effectiveTotal) || 0;
+    if (numTotal <= 0) return [10000, 20000, 50000, 100000];
+
+    const set = new Set();
+    const standardNotes = [5000, 10000, 20000, 50000, 100000];
+
+    // Pecahan standar lembaran rupiah yang lebih besar dari total
+    for (const note of standardNotes) {
+      if (note > numTotal) set.add(note);
+    }
+
+    // Jika di bawah 100k, tambahkan pembulatan ke kelipatan 10rb terdekat (misal 35rb -> 40rb)
+    if (numTotal < 100000) {
+      const ceil10k = Math.ceil(numTotal / 10000) * 10000;
+      if (ceil10k > numTotal) set.add(ceil10k);
+
+      // Pembulatan ke 20rb terdekat jika belum ada (misal 25rb -> 40rb)
+      const ceil20k = Math.ceil(numTotal / 20000) * 20000;
+      if (ceil20k > numTotal && ceil20k <= 100000 && numTotal % 20000 !== 0 && numTotal % 50000 !== 0) {
+        set.add(ceil20k);
+      }
+    } else {
+      // Jika >= 100k, sediakan kelipatan 10k, 50k & 100k berikutnya
+      const ceil10k = Math.ceil(numTotal / 10000) * 10000;
+      if (ceil10k > numTotal && ceil10k % 50000 !== 0) set.add(ceil10k);
+
+      const ceil50k = Math.ceil(numTotal / 50000) * 50000;
+      if (ceil50k > numTotal) set.add(ceil50k);
+
+      const ceil100k = Math.ceil(numTotal / 100000) * 100000;
+      if (ceil100k > numTotal) {
+        set.add(ceil100k);
+        set.add(ceil100k + 100000);
+      } else {
+        set.add(numTotal + 100000);
+      }
+    }
+
+    const sorted = Array.from(set)
+      .filter((v) => v > numTotal)
+      .sort((a, b) => a - b);
+
+    if (numTotal < 100000) {
+      return sorted.filter((v) => v <= 100000);
+    }
+    return sorted.slice(0, 4);
+  }, [effectiveTotal]);
+
   // ══════════════════════════════════════════════════════════════════════════
   // CHECKOUT HANDLERS (NORMAL POS)
   // ══════════════════════════════════════════════════════════════════════════
@@ -349,6 +407,47 @@ export default function PosScreenPage() {
     setCashReceived(effectiveTotal);
     setCheckoutModalOpen(true);
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // THERMAL RECEIPT PRINTING (BLUETOOTH / USB / KIOSK AUTO-PRINT)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handlePrint = (orderToPrint, mode = 'CUSTOMER') => {
+    if (!orderToPrint) {
+      toast.error('Data transaksi untuk cetak tidak tersedia.');
+      return;
+    }
+
+    try {
+      setPrintOrder(orderToPrint);
+      setPrintMode(mode);
+      toast.loading('Mengirim ke printer thermal Bluetooth...', {
+        id: 'pos-thermal-print',
+        duration: 1500,
+      });
+
+      setTimeout(() => {
+        try {
+          window.print();
+          toast.success(
+            mode === 'KITCHEN'
+              ? 'Perintah cetak tiket dapur berhasil dikirim!'
+              : 'Perintah cetak struk berhasil dikirim ke printer!',
+            { id: 'pos-thermal-print', duration: 3000 }
+          );
+        } catch (err) {
+          console.error('[window.print Error]', err);
+          toast.error(
+            'Gagal mencetak: ' + (err.message || 'Periksa koneksi Bluetooth printer Anda.'),
+            { id: 'pos-thermal-print' }
+          );
+        }
+      }, 120);
+    } catch (err) {
+      console.error('[handlePrint Error]', err);
+      toast.error('Gagal memproses cetak struk.', { id: 'pos-thermal-print' });
+    }
+  };
 
   function handleProcessCheckout(e) {
     e.preventDefault();
@@ -386,7 +485,7 @@ export default function PosScreenPage() {
           try {
             sessionStorage.clear();
             localStorage.clear();
-          } catch {}
+          } catch { }
           window.location.replace('/api/auth/clear-session');
           return;
         }
@@ -400,8 +499,13 @@ export default function PosScreenPage() {
         const nextQNum = String(parseInt(queueNumber.replace(/\D/g, '') || '1') + 1).padStart(2, '0');
         setQueueNumber(`A-${nextQNum}`);
 
+        // Cetak struk otomatis ke printer Bluetooth jika autoPrintEnabled aktif
+        if (autoPrintEnabled && res.data.orderForPrint) {
+          handlePrint(res.data.orderForPrint, 'CUSTOMER');
+        }
+
         const Swal = (await import('sweetalert2')).default;
-        await Swal.fire({
+        const swalRes = await Swal.fire({
           icon: 'success',
           title: 'Pembayaran Berhasil! 🎉',
           html: `
@@ -412,16 +516,15 @@ export default function PosScreenPage() {
                 <p class="text-xs text-slate-400">Order #${res.data.orderNumber} ${res.data.publicQrToken ? `&bull; QR ${res.data.publicQrToken}` : ''}</p>
               </div>
               <div class="space-y-1 pt-2">
-                ${
-                  res.data.promotionDiscount > 0
-                    ? `
+                ${res.data.promotionDiscount > 0
+              ? `
                   <div class="flex justify-between text-emerald-600 font-bold">
                     <span>Diskon Promo:</span>
                     <span>-${formatRupiah(res.data.promotionDiscount)}</span>
                   </div>
                 `
-                    : ''
-                }
+              : ''
+            }
                 <div class="flex justify-between font-bold text-sm text-slate-900">
                   <span>Total Tagihan:</span>
                   <span class="text-emerald-700">${formatRupiah(res.data.grandTotal)}</span>
@@ -430,9 +533,8 @@ export default function PosScreenPage() {
                   <span class="text-slate-500">Metode Bayar:</span>
                   <span class="font-bold">${res.data.paymentMethod}</span>
                 </div>
-                ${
-                  res.data.paymentMethod === 'CASH'
-                    ? `
+                ${res.data.paymentMethod === 'CASH'
+              ? `
                   <div class="flex justify-between">
                     <span class="text-slate-500">Uang Diterima:</span>
                     <span>${formatRupiah(res.data.cashReceived)}</span>
@@ -442,16 +544,28 @@ export default function PosScreenPage() {
                     <span>${formatRupiah(res.data.changeAmount)}</span>
                   </div>
                 `
-                    : ''
-                }
+              : ''
+            }
               </div>
             </div>
           `,
-          confirmButtonText: 'Transaksi Baru',
+          showDenyButton: true,
+          denyButtonText: '🍳 Cetak Tiket Dapur',
+          denyButtonColor: '#0284c7',
+          showCancelButton: true,
+          cancelButtonText: '🖨️ Cetak Ulang Struk',
+          cancelButtonColor: '#475569',
+          confirmButtonText: 'Transaksi Baru ✓',
           confirmButtonColor: '#059669',
           background: '#ffffff',
           color: '#0f172a',
         });
+
+        if (swalRes.isDenied && res.data.orderForPrint) {
+          handlePrint(res.data.orderForPrint, 'KITCHEN');
+        } else if (swalRes.dismiss === Swal.DismissReason.cancel && res.data.orderForPrint) {
+          handlePrint(res.data.orderForPrint, 'CUSTOMER');
+        }
 
         loadData();
       }
@@ -1368,25 +1482,38 @@ export default function PosScreenPage() {
                     />
                   </div>
 
-                  {/* Quick Cash Buttons */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  {/* Quick Cash Buttons (Pecahan Lembaran Rupiah Dinamis) */}
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
                     <button
                       type="button"
                       onClick={() => setCashReceived(effectiveTotal)}
-                      className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200"
+                      className={cn(
+                        'flex-1 min-w-17.5 py-2 px-2.5 rounded-xl text-xs font-bold border transition-all text-center whitespace-nowrap',
+                        Number(cashReceived) === Number(effectiveTotal)
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-600/20'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
+                      )}
                     >
                       Uang Pas
                     </button>
-                    {[50000, 100000, 200000].map((nom) => (
-                      <button
-                        key={nom}
-                        type="button"
-                        onClick={() => setCashReceived(nom)}
-                        className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 font-mono"
-                      >
-                        {nom >= 1000 ? `${nom / 1000}k` : nom}
-                      </button>
-                    ))}
+                    {suggestedCashAmounts.map((nom) => {
+                      const isSelected = Number(cashReceived) === nom;
+                      return (
+                        <button
+                          key={nom}
+                          type="button"
+                          onClick={() => setCashReceived(nom)}
+                          className={cn(
+                            'flex-1 min-w-17.5 py-2 px-2.5 rounded-xl text-xs font-bold border transition-all font-mono text-center whitespace-nowrap',
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-600/20'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
+                          )}
+                        >
+                          {nom >= 1000 ? `${(nom / 1000).toLocaleString('id-ID')}rb` : nom}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Change Display */}
@@ -1456,6 +1583,22 @@ export default function PosScreenPage() {
                   )}
                 </div>
               )}
+
+              {/* Auto Print Thermal Toggle */}
+              <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer text-xs font-semibold text-slate-700 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span>🖨️ Cetak Struk Otomatis (Bluetooth / USB)</span>
+                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">
+                    Auto-Print
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={autoPrintEnabled}
+                  onChange={(e) => setAutoPrintEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+              </label>
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
@@ -1619,11 +1762,7 @@ export default function PosScreenPage() {
 
             <div className="space-y-1">
               <p className="text-lg font-mono font-extrabold text-emerald-700">
-                {checkoutModalOpen
-                  ? formatRupiah(effectiveTotal)
-                  : selectedQrOrder
-                  ? formatRupiah(selectedQrOrder.grandTotal)
-                  : ''}
+                {checkoutModalOpen ? formatRupiah(effectiveTotal) : ''}
               </p>
               <p className="text-xs text-slate-500">
                 Arahkan kamera smartphone ke kode QRIS di atas untuk menyelesaikan transaksi.
@@ -1640,6 +1779,9 @@ export default function PosScreenPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Hidden Printable Thermal Receipt Container ───────────────────────── */}
+      <ThermalReceipt order={printOrder} store={storeInfo} printMode={printMode} />
     </div>
   );
 }
