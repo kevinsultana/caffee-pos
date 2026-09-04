@@ -49,7 +49,7 @@ export default function ShiftHistoryPage() {
   const [shiftData, setShiftData] = useState(null);
   const [storeData, setStoreData] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  
+
   // Filter & Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [methodFilter, setMethodFilter] = useState('ALL');
@@ -68,7 +68,7 @@ export default function ShiftHistoryPage() {
           try {
             sessionStorage.clear();
             localStorage.clear();
-          } catch {}
+          } catch { }
           window.location.replace('/api/auth/clear-session');
           return;
         }
@@ -271,7 +271,7 @@ export default function ShiftHistoryPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari no. order, antrean, pelanggan..."
-            className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+            className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
           />
         </div>
 
@@ -377,7 +377,7 @@ export default function ShiftHistoryPage() {
 
                       {/* Pelanggan */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="font-semibold text-slate-800 truncate max-w-[130px]">
+                        <div className="font-semibold text-slate-800 truncate max-w-32.5">
                           {order.customerNameSnapshot || order.customer?.name || 'Pelanggan'}
                         </div>
                         {order.customerPhoneSnapshot && (
@@ -392,7 +392,7 @@ export default function ShiftHistoryPage() {
                         <div className="text-slate-600 font-medium">
                           {itemCount} item
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[160px]">
+                        <div className="text-[10px] text-slate-400 truncate max-w-40">
                           {order.items?.map((it) => it.productNameSnapshot).join(', ')}
                         </div>
                       </td>
@@ -515,11 +515,11 @@ export default function ShiftHistoryPage() {
                 <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                   Daftar Pesanan ({selectedOrder.items?.length || 0} Item)
                 </h3>
-                <div className="space-y-2 border border-slate-100 rounded-xl p-3 bg-white">
+                <div className="divide-y divide-slate-100 border rounded-xl p-3 bg-white">
                   {selectedOrder.items?.map((item, idx) => (
                     <div
                       key={item.id || idx}
-                      className="flex items-start justify-between pb-2 border-b border-slate-100 last:border-b-0 last:pb-0"
+                      className="flex items-start justify-between py-2"
                     >
                       <div>
                         <div className="font-semibold text-slate-900">
@@ -609,8 +609,8 @@ export default function ShiftHistoryPage() {
                         <span>
                           {formatRupiah(
                             selectedOrder.payment?.cashReceived ||
-                              selectedOrder.cashPayable ||
-                              selectedOrder.grandTotal
+                            selectedOrder.cashPayable ||
+                            selectedOrder.grandTotal
                           )}
                         </span>
                       </div>

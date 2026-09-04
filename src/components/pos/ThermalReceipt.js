@@ -92,7 +92,7 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-700">Pelanggan:</span>
-                <span className="font-bold truncate max-w-[150px]">
+                <span className="font-bold truncate max-w-37.5">
                   {order.customerNameSnapshot || order.customer?.name || 'Umum'}
                 </span>
               </div>
@@ -189,7 +189,7 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
               </div>
               <div className="flex justify-between">
                 <span>Pelanggan:</span>
-                <span className="font-semibold truncate max-w-[140px]">
+                <span className="font-semibold truncate max-w-35">
                   {order.customerNameSnapshot || order.customer?.name || 'Umum'}
                 </span>
               </div>
