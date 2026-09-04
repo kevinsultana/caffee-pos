@@ -111,6 +111,7 @@ export async function getPosInitData() {
         categories,
         settings: store?.settings
           ? {
+              qrisImageUrl: store.settings.qrisImageUrl || null,
               taxEnabled: store.settings.taxEnabled,
               taxRate: Number(store.settings.taxRate),
               taxBaseIncludesServiceCharge: store.settings.taxBaseIncludesServiceCharge,
@@ -120,6 +121,7 @@ export async function getPosInitData() {
               cashRoundingUnit: Number(store.settings.cashRoundingUnit),
             }
           : {
+              qrisImageUrl: null,
               taxEnabled: false,
               taxRate: 0,
               taxBaseIncludesServiceCharge: false,

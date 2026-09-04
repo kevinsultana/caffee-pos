@@ -25,11 +25,13 @@ export async function getStoreSettings() {
         storeName: store.name,
         storeCode: store.code,
         logoUrl: store.logoUrl || null,
+        qrisImageUrl: store.settings?.qrisImageUrl || null,
         settings: store.settings
           ? {
               id: store.settings.id,
               storeId: store.settings.storeId,
               printerWidth: store.settings.printerWidth || 58,
+              qrisImageUrl: store.settings.qrisImageUrl || null,
               taxEnabled: store.settings.taxEnabled,
               taxRate: Number(store.settings.taxRate),
               taxBaseIncludesServiceCharge: store.settings.taxBaseIncludesServiceCharge,
@@ -41,6 +43,7 @@ export async function getStoreSettings() {
             }
           : {
               printerWidth: 58,
+              qrisImageUrl: null,
               taxEnabled: false,
               taxRate: 0,
               taxBaseIncludesServiceCharge: false,
@@ -205,6 +208,175 @@ export async function removeStoreLogo() {
     return { error: 'Gagal menghapus logo toko.' };
   }
 }
+
+/**
+ * Upload Barcode / Gambar QRIS Toko ke Supabase Storage (Bucket: store-assets)
+ *
+ * @param {FormData} formData
+ */
+export async function uploadQrisImage(formData) {
+  const user = await verifySession();
+  if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+
+  if (!isSupabaseConfigured) {
+    return {
+      error:
+        'Kunci API Supabase belum dikonfigurasi di file .env. Harap tambahkan SUPABASE_SERVICE_ROLE_KEY di .env.',
+    };
+  }
+
+  try {
+    const file = formData.get('image') || formData.get('file') || formData.get('qris');
+    if (!file || typeof file === 'string') {
+      return { error: 'File gambar QRIS tidak valid atau tidak ditemukan.' };
+    }
+
+    // Validasi tipe file (harus berupa file gambar)
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/svg+xml',
+    ];
+    if (!allowedMimeTypes.includes(file.type)) {
+      return { error: 'Format file tidak didukung. Harap gunakan file PNG, JPG, WEBP, atau SVG.' };
+    }
+
+    // Validasi ukuran file (Maksimal 5MB)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return { error: 'Ukuran file terlalu besar. Maksimal 5MB.' };
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Buat nama file unik
+    const cleanFileName = file.name ? file.name.replace(/[^a-zA-Z0-9.-]/g, '_') : 'qris.png';
+    const fileName = `qris-${Date.now()}-${cleanFileName}`;
+    const bucketName = 'store-assets';
+
+    // Dapatkan data store & settings saat ini
+    const store = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      include: { settings: true },
+    });
+    if (!store) return { error: 'Store tidak ditemukan.' };
+
+    const currentQrisUrl = store.settings?.qrisImageUrl;
+
+    // Upload ke Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(fileName, buffer, {
+        contentType: file.type,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[settings/uploadQrisImage] Supabase Storage error:', uploadError);
+      return { error: `Gagal mengunggah QRIS ke Supabase Storage: ${uploadError.message}` };
+    }
+
+    // Dapatkan Public URL
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    const publicUrl = publicData?.publicUrl || '';
+
+    if (!publicUrl) {
+      return { error: 'Gagal mendapatkan Public URL QRIS dari Supabase Storage.' };
+    }
+
+    // Simpan ke StoreSettings
+    await prisma.storeSettings.upsert({
+      where: { storeId: store.id },
+      update: { qrisImageUrl: publicUrl },
+      create: {
+        storeId: store.id,
+        qrisImageUrl: publicUrl,
+        printerWidth: 58,
+        taxEnabled: false,
+        taxRate: 0,
+        taxBaseIncludesServiceCharge: false,
+        serviceChargeEnabled: false,
+        serviceChargeRate: 0,
+        cashRoundingEnabled: false,
+        cashRoundingUnit: 0,
+      },
+    });
+
+    // Cleanup gambar lama dari Supabase Storage jika sebelumnya ada
+    if (currentQrisUrl && currentQrisUrl.includes('store-assets/')) {
+      try {
+        const oldParts = currentQrisUrl.split('store-assets/');
+        if (oldParts[1]) {
+          const oldFilePath = decodeURIComponent(oldParts[1].split('?')[0]);
+          await supabase.storage.from(bucketName).remove([oldFilePath]);
+        }
+      } catch (cleanErr) {
+        console.warn('[settings/uploadQrisImage] Cleanup old QRIS error:', cleanErr);
+      }
+    }
+
+    revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pos');
+    revalidatePath('/dashboard');
+
+    return {
+      success: true,
+      qrisImageUrl: publicUrl,
+      message: 'Gambar QRIS toko berhasil disimpan.',
+    };
+  } catch (error) {
+    console.error('[settings/uploadQrisImage]', error);
+    return { error: 'Gagal mengunggah gambar QRIS ke storage.' };
+  }
+}
+
+/**
+ * Hapus Gambar QRIS Toko
+ */
+export async function removeQrisImage() {
+  const user = await verifySession();
+  if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+
+  try {
+    const store = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      include: { settings: true },
+    });
+
+    const qrisUrl = store?.settings?.qrisImageUrl;
+
+    if (qrisUrl && qrisUrl.includes('store-assets/')) {
+      try {
+        const parts = qrisUrl.split('store-assets/');
+        if (parts[1]) {
+          const filePath = decodeURIComponent(parts[1].split('?')[0]);
+          await supabase.storage.from('store-assets').remove([filePath]);
+        }
+      } catch (err) {
+        console.warn('[settings/removeQrisImage] Gagal menghapus file storage:', err);
+      }
+    }
+
+    if (store?.settings) {
+      await prisma.storeSettings.update({
+        where: { id: store.settings.id },
+        data: { qrisImageUrl: null },
+      });
+    }
+
+    revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pos');
+    revalidatePath('/dashboard');
+
+    return { success: true, message: 'Gambar QRIS toko berhasil dihapus.' };
+  } catch (error) {
+    console.error('[settings/removeQrisImage]', error);
+    return { error: 'Gagal menghapus gambar QRIS.' };
+  }
+}
+
 
 /**
  * Perbarui Store & StoreSettings untuk toko MAIN.

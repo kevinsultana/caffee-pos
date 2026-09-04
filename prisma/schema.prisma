@@ -158,6 +158,8 @@ model StoreSettings {
 
   printerWidth Int @default(58)
 
+  qrisImageUrl String?
+
   timezone String @default("Asia/Jakarta")
 
   createdAt DateTime @default(now())

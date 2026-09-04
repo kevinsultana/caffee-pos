@@ -59,6 +59,7 @@ export default function PosScreenPage() {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH' | 'QRIS'
   const [cashReceived, setCashReceived] = useState(0);
+  const [zoomQrisUrl, setZoomQrisUrl] = useState(null);
 
   // Quick Create Customer Modal State
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -1342,24 +1343,62 @@ export default function PosScreenPage() {
                   </div>
                 </div>
               ) : (
-                /* QRIS Static Info */
-                <div className="p-5 bg-blue-50/50 border border-blue-200 rounded-2xl text-center space-y-2">
-                  <div className="w-20 h-20 mx-auto bg-white rounded-xl p-1.5 flex items-center justify-center border border-blue-200 shadow-2xs">
-                    <div className="w-full h-full border border-slate-800 flex flex-col justify-between p-1">
-                      <div className="flex justify-between">
-                        <div className="w-3 h-3 bg-slate-900" />
-                        <div className="w-3 h-3 bg-slate-900" />
+                /* QRIS Dynamic Display */
+                <div className="p-4 bg-gradient-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-3">
+                  {settings?.qrisImageUrl ? (
+                    <div className="space-y-3">
+                      <div className="relative mx-auto w-52 h-52 sm:w-56 sm:h-56 bg-white rounded-2xl p-2.5 border-2 border-blue-100 shadow-xs flex items-center justify-center group overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={settings.qrisImageUrl}
+                          alt="QRIS Barcode"
+                          className="w-full h-full object-contain cursor-pointer transition-transform duration-200 group-hover:scale-105"
+                          onClick={() => setZoomQrisUrl(settings.qrisImageUrl)}
+                          title="Klik untuk memperbesar QRIS"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setZoomQrisUrl(settings.qrisImageUrl)}
+                          className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white text-[10px] font-semibold backdrop-blur-xs transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
+                          </svg>
+                          Perbesar
+                        </button>
                       </div>
-                      <div className="flex justify-between">
-                        <div className="w-3 h-3 bg-slate-900" />
-                        <div className="w-3 h-3 bg-slate-900" />
+
+                      <div className="space-y-1">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100/90 text-blue-950 text-xs font-bold">
+                          <span>Total Tagihan:</span>
+                          <span className="font-mono text-emerald-700 font-extrabold">{formatRupiah(effectiveTotal)}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 font-medium">
+                          Tunjukkan kode QRIS ke pelanggan untuk di-scan. Verifikasi status pembayaran sebelum konfirmasi.
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <p className="text-xs font-bold text-blue-900">QRIS Statis Toko</p>
-                  <p className="text-[11px] text-blue-700">
-                    Minta pelanggan memindai QRIS dan verifikasi bukti transfer di layar kasir.
-                  </p>
+                  ) : (
+                    <div className="py-4 px-2 space-y-2">
+                      <div className="w-12 h-12 mx-auto bg-amber-100/80 rounded-2xl border border-amber-200 flex items-center justify-center text-amber-700">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008h-.008v-.008z" />
+                        </svg>
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">Barcode QRIS Belum Diunggah</p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                        Silakan unggah gambar barcode QRIS toko di menu <strong className="text-slate-700">Pengaturan Toko</strong> agar gambar QRIS otomatis muncul di sini.
+                      </p>
+                      <a
+                        href="/dashboard/settings"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-bold underline underline-offset-2 pt-1"
+                      >
+                        Buka Pengaturan Toko &rarr;
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1475,6 +1514,35 @@ export default function PosScreenPage() {
                 </div>
               )}
 
+              {qrPaymentMethod === 'QRIS' && (
+                <div className="p-3.5 bg-gradient-to-b from-blue-50/60 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-2.5">
+                  {settings?.qrisImageUrl ? (
+                    <div className="space-y-2">
+                      <div className="relative mx-auto w-40 h-40 bg-white rounded-xl p-2 border border-blue-100 shadow-2xs flex items-center justify-center overflow-hidden group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={settings.qrisImageUrl}
+                          alt="QRIS Barcode"
+                          className="w-full h-full object-contain cursor-pointer transition-transform duration-200 group-hover:scale-105"
+                          onClick={() => setZoomQrisUrl(settings.qrisImageUrl)}
+                          title="Klik untuk memperbesar QRIS"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-700 font-semibold">
+                        Tagihan: <span className="font-mono font-extrabold text-emerald-700">{formatRupiah(selectedQrOrder.grandTotal)}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Scan QRIS pelanggan dan pastikan saldo masuk sebelum klik terima pembayaran.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="py-2 text-center text-xs text-slate-500">
+                      Barcode QRIS belum dikonfigurasi di Pengaturan Toko.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -1580,6 +1648,62 @@ export default function PosScreenPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL ZOOM / FULLSCREEN QRIS ─────────────────────────────────── */}
+      {zoomQrisUrl && (
+        <div
+          className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-60 flex items-center justify-center p-4"
+          onClick={() => setZoomQrisUrl(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm sm:max-w-md w-full text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Pindai Pembayaran QRIS
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomQrisUrl(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={zoomQrisUrl}
+                alt="QRIS Barcode Besar"
+                className="w-full max-h-[55vh] object-contain"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-lg font-mono font-extrabold text-emerald-700">
+                {checkoutModalOpen
+                  ? formatRupiah(effectiveTotal)
+                  : selectedQrOrder
+                  ? formatRupiah(selectedQrOrder.grandTotal)
+                  : ''}
+              </p>
+              <p className="text-xs text-slate-500">
+                Arahkan kamera smartphone ke kode QRIS di atas untuk menyelesaikan transaksi.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setZoomQrisUrl(null)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Tutup Tampilan Penuh
+            </button>
           </div>
         </div>
       )}

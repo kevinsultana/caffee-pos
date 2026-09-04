@@ -7,6 +7,8 @@ import {
   updateStoreSettings,
   uploadStoreLogo,
   removeStoreLogo,
+  uploadQrisImage,
+  removeQrisImage,
 } from '@/app/actions/settings';
 import { cn } from '@/lib/utils';
 
@@ -81,11 +83,14 @@ export default function SettingsPage() {
   const [isPending, startTransition] = useTransition();
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingQris, setIsUploadingQris] = useState(false);
   const fileInputRef = useRef(null);
+  const qrisFileInputRef = useRef(null);
 
   // Form state
   const [storeName, setStoreName] = useState('');
   const [logoUrl, setLogoUrl] = useState(null);
+  const [qrisImageUrl, setQrisImageUrl] = useState(null);
   const [printerWidth, setPrinterWidth] = useState(58);
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxRate, setTaxRate] = useState(0);
@@ -103,9 +108,10 @@ export default function SettingsPage() {
       setIsLoading(false);
       return;
     }
-    const { settings, storeName: name, logoUrl: logo } = result.data;
+    const { settings, storeName: name, logoUrl: logo, qrisImageUrl: qris } = result.data;
     setStoreName(name || '');
     setLogoUrl(logo || null);
+    setQrisImageUrl(qris || settings?.qrisImageUrl || null);
     if (settings) {
       setPrinterWidth(settings.printerWidth || 58);
       setTaxEnabled(settings.taxEnabled ?? false);
@@ -181,6 +187,65 @@ export default function SettingsPage() {
     setIsUploadingLogo(false);
   };
 
+  // Handle QRIS Upload
+  const handleQrisChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side quick validation
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Format file harus berupa PNG, JPG, WEBP, atau SVG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB.');
+      return;
+    }
+
+    setIsUploadingQris(true);
+    const toastId = toast.loading('Mengunggah barcode QRIS toko ke Supabase Storage...');
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('file', file);
+      formData.append('qris', file);
+
+      const res = await uploadQrisImage(formData);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success(res.message || 'Barcode QRIS berhasil diperbarui!', { id: toastId });
+        setQrisImageUrl(res.qrisImageUrl);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunggah gambar QRIS toko.', { id: toastId });
+    } finally {
+      setIsUploadingQris(false);
+      if (qrisFileInputRef.current) {
+        qrisFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle Remove QRIS
+  const handleRemoveQris = async () => {
+    setIsUploadingQris(true);
+    const toastId = toast.loading('Menghapus gambar QRIS toko...');
+
+    const res = await removeQrisImage();
+    if (res.error) {
+      toast.error(res.error, { id: toastId });
+    } else {
+      toast.success('Gambar QRIS toko berhasil dihapus.', { id: toastId });
+      setQrisImageUrl(null);
+    }
+    setIsUploadingQris(false);
+  };
+
   // Handle Save Settings
   const handleSave = () => {
     if (!storeName.trim()) {
@@ -219,7 +284,7 @@ export default function SettingsPage() {
     );
   }
 
-  const isSaving = isPending || isUploadingLogo;
+  const isSaving = isPending || isUploadingLogo || isUploadingQris;
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -320,6 +385,84 @@ export default function SettingsPage() {
 
               <p className="text-[11px] text-slate-500">
                 Format didukung: <strong>PNG, JPG, WEBP, SVG</strong> (Maksimal 5MB). Logo akan otomatis tersimpan di Supabase Storage bucket <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono text-[10px]">store-assets</code>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      {/* ─── BARCODE & GAMBAR QRIS TOKO ─────────────────────────────────── */}
+      <SettingsCard
+        title="Barcode & Gambar QRIS Toko (Kasir POS)"
+        description="Upload barcode QRIS usaha Anda (BCA, Mandiri, GoPay, DANA, OVO, ShopeePay, dll). Gambar ini akan langsung muncul di layar modal pembayaran kasir POS saat memilih metode bayar QRIS agar pelanggan dapat langsung melakukan pemindaian (scan)."
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+          {/* QRIS Preview */}
+          <div className="w-32 h-32 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative group shadow-2xs">
+            {qrisImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrisImageUrl}
+                alt="Barcode QRIS Toko"
+                className="w-full h-full object-contain p-2 bg-white"
+              />
+            ) : (
+              <div className="text-center p-3">
+                <svg className="w-8 h-8 mx-auto text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5zM16.5 13.5v1.5m0 3v1.5m3-3h1.5m-6 0h1.5m3-3h-3v3h3v-3z" />
+                </svg>
+                <span className="text-[10px] text-slate-400 block mt-1 font-medium">Belum Ada QRIS</span>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons & Note */}
+          <div className="space-y-2.5 flex-1">
+            <input
+              ref={qrisFileInputRef}
+              type="file"
+              id="file-store-qris"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={handleQrisChange}
+              disabled={isSaving}
+              className="hidden"
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => qrisFileInputRef.current?.click()}
+                disabled={isSaving}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                {qrisImageUrl ? 'Ganti Barcode QRIS' : 'Pilih & Upload Barcode QRIS'}
+              </button>
+
+              {qrisImageUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveQris}
+                  disabled={isSaving}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Hapus Barcode QRIS
+                </button>
+              )}
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+              <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                Terintegrasi langsung dengan Popup Pembayaran Kasir POS
+              </p>
+              <p>
+                Gunakan gambar barcode QRIS dengan rasio persegi (1:1) dan resolusi tajam agar mudah dan cepat di-scan oleh kamera smartphone pelanggan di meja kasir.
+              </p>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Format didukung: <strong>PNG, JPG, WEBP, SVG</strong> (Maksimal 5MB).
               </p>
             </div>
           </div>
