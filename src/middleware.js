@@ -39,6 +39,12 @@ function clearSessionCookie(response) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   });
+  response.headers.set(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+  );
+  response.headers.set('Pragma', 'no-cache');
+  response.headers.set('Expires', '0');
   return response;
 }
 
@@ -60,7 +66,9 @@ export function middleware(request) {
   if (pathname === '/login') {
     const isRevokedOrRedirected =
       request.nextUrl.searchParams.has('revoked') ||
-      request.nextUrl.searchParams.has('from');
+      request.nextUrl.searchParams.has('from') ||
+      request.nextUrl.searchParams.has('logout') ||
+      request.nextUrl.searchParams.has('expired');
 
     // Jika sesi dicabut (Single Active Session) atau redirect error,
     // langsung bersihkan cookie sesi di scope middleware!

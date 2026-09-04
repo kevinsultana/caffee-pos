@@ -266,51 +266,70 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
  * Logout Server Action — revoke sesi saat ini.
  */
 export async function logout() {
-  const cookieStore = await cookies();
-  const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
+  try {
+    const cookieStore = await cookies();
+    const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
 
-  if (rawCookie) {
-    const sessionData = parseSessionCookie(rawCookie);
-    const rawToken = sessionData?.token;
-    if (rawToken) {
-      const tokenHash = hashToken(rawToken);
-      const session = await prisma.userSession.findUnique({
-        where: { sessionTokenHash: tokenHash },
-      });
+    if (rawCookie) {
+      const sessionData = parseSessionCookie(rawCookie);
+      const rawToken = sessionData?.token;
+      if (rawToken) {
+        const tokenHash = hashToken(rawToken);
+        try {
+          const session = await prisma.userSession.findUnique({
+            where: { sessionTokenHash: tokenHash },
+            include: { user: true },
+          });
 
-      if (session) {
-        await prisma.userSession.update({
-          where: { sessionTokenHash: tokenHash },
-          data: { revokedAt: new Date() },
-        });
+          if (session) {
+            if (!session.revokedAt) {
+              await prisma.userSession.update({
+                where: { sessionTokenHash: tokenHash },
+                data: { revokedAt: new Date() },
+              });
+            }
 
-        await prisma.auditLog.create({
-          data: {
-            storeId: session.userId ? (await prisma.user.findUnique({ where: { id: session.userId } }))?.storeId : '',
-            userId: session.userId,
-            action: 'LOGOUT',
-            module: 'AUTH',
-            changeSummary: 'Pengguna melakukan logout dari sistem.',
-          },
-        });
+            if (session.user?.storeId) {
+              await prisma.auditLog.create({
+                data: {
+                  storeId: session.user.storeId,
+                  userId: session.userId,
+                  sessionId: session.id,
+                  action: 'LOGOUT',
+                  module: 'AUTH',
+                  changeSummary: 'Pengguna melakukan logout dari sistem.',
+                },
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.error('[logout] Error updating DB or audit log:', dbErr);
+        }
       }
     }
+  } catch (err) {
+    console.error('[logout] Error reading cookie:', err);
+  } finally {
+    // ── Pembersihan cookie secara tuntas dan aman ───────────────────────────
+    try {
+      const cookieStore = await cookies();
+      cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
+      cookieStore.set(SESSION_COOKIE, '', {
+        path: '/',
+        expires: new Date(0),
+        maxAge: 0,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+    } catch (cookieErr) {
+      console.error('[logout] Error clearing cookie:', cookieErr);
+    }
   }
-
-  // ── Pembersihan cookie secara tuntas untuk Production ─────────────────
-  cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
-  cookieStore.set(SESSION_COOKIE, '', {
-    path: '/',
-    expires: new Date(0),
-    maxAge: 0,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-  });
 }
 
 /**
- * Verifikasi sesi dari cookie — digunakan oleh middleware / server components.
+ * Verifikasi sesi dari cookie — digunakan oleh middleware / server components / server actions.
  * @returns {object|null} user object atau null jika sesi tidak valid
  */
 export async function verifySession() {
@@ -325,19 +344,46 @@ export async function verifySession() {
 
   const tokenHash = hashToken(rawToken);
 
-  const session = await prisma.userSession.findUnique({
-    where: { sessionTokenHash: tokenHash },
-    include: {
-      user: {
-        include: { role: true, store: true },
+  let session = null;
+  try {
+    session = await prisma.userSession.findUnique({
+      where: { sessionTokenHash: tokenHash },
+      include: {
+        user: {
+          include: { role: true, store: true },
+        },
       },
-    },
-  });
+    });
+  } catch (err) {
+    console.error('[verifySession] DB lookup error:', err);
+    return null;
+  }
 
-  if (!session) return null;
-  if (session.revokedAt) return null;
-  if (session.expiresAt < new Date()) return null;
-  if (session.user.status !== 'ACTIVE') return null;
+  const isInvalid =
+    !session ||
+    Boolean(session.revokedAt) ||
+    session.expiresAt < new Date() ||
+    session.user?.status !== 'ACTIVE';
+
+  if (isInvalid) {
+    // Jika dipanggil dari Server Action atau Route Handler (konteks yang mengizinkan modifikasi cookie),
+    // hapus cookie sesi yang sudah tidak valid ini secara langsung!
+    try {
+      cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
+      cookieStore.set(SESSION_COOKIE, '', {
+        path: '/',
+        expires: new Date(0),
+        maxAge: 0,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+    } catch {
+      // Di Server Component (layout/page), cookies() bersifat read-only.
+      // Error ReadonlyRequestCookiesError tertangkap dengan aman di sini tanpa me-crash server.
+    }
+    return null;
+  }
 
   // Pastikan permissions terisi dengan benar (OWNER mendapatkan seluruh hak akses)
   if (session.user.role) {
@@ -365,6 +411,22 @@ export async function verifyCurrentSession() {
     const cookieStore = await cookies();
     const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
 
+    const clearInvalidCookie = () => {
+      try {
+        cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
+        cookieStore.set(SESSION_COOKIE, '', {
+          path: '/',
+          expires: new Date(0),
+          maxAge: 0,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+        });
+      } catch (err) {
+        console.error('[verifyCurrentSession] Error clearing cookie:', err);
+      }
+    };
+
     if (!rawCookie) {
       return { isValid: false, reason: 'REVOKED' };
     }
@@ -372,6 +434,7 @@ export async function verifyCurrentSession() {
     const sessionData = parseSessionCookie(rawCookie);
     const rawToken = sessionData?.token;
     if (!rawToken) {
+      clearInvalidCookie();
       return { isValid: false, reason: 'REVOKED' };
     }
 
@@ -387,10 +450,12 @@ export async function verifyCurrentSession() {
     });
 
     if (!session || session.revokedAt !== null || session.expiresAt < new Date()) {
+      clearInvalidCookie();
       return { isValid: false, reason: 'REVOKED' };
     }
 
     if (session.user?.status !== 'ACTIVE') {
+      clearInvalidCookie();
       return { isValid: false, reason: 'REVOKED' };
     }
 

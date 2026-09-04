@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 import { login } from '@/app/actions/auth';
@@ -11,6 +11,38 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Bersihkan sisa storage lokal
+    try {
+      sessionStorage.clear();
+      localStorage.removeItem('schaw_user');
+    } catch {}
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('revoked') === '1') {
+      import('sweetalert2').then(({ default: Swal }) => {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Sesi Telah Berakhir',
+          text: 'Akun Anda telah login di perangkat lain. Silakan login kembali untuk melanjutkan.',
+          confirmButtonText: 'Mengerti',
+          confirmButtonColor: '#059669',
+          background: '#ffffff',
+          color: '#0f172a',
+          customClass: {
+            popup: 'rounded-2xl shadow-xl font-sans',
+            confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
+          },
+        });
+      });
+
+      // Bersihkan search params dari URL bar agar bersih saat refresh
+      window.history.replaceState({}, '', '/login');
+    }
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();

@@ -116,6 +116,14 @@ export default function PosScreenPage() {
     ]);
 
     if (initRes.error) {
+      if (initRes.sessionRevoked || initRes.error.includes('Sesi tidak valid')) {
+        try {
+          sessionStorage.clear();
+          localStorage.clear();
+        } catch {}
+        window.location.replace('/api/auth/clear-session');
+        return;
+      }
       toast.error(initRes.error);
     } else {
       setProducts(initRes.data.products || []);
@@ -140,6 +148,15 @@ export default function PosScreenPage() {
     // Poll pending orders every 30s
     const timer = setInterval(async () => {
       const res = await getPublicPendingOrders();
+      if (res?.error && (res.sessionRevoked || res.error.includes('Sesi tidak valid'))) {
+        clearInterval(timer);
+        try {
+          sessionStorage.clear();
+          localStorage.clear();
+        } catch {}
+        window.location.replace('/api/auth/clear-session');
+        return;
+      }
       if (res.data) setPendingOrders(res.data);
     }, 30000);
     return () => clearInterval(timer);
@@ -343,6 +360,14 @@ export default function PosScreenPage() {
       const res = await processPosCheckout(payload);
 
       if (res.error) {
+        if (res.sessionRevoked || res.error.includes('Sesi tidak valid')) {
+          try {
+            sessionStorage.clear();
+            localStorage.clear();
+          } catch {}
+          window.location.replace('/api/auth/clear-session');
+          return;
+        }
         toast.error(res.error, { id: toastId, duration: 4500 });
       } else {
         toast.dismiss(toastId);
@@ -441,6 +466,14 @@ export default function PosScreenPage() {
       });
 
       if (res.error) {
+        if (res.sessionRevoked || res.error.includes('Sesi tidak valid')) {
+          try {
+            sessionStorage.clear();
+            localStorage.clear();
+          } catch {}
+          window.location.replace('/api/auth/clear-session');
+          return;
+        }
         toast.error(res.error, { id: toastId, duration: 4500 });
       } else {
         toast.dismiss(toastId);

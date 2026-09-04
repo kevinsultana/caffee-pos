@@ -139,7 +139,11 @@ export async function getPosInitData() {
     };
   } catch (error) {
     console.error('[getPosInitData] Error:', error);
-    return { error: error.message || 'Gagal memuat data kasir POS.' };
+    const isSessionError = Boolean(error.message?.includes('Sesi tidak valid'));
+    return {
+      error: error.message || 'Gagal memuat data kasir POS.',
+      sessionRevoked: isSessionError,
+    };
   }
 }
 
@@ -666,6 +670,10 @@ export async function processPosCheckout({
     };
   } catch (error) {
     console.error('[processPosCheckout] Error:', error);
-    return { error: error.message || 'Gagal memproses pembayaran kasir.' };
+    const isSessionError = Boolean(error.message?.includes('Sesi tidak valid'));
+    return {
+      error: error.message || 'Gagal memproses pembayaran kasir.',
+      sessionRevoked: isSessionError,
+    };
   }
 }
