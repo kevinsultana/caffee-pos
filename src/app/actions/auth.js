@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { MENU_PERMISSIONS } from '@/lib/permissions';
+import { MENU_PERMISSIONS, getDefaultRouteForUser } from '@/lib/permissions';
 
 const SESSION_COOKIE = 'schaw_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 jam
@@ -161,10 +161,12 @@ export async function login(username, password) {
       path: '/',
     });
 
+    const targetRedirectRoute = getDefaultRouteForUser(user.role?.name, effectivePermissions);
+
     return {
       success: true,
       mustChangePassword: Boolean(user.mustChangePassword),
-      redirectUrl: user.mustChangePassword ? '/login/change-password' : '/dashboard',
+      redirectUrl: user.mustChangePassword ? '/login/change-password' : targetRedirectRoute,
       role: user.role?.name,
       permissions: effectivePermissions,
     };
@@ -254,8 +256,9 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
       });
     }
 
+    const targetRedirectRoute = getDefaultRouteForUser(user.role?.name, user.permissions);
     revalidatePath('/dashboard');
-    return { success: true, redirectUrl: '/dashboard' };
+    return { success: true, redirectUrl: targetRedirectRoute };
   } catch (error) {
     console.error('[changeFirstTimePassword] Error:', error);
     return { error: error.message || 'Gagal mengubah password.' };

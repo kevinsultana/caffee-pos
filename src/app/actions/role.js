@@ -277,20 +277,21 @@ export async function deleteRole(id) {
 
     // ── GUARDRAIL KRUSIAL: Proteksi Hapus Role ──────────────────────────────
     if (role.name === 'OWNER') {
-      return { error: 'Role OWNER adalah sistem root admin dan TIDAK BOLEH dihapus.' };
-    }
-
-    if (role.isSystem) {
-      return { error: `Role bawaan sistem "${role.name}" tidak dapat dihapus.` };
+      return { error: 'Role OWNER adalah sistem root admin dan TIDAK DAPAT dihapus.' };
     }
 
     if (role._count.users > 0) {
       return {
-        error: `Role "${role.name}" tidak dapat dihapus karena masih digunakan oleh ${role._count.users} karyawan. Harap pindahkan karyawan ke role lain terlebih dahulu.`,
+        error: `Role "${role.name}" tidak dapat dihapus karena masih digunakan oleh ${role._count.users} karyawan. Harap pindahkan karyawan ke peran lain terlebih dahulu di menu Manajemen Karyawan.`,
       };
     }
 
     await prisma.$transaction(async (tx) => {
+      // Hapus relasi rolePermissions jika ada
+      await tx.rolePermission.deleteMany({
+        where: { roleId: id },
+      });
+
       await tx.role.delete({ where: { id } });
 
       await tx.auditLog.create({
@@ -301,7 +302,7 @@ export async function deleteRole(id) {
           module: 'USER_MANAGEMENT',
           entityType: 'Role',
           entityId: id,
-          changeSummary: `${user.name} menghapus role kustom "${role.name}".`,
+          changeSummary: `${user.name} menghapus role "${role.name}".`,
         },
       });
     });

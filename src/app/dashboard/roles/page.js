@@ -135,27 +135,42 @@ export default function RolesManagementPage() {
       toast.error('Role OWNER adalah sistem root admin dan tidak dapat dihapus.');
       return;
     }
-    if (role.isSystem) {
-      toast.error(`Role bawaan sistem "${role.name}" tidak dapat dihapus.`);
-      return;
-    }
+
+    const Swal = (await import('sweetalert2')).default;
+
     if (role.userCount > 0) {
-      toast.error(
-        `Role "${role.name}" tidak dapat dihapus karena masih digunakan oleh ${role.userCount} karyawan.`
-      );
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Tidak Dapat Menghapus Peran',
+        html: `Peran "<b>${role.name}</b>" saat ini masih digunakan oleh <b>${role.userCount} karyawan</b>.<br/><br/><span class="text-xs text-slate-500">Silakan ubah peran karyawan tersebut ke peran lain di menu <b>Manajemen Karyawan</b> sebelum menghapus peran ini.</span>`,
+        confirmButtonText: 'Mengerti',
+        confirmButtonColor: '#059669',
+        background: '#ffffff',
+        color: '#0f172a',
+        customClass: {
+          popup: 'rounded-2xl shadow-xl font-sans',
+          confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
+        },
+      });
       return;
     }
 
-    const Swal = (await import('sweetalert2')).default;
     const confirm = await Swal.fire({
       title: `Hapus Peran "${role.name}"?`,
-      text: 'Peran kustom ini akan dihapus permanen dari sistem.',
+      text: 'Peran ini akan dihapus permanen dari sistem.',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#64748b',
       confirmButtonText: 'Ya, Hapus Peran',
       cancelButtonText: 'Batal',
+      background: '#ffffff',
+      color: '#0f172a',
+      customClass: {
+        popup: 'rounded-2xl shadow-xl font-sans',
+        confirmButton: 'px-5 py-2.5 rounded-xl font-bold text-sm',
+        cancelButton: 'px-5 py-2.5 rounded-xl font-semibold text-sm',
+      },
     });
 
     if (confirm.isConfirmed) {
@@ -325,7 +340,7 @@ export default function RolesManagementPage() {
                       <td className="py-4 px-5 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           {isOwner ? (
-                            <span className="text-[11px] text-slate-400 italic py-1 px-2">
+                            <span className="text-[11px] text-slate-400 italic py-1 px-2.5 font-medium bg-slate-100 rounded-lg border border-slate-200">
                               Terkunci (Root)
                             </span>
                           ) : (
@@ -336,14 +351,16 @@ export default function RolesManagementPage() {
                               >
                                 Edit
                               </button>
-                              {!role.isSystem && role.userCount === 0 && (
-                                <button
-                                  onClick={() => handleDelete(role)}
-                                  className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-colors cursor-pointer"
-                                >
-                                  Hapus
-                                </button>
-                              )}
+                              <button
+                                onClick={() => handleDelete(role)}
+                                className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                                title={`Hapus peran ${role.name}`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                                <span>Hapus</span>
+                              </button>
                             </>
                           )}
                         </div>
@@ -504,28 +521,47 @@ export default function RolesManagementPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isPending ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Menyimpan...
-                    </>
-                  ) : (
-                    'Simpan Peran'
+              <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                <div>
+                  {modalMode === 'EDIT' && selectedRole?.name !== 'OWNER' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalOpen(false);
+                        handleDelete(selectedRole);
+                      }}
+                      className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                      Hapus Peran
+                    </button>
                   )}
-                </button>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isPending ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      'Simpan Peran'
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

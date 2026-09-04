@@ -94,7 +94,7 @@ export default function LoginPage() {
           timer: 2000,
           timerProgressBar: true,
         });
-        router.push('/dashboard');
+        router.push(result.redirectUrl || '/dashboard');
       }
     } catch (err) {
       toast.error('Terjadi kesalahan. Silakan coba lagi.', { id: 'login-error' });

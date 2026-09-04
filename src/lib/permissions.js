@@ -188,3 +188,30 @@ export function getRequiredPermissionForRoute(pathname) {
   }
   return null;
 }
+
+/**
+ * Menentukan rute landing page default pengguna berdasarkan peran dan hak aksesnya.
+ * - OWNER atau pengguna dengan MENU_DASHBOARD -> /dashboard
+ * - Pengguna tanpa MENU_DASHBOARD -> rute pertama yang diizinkan (misal Kasir -> /dashboard/pos)
+ * - Fallback jika tidak ada izin -> /dashboard/pos (atau /dashboard)
+ */
+export function getDefaultRouteForUser(roleName, permissions = []) {
+  if (roleName === 'OWNER') {
+    return '/dashboard';
+  }
+
+  const userPermissions = Array.isArray(permissions) ? permissions : [];
+
+  if (userPermissions.includes('MENU_DASHBOARD')) {
+    return '/dashboard';
+  }
+
+  for (const perm of MENU_PERMISSIONS) {
+    if (userPermissions.includes(perm.code) && perm.defaultRoute) {
+      return perm.defaultRoute;
+    }
+  }
+
+  return '/dashboard/pos';
+}
+

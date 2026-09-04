@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getRequiredPermissionForRoute } from '@/lib/permissions';
+import { getRequiredPermissionForRoute, getDefaultRouteForUser } from '@/lib/permissions';
 
 const SESSION_COOKIE = 'schaw_session';
 
@@ -77,9 +77,10 @@ export function middleware(request) {
       return clearSessionCookie(response);
     }
 
-    // Jika sudah login normal & valid tanpa flag revoked/from, baru arahkan ke dashboard
+    // Jika sudah login normal & valid tanpa flag revoked/from, arahkan ke landing page hak aksesnya
     if (sessionToken && !requiresPasswordChange && !isRevokedOrRedirected) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
+      return NextResponse.redirect(new URL(targetRoute, request.url));
     }
 
     return NextResponse.next();
@@ -115,7 +116,8 @@ export function middleware(request) {
   // ── ATURAN 4: PENGGUNA SUDAH LOGIN NORMAL (SUDAH PERNAH GANTI PASSWORD) ─────
   if (!requiresPasswordChange) {
     if (pathname === '/login/change-password') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      const targetRoute = getDefaultRouteForUser(userRole, userPermissions);
+      return NextResponse.redirect(new URL(targetRoute, request.url));
     }
   }
 
@@ -123,14 +125,18 @@ export function middleware(request) {
   if (isProtected && userRole && userRole !== 'OWNER') {
     const requiredPermission = getRequiredPermissionForRoute(pathname);
     if (requiredPermission && !userPermissions.includes(requiredPermission)) {
-      if (pathname === '/dashboard') {
-        return NextResponse.next();
-      }
+      const allowedRoute = getDefaultRouteForUser(userRole, userPermissions);
 
-      // Alihkan kembali ke /dashboard dengan notifikasi forbidden
-      const dashboardUrl = new URL('/dashboard', request.url);
-      dashboardUrl.searchParams.set('forbidden', '1');
-      return NextResponse.redirect(dashboardUrl);
+      // Cegah loop redirect jika rute yang diizinkan sama dengan pathname
+      if (pathname !== allowedRoute) {
+        const redirectUrl = new URL(allowedRoute, request.url);
+        // Tampilkan forbidden toast hanya jika user membuka rute menu lain yang diblokir,
+        // bukan saat otomatis dialihkan dari landing /dashboard
+        if (pathname !== '/dashboard') {
+          redirectUrl.searchParams.set('forbidden', '1');
+        }
+        return NextResponse.redirect(redirectUrl);
+      }
     }
   }
 

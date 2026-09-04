@@ -60,7 +60,7 @@ export default function ChangePasswordPage() {
         color: '#0f172a',
       });
 
-      router.push('/dashboard');
+      router.push(res.redirectUrl || '/dashboard');
     });
   };
 

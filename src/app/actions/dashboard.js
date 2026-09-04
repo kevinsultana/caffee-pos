@@ -2,10 +2,14 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
+import { hasPermission } from '@/lib/permissions';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
   if (!user) throw new Error('Sesi tidak valid. Silakan login kembali.');
+  if (user.role?.name !== 'OWNER' && !hasPermission(user, 'MENU_DASHBOARD')) {
+    throw new Error('Akses ditolak: Anda tidak memiliki izin untuk mengakses Dashboard Ringkasan Bisnis.');
+  }
   return { user, storeId: user.storeId };
 }
 
