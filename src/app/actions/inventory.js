@@ -65,7 +65,7 @@ export async function getUnits() {
           },
         });
       }
-      revalidateTag('units');
+      revalidateTag('units', 'max');
       units = await getCachedUnits(storeId);
     }
 
@@ -104,7 +104,7 @@ export async function createUnit({ code, name }) {
       },
     });
 
-    revalidateTag('units');
+    revalidateTag('units', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: unit };
   } catch (error) {
@@ -134,7 +134,7 @@ export async function updateUnit(id, { name }) {
       data: { name: name.trim() },
     });
 
-    revalidateTag('units');
+    revalidateTag('units', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: updated };
   } catch (error) {
@@ -181,7 +181,7 @@ export async function deleteUnit(id) {
 
     await prisma.unit.delete({ where: { id } });
 
-    revalidateTag('units');
+    revalidateTag('units', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true };
   } catch (error) {
@@ -246,7 +246,7 @@ export async function createInventoryCategory({ name }) {
       },
     });
 
-    revalidateTag('inventory-categories');
+    revalidateTag('inventory-categories', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: category };
   } catch (error) {
@@ -282,7 +282,7 @@ export async function updateInventoryCategory(id, { name }) {
       data: { name: cleanName },
     });
 
-    revalidateTag('inventory-categories');
+    revalidateTag('inventory-categories', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true, data: category };
   } catch (error) {
@@ -316,7 +316,7 @@ export async function deleteInventoryCategory(id) {
 
     await prisma.inventoryCategory.delete({ where: { id } });
 
-    revalidateTag('inventory-categories');
+    revalidateTag('inventory-categories', 'max');
     revalidatePath('/dashboard/inventory/setup');
     return { success: true };
   } catch (error) {

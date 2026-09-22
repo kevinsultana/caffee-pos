@@ -67,7 +67,7 @@ export async function createProductCategory({ name }) {
       },
     });
 
-    revalidateTag('product-categories');
+    revalidateTag('product-categories', 'max');
     revalidatePath('/dashboard/products/categories');
     return { success: true, data: category };
   } catch (error) {
@@ -103,7 +103,7 @@ export async function updateProductCategory(id, { name }) {
       data: { name: cleanName },
     });
 
-    revalidateTag('product-categories');
+    revalidateTag('product-categories', 'max');
     revalidatePath('/dashboard/products/categories');
     return { success: true, data: category };
   } catch (error) {
@@ -137,7 +137,7 @@ export async function deleteProductCategory(id) {
 
     await prisma.productCategory.delete({ where: { id } });
 
-    revalidateTag('product-categories');
+    revalidateTag('product-categories', 'max');
     revalidatePath('/dashboard/products/categories');
     return { success: true };
   } catch (error) {

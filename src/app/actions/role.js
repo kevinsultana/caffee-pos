@@ -132,7 +132,7 @@ export async function createRole({ name, description = '', permissions = [] }) {
       return created;
     });
 
-    revalidateTag('roles');
+    revalidateTag('roles', 'max');
     revalidatePath('/dashboard/roles');
     revalidatePath('/dashboard/users');
 
@@ -236,7 +236,7 @@ export async function updateRole(id, { name, description = '', permissions = [] 
       return res;
     });
 
-    revalidateTag('roles');
+    revalidateTag('roles', 'max');
     revalidatePath('/dashboard', 'layout');
     revalidatePath('/dashboard/roles');
     revalidatePath('/dashboard/users');
@@ -308,7 +308,7 @@ export async function deleteRole(id) {
       });
     });
 
-    revalidateTag('roles');
+    revalidateTag('roles', 'max');
     revalidatePath('/dashboard/roles');
     revalidatePath('/dashboard/users');
 

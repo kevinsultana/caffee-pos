@@ -64,7 +64,7 @@ export async function createSupplier({ name, phone, address }) {
       },
     });
 
-    revalidateTag('suppliers');
+    revalidateTag('suppliers', 'max');
     revalidatePath('/dashboard/inventory/suppliers');
     revalidatePath('/dashboard/inventory/purchases/create');
     return { success: true, data: supplier };
@@ -105,7 +105,7 @@ export async function updateSupplier(id, { name, phone, address }) {
       },
     });
 
-    revalidateTag('suppliers');
+    revalidateTag('suppliers', 'max');
     revalidatePath('/dashboard/inventory/suppliers');
     return { success: true, data: updated };
   } catch (error) {
@@ -139,7 +139,7 @@ export async function deleteSupplier(id) {
 
     await prisma.supplier.delete({ where: { id } });
 
-    revalidateTag('suppliers');
+    revalidateTag('suppliers', 'max');
     revalidatePath('/dashboard/inventory/suppliers');
     return { success: true };
   } catch (error) {
