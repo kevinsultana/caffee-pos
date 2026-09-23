@@ -46,7 +46,33 @@ export async function getCurrentShift() {
     });
 
     if (!shift) {
-      return { data: null };
+      // Periksa apakah ada shift aktif lain di toko ini dan bandingkan dengan batas toko
+      const activeShifts = await prisma.shift.findMany({
+        where: {
+          storeId,
+          status: 'OPEN',
+        },
+        include: {
+          user: { select: { id: true, name: true, username: true } },
+        },
+      });
+
+      const storeSettings = await prisma.storeSettings.findUnique({
+        where: { storeId },
+        select: { maxActiveShifts: true },
+      });
+      const maxActiveShifts = storeSettings?.maxActiveShifts ?? 1;
+
+      return {
+        data: null,
+        activeStoreShifts: activeShifts.map((s) => ({
+          id: s.id,
+          userName: s.user?.name || 'Kasir',
+          openedAt: s.openedAt ? new Date(s.openedAt).toISOString() : null,
+        })),
+        maxActiveShifts,
+        isLimitReached: activeShifts.length >= maxActiveShifts,
+      };
     }
 
     // Hitung ringkasan kas fisik

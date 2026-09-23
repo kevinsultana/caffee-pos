@@ -20,11 +20,16 @@ export default function ShiftManagementPage() {
   const [isPending, startTransition] = useTransition();
 
   // Form Open Shift
-  const [openingCash, setOpeningCash] = useState(200000);
+  const [openingCash, setOpeningCash] = useState(100000);
 
   // Form Close Shift
   const [actualCash, setActualCash] = useState(0);
   const [depositedCash, setDepositedCash] = useState(0);
+
+  // Active Store Shifts & Limit State
+  const [activeStoreShifts, setActiveStoreShifts] = useState([]);
+  const [isLimitReached, setIsLimitReached] = useState(false);
+  const [maxActiveShifts, setMaxActiveShifts] = useState(1);
 
   // Modal Cash Movement
   const [movementModalOpen, setMovementModalOpen] = useState(false);
@@ -38,11 +43,23 @@ export default function ShiftManagementPage() {
     if (res.error) toast.error(res.error);
     else {
       setShift(res.data);
+      const activeList = res.activeStoreShifts || [];
+      const limitReached = !!res.isLimitReached;
+      setActiveStoreShifts(activeList);
+      setIsLimitReached(limitReached);
+      setMaxActiveShifts(res.maxActiveShifts || 1);
+
       if (res.data) {
         setActualCash(res.data.expectedCash || 0);
         // Default setoran: sisa setelah modal awal, atau seluruh expected cash jika kurang dari modal awal
         const defaultDeposit = Math.max(0, (res.data.expectedCash || 0) - (res.data.openingCash || 0));
         setDepositedCash(defaultDeposit);
+      } else if (limitReached) {
+        const names = activeList.map((s) => s.userName).join(', ') || 'kasir lain';
+        toast.error(
+          `Shift sedang aktif oleh ${names}. Anda tidak bisa membuka shift baru sebelum shift tersebut ditutup!`,
+          { id: 'active-shift-warning-toast', duration: 6000 }
+        );
       }
     }
     setLoading(false);
@@ -54,6 +71,12 @@ export default function ShiftManagementPage() {
 
   function handleOpenShift(e) {
     e.preventDefault();
+    if (isLimitReached) {
+      const names = activeStoreShifts.map((s) => s.userName).join(', ') || 'kasir lain';
+      toast.error(`Sudah ada kasir yang aktif (${names}). Tidak bisa membuka shift baru!`);
+      return;
+    }
+
     const cash = Number(openingCash);
     if (isNaN(cash) || cash < 0) {
       toast.error('Modal awal kasir harus berupa angka positif.');
@@ -260,16 +283,37 @@ export default function ShiftManagementPage() {
             </p>
           </div>
 
+          {/* Warning banner jika batas shift tercapai / ada kasir lain yang aktif */}
+          {isLimitReached && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left space-y-1.5 animate-in fade-in">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span>⚠️ Ada Shift Kasir yang Sedang Aktif</span>
+              </div>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Saat ini kasir <strong>{activeStoreShifts.map((s) => s.userName).join(', ') || 'lain'}</strong> sedang aktif bertugas. Toko dibatasi maksimal <strong>{maxActiveShifts} shift</strong> aktif bersamaan. Anda tidak bisa membuka shift baru sebelum shift tersebut ditutup.
+              </p>
+              <div className="pt-1">
+                <Link
+                  href="/dashboard/pos/manage-shifts"
+                  className="text-xs font-bold text-amber-900 underline hover:text-amber-950 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  Buka Kelola Shift &rarr;
+                </Link>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleOpenShift} className="space-y-4 text-left">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Modal Awal Kasir (Cash Float) *
               </label>
               <CurrencyInput
-                placeholder="200.000"
+                placeholder="100.000"
                 value={openingCash}
                 onChange={(val) => setOpeningCash(val)}
-                disabled={isPending}
+                disabled={isPending || isLimitReached}
                 required
               />
             </div>
@@ -281,7 +325,8 @@ export default function ShiftManagementPage() {
                   key={amt}
                   type="button"
                   onClick={() => setOpeningCash(amt)}
-                  className="flex-1 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-semibold transition-colors"
+                  disabled={isPending || isLimitReached}
+                  className="flex-1 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-semibold transition-colors disabled:opacity-50"
                 >
                   {formatRupiah(amt)}
                 </button>
@@ -290,12 +335,22 @@ export default function ShiftManagementPage() {
 
             <button
               type="submit"
-              disabled={isPending}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+              disabled={isPending || isLimitReached}
+              className={cn(
+                'w-full py-3 rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5',
+                isLimitReached
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+              )}
             >
-              {isPending ? 'Membuka Shift...' : 'Buka Shift & Mulai Transaksi'}
+              {isLimitReached
+                ? 'Tidak Bisa Buka Shift (Ada Kasir Aktif)'
+                : isPending
+                  ? 'Membuka Shift...'
+                  : 'Buka Shift & Mulai Transaksi'}
             </button>
           </form>
+
         </div>
       ) : (
         /* ─── KONDISI 2: SHIFT AKTIF (MONITOR & TUTUP SHIFT) ──────────────── */
@@ -523,7 +578,7 @@ export default function ShiftManagementPage() {
                       {Number(actualCash) - Number(shift.expectedCash) === 0
                         ? 'Pas (Tidak ada selisih)'
                         : (Number(actualCash) - Number(shift.expectedCash) > 0 ? '+' : '') +
-                          formatRupiah(Number(actualCash) - Number(shift.expectedCash))}
+                        formatRupiah(Number(actualCash) - Number(shift.expectedCash))}
                     </span>
                   </div>
                 )}
