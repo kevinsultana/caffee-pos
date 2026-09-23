@@ -15,6 +15,7 @@ import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
+import BluetoothModal from '@/components/bluetooth/BluetoothModal';
 
 export default function PosScreenPage() {
   const [loading, setLoading] = useState(true);
@@ -55,7 +56,13 @@ export default function PosScreenPage() {
   const [cart, setCart] = useState([]);
   const [customerName, setCustomerName] = useState('Pelanggan');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [queueNumber, setQueueNumber] = useState('A-01');
+  const [queueInput, setQueueInput] = useState(''); // Angka antrean saja (awal kosong, wajib diisi)
+  const [orderType, setOrderType] = useState('DINE_IN'); // 'DINE_IN' | 'TAKEAWAY'
+
+  // Nomor antrean lengkap dengan prefix otomatis (A- untuk Dine In, TA- untuk Takeaway)
+  const fullQueueNumber = queueInput.trim()
+    ? `${orderType === 'TAKEAWAY' ? 'TA' : 'A'}-${queueInput.trim().padStart(2, '0')}`
+    : '';
 
   // Promo Code State
   const [inputPromoCode, setInputPromoCode] = useState('');
@@ -67,6 +74,7 @@ export default function PosScreenPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH' | 'QRIS'
   const [cashReceived, setCashReceived] = useState(0);
   const [zoomQrisUrl, setZoomQrisUrl] = useState(null);
+  const [isBtModalOpen, setIsBtModalOpen] = useState(false);
 
   // Quick Create Customer Modal State
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -261,6 +269,7 @@ export default function PosScreenPage() {
     setSelectedCustomerId('');
     setCustomerName('Pelanggan');
     setCustomerPhone('');
+    setQueueInput('');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -399,13 +408,17 @@ export default function PosScreenPage() {
   // CHECKOUT HANDLERS (NORMAL POS)
   // ══════════════════════════════════════════════════════════════════════════
 
+  function handleOrderTypeChange(type) {
+    setOrderType(type);
+  }
+
   function openCheckout() {
     if (cart.length === 0) {
       toast.error('Keranjang belanja masih kosong.');
       return;
     }
-    if (!queueNumber.trim()) {
-      toast.error('Nomor antrean wajib diisi.');
+    if (!queueInput.trim()) {
+      toast.error('Nomor antrean wajib diisi! Masukkan angka antrean.');
       return;
     }
     setCashReceived(effectiveTotal);
@@ -429,12 +442,17 @@ export default function PosScreenPage() {
       orderToPrint.queue ||
       orderToPrint.queueNo ||
       orderToPrint.antrean ||
-      queueNumber ||
+      fullQueueNumber ||
       '-';
+
+    const resolvedOrderType =
+      orderToPrint.orderType ||
+      (resolvedQueueNumber.toUpperCase().startsWith('TA') ? 'TAKEAWAY' : orderType);
 
     const safeOrderToPrint = {
       ...orderToPrint,
       queueNumber: resolvedQueueNumber,
+      orderType: resolvedOrderType,
     };
 
     // ── Path 1: Bluetooth BLE (jika printer terhubung via context) ────────────
@@ -479,11 +497,22 @@ export default function PosScreenPage() {
     );
   };
 
-  function handleProcessCheckout(e) {
-    e.preventDefault();
+  function handleProcessCheckout(e, forceProceed = false) {
+    if (e?.preventDefault) e.preventDefault();
 
     if (paymentMethod === 'CASH' && Number(cashReceived) < effectiveTotal) {
       toast.error('Uang tunai yang diterima kurang dari total tagihan.');
+      return;
+    }
+
+    if (!queueInput.trim()) {
+      toast.error('Nomor antrean wajib diisi! Masukkan angka antrean.');
+      return;
+    }
+
+    // Pengecekan printer Bluetooth: jika belum terhubung, tampilkan modal Bluetooth connect
+    if (!forceProceed && !btConnected) {
+      setIsBtModalOpen(true);
       return;
     }
 
@@ -494,7 +523,8 @@ export default function PosScreenPage() {
         customerId: selectedCustomerId || null,
         customerName: customerName.trim() || 'Pelanggan',
         customerPhone: customerPhone.trim(),
-        queueNumber: queueNumber.trim(),
+        queueNumber: fullQueueNumber,
+        orderType,
         paymentMethod,
         promoCode: appliedPromo?.code || '',
         cashReceived: Number(cashReceived),
@@ -524,17 +554,16 @@ export default function PosScreenPage() {
         toast.dismiss(toastId);
         setCheckoutModalOpen(false);
         clearCart();
+        setQueueInput('');
         loadPendingOrders();
-
-        const nextQNum = String(parseInt(queueNumber.replace(/\D/g, '') || '1') + 1).padStart(2, '0');
-        setQueueNumber(`A-${nextQNum}`);
 
         // Cetak struk otomatis ke printer Bluetooth jika autoPrintEnabled aktif
         if (autoPrintEnabled && res.data.orderForPrint) {
           handlePrint(
             {
               ...res.data.orderForPrint,
-              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || fullQueueNumber,
+              orderType: res.data.orderType || orderType,
             },
             'CUSTOMER'
           );
@@ -601,7 +630,8 @@ export default function PosScreenPage() {
           handlePrint(
             {
               ...res.data.orderForPrint,
-              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || fullQueueNumber,
+              orderType: res.data.orderType || orderType,
             },
             'KITCHEN'
           );
@@ -609,7 +639,8 @@ export default function PosScreenPage() {
           handlePrint(
             {
               ...res.data.orderForPrint,
-              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || fullQueueNumber,
+              orderType: res.data.orderType || orderType,
             },
             'CUSTOMER'
           );
@@ -654,6 +685,16 @@ export default function PosScreenPage() {
     const cPhone = order.customerPhoneSnapshot?.trim() || '';
     setCustomerName(cName);
     setCustomerPhone(cPhone);
+
+    if (order.queueNumber) {
+      const digitsOnly = order.queueNumber.replace(/\D/g, '');
+      setQueueInput(digitsOnly);
+      if (order.queueNumber.toUpperCase().startsWith('TA')) {
+        setOrderType('TAKEAWAY');
+      } else {
+        setOrderType('DINE_IN');
+      }
+    }
 
     // 3. Cek otomatis apakah pelanggan ini sudah terdaftar sebagai member
     const matched = customers.find((c) => {
@@ -1090,19 +1131,80 @@ export default function PosScreenPage() {
                   />
                 </div>
 
+                {/* Pilihan Dine In / Takeaway */}
+                <div>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeChange('DINE_IN')}
+                      className={cn(
+                        'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                        orderType === 'DINE_IN'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      <span className="text-sm">🍽️</span>
+                      <span>Dine In (A)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeChange('TAKEAWAY')}
+                      className={cn(
+                        'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                        orderType === 'TAKEAWAY'
+                          ? 'bg-white text-amber-700 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      <span className="text-sm">🥡</span>
+                      <span>Takeaway (TA)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Antrean
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+                      <span>Antrean <span className="text-rose-500 font-bold">*</span></span>
+                      <span className={cn('text-[9px] font-bold px-1 rounded', orderType === 'TAKEAWAY' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')}>
+                        {orderType === 'TAKEAWAY' ? 'TA' : 'A'}
+                      </span>
                     </label>
-                    <input
-                      type="text"
-                      value={queueNumber}
-                      onChange={(e) => setQueueNumber(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-emerald-700 font-mono font-bold text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      placeholder="A-01"
-                      required
-                    />
+                    <div className={cn(
+                      'flex items-center rounded-xl border bg-white overflow-hidden transition-all focus-within:ring-2',
+                      !queueInput.trim()
+                        ? 'border-rose-300 focus-within:ring-rose-400'
+                        : orderType === 'TAKEAWAY'
+                          ? 'border-amber-300 focus-within:ring-amber-500'
+                          : 'border-slate-200 focus-within:ring-emerald-500'
+                    )}>
+                      <span className={cn(
+                        'px-2 py-1.5 text-xs font-black font-mono select-none border-r shrink-0',
+                        orderType === 'TAKEAWAY'
+                          ? 'bg-amber-100 text-amber-800 border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      )}>
+                        {orderType === 'TAKEAWAY' ? 'TA-' : 'A-'}
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={queueInput}
+                        onChange={(e) => {
+                          const digitsOnly = e.target.value.replace(/\D/g, '');
+                          setQueueInput(digitsOnly);
+                        }}
+                        className={cn(
+                          'w-full px-2 py-1.5 font-mono font-black text-xs text-center focus:outline-none bg-transparent',
+                          orderType === 'TAKEAWAY' ? 'text-amber-800' : 'text-emerald-800',
+                          !queueInput.trim() && 'placeholder:text-rose-300'
+                        )}
+                        placeholder="Wajib"
+                        required
+                      />
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -1459,7 +1561,7 @@ export default function PosScreenPage() {
                 {formatRupiah(effectiveTotal)}
               </p>
               <div className="text-xs text-slate-500 mt-1 space-x-2">
-                <span>Antrean #{queueNumber}</span>
+                <span>Antrean #{fullQueueNumber || 'Belum diisi'} ({orderType === 'TAKEAWAY' ? 'Takeaway' : 'Dine In'})</span>
                 <span>&bull;</span>
                 <span>{customerName}</span>
                 {appliedPromo && (
@@ -1632,21 +1734,44 @@ export default function PosScreenPage() {
                 </div>
               )}
 
-              {/* Auto Print Thermal Toggle */}
-              <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer text-xs font-semibold text-slate-700 transition-colors">
-                <div className="flex items-center gap-2">
-                  <span>🖨️ Cetak Struk Otomatis (Bluetooth / USB)</span>
-                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">
-                    Auto-Print
-                  </span>
+              {/* Status Printer & Toggle Auto-Print */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn(
+                      'w-2 h-2 rounded-full',
+                      btConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                    )} />
+                    <span className="text-[11px] text-slate-600">
+                      Printer Thermal: <strong className="text-slate-800">{btConnected ? (btDeviceName || 'Terhubung') : 'Belum Terhubung'}</strong>
+                    </span>
+                  </div>
+                  {!btConnected && (
+                    <button
+                      type="button"
+                      onClick={() => setIsBtModalOpen(true)}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                    >
+                      Hubungkan Printer
+                    </button>
+                  )}
                 </div>
-                <input
-                  type="checkbox"
-                  checked={autoPrintEnabled}
-                  onChange={(e) => setAutoPrintEnabled(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                />
-              </label>
+
+                <label className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-pointer">
+                  <div className="space-y-0.5">
+                    <span className="font-semibold block">Cetak struk kasir otomatis</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Kirim perintah cetak langsung ke printer thermal setelah pembayaran
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={autoPrintEnabled}
+                    onChange={(e) => setAutoPrintEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                </label>
+              </div>
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
@@ -1654,16 +1779,25 @@ export default function PosScreenPage() {
                   type="button"
                   onClick={() => setCheckoutModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors"
+                  className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || (paymentMethod === 'CASH' && Number(cashReceived) < effectiveTotal)}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-700/20 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-700/20 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {isPending ? 'Memproses Transaksi...' : 'Konfirmasi & Cetak Struk'}
+                  {isPending ? (
+                    'Memproses Transaksi...'
+                  ) : (
+                    <>
+                      <span>Konfirmasi & Cetak Struk</span>
+                      {!btConnected && (
+                        <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" title="Printer belum terhubung" />
+                      )}
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1830,6 +1964,22 @@ export default function PosScreenPage() {
 
       {/* ─── Hidden Printable Thermal Receipt Container ───────────────────────── */}
       <ThermalReceipt order={printOrder} store={storeInfo} printMode={printMode} />
+
+      {/* ─── MODAL KONEKSI PRINTER BLUETOOTH (QUICK CONNECT) ───────────────────── */}
+      <BluetoothModal
+        isOpen={isBtModalOpen}
+        onClose={() => setIsBtModalOpen(false)}
+        userName="Kasir"
+        onConnectedContinue={() => {
+          setIsBtModalOpen(false);
+          handleProcessCheckout(null, true);
+        }}
+        onProceedWithoutPrinter={() => {
+          setIsBtModalOpen(false);
+          handleProcessCheckout(null, true);
+        }}
+        continueButtonText="Lanjutkan Konfirmasi & Cetak Struk"
+      />
     </div>
   );
 }

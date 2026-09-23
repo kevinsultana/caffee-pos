@@ -145,10 +145,13 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
     parts.push(enc('== TIKET DAPUR ==\n'));
     parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal size
+    const isTakeaway = queueNum.toUpperCase().startsWith('TA') || order?.orderType === 'TAKEAWAY';
+    const typeBadge = isTakeaway ? '[ BUNGKUS / TAKEAWAY ]' : '[ DINE IN / DI TEMPAT ]';
+    parts.push(enc(typeBadge + '\n'));
     parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
     parts.push(enc(sep + '\n'));
 
-    // Nomor antrean besar & jelas untuk pelanggan
+    // Nomor antrean besar & jelas untuk dapur
     if (queueNum && queueNum !== '-') {
       parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
       parts.push(enc('NOMOR ANTREAN\n'));
@@ -165,6 +168,7 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(enc('No. Order : ' + (order.orderNumber || '-') + '\n'));
     parts.push(enc('Waktu     : ' + fmtDt(order.createdAt) + '\n'));
     parts.push(enc('Pelanggan : ' + (order.customerNameSnapshot || order.customer?.name || 'Umum') + '\n'));
+    parts.push(enc('Tipe      : ' + (isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)') + '\n'));
     parts.push(enc('Sumber    : ' + (order.source === 'PUBLIC_QR' ? 'QR Online' : 'Kasir POS') + '\n'));
     parts.push(enc(sep + '\n'));
 
@@ -200,10 +204,12 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
 
 
     // Meta transaksi
+    const isTakeawayCust = queueNum.toUpperCase().startsWith('TA') || order?.orderType === 'TAKEAWAY';
     parts.push(new Uint8Array([ESC, 0x61, 0x00])); // left
     parts.push(enc('Waktu    : ' + fmtDt(order.paidAt || order.createdAt) + '\n'));
     parts.push(enc('No.Order : ' + (order.orderNumber || '-') + '\n'));
     parts.push(enc('Antrean  : ' + queueNum + '\n'));
+    parts.push(enc('Pesanan  : ' + (isTakeawayCust ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)') + '\n'));
     parts.push(enc('Kasir    : ' + (order.createdBy?.name || 'Kasir') + '\n'));
     parts.push(enc('Pelanggan: ' + (order.customerNameSnapshot || order.customer?.name || 'Umum') + '\n'));
     parts.push(enc(sep + '\n'));

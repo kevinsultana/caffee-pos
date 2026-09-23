@@ -50,6 +50,9 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
   const isKitchen = printMode === 'KITCHEN';
   const is80mm = store?.printerWidth === 80;
 
+  const rawQueue = order.queueNumber || order.queue_number || order.queue || order.queueNo || '';
+  const isTakeaway = rawQueue.toUpperCase().startsWith('TA') || order.orderType === 'TAKEAWAY';
+
   return (
     <div id="thermal-receipt-print-area" className="hidden print:block font-mono text-black">
       <div
@@ -66,8 +69,13 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
              ══════════════════════════════════════════════════════════════════ */
           <div>
             {/* Header Tiket Dapur */}
-            <div className="text-center font-black text-xs sm:text-sm border-2 border-black p-1 uppercase tracking-wider mb-2">
+            <div className="text-center font-black text-xs sm:text-sm border-2 border-black p-1 uppercase tracking-wider mb-1">
               TIKET DAPUR / KITCHEN
+            </div>
+
+            {/* Banner Tipe Pesanan */}
+            <div className="text-center font-black text-xs py-0.5 border-2 border-black uppercase tracking-wider mb-2">
+              {isTakeaway ? '[ BUNGKUS / TAKEAWAY ]' : '[ DINE IN / DI TEMPAT ]'}
             </div>
 
             {/* Nomor Antrean Menonjol & Besar */}
@@ -76,12 +84,16 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
                 NOMOR ANTREAN
               </div>
               <div className="text-3xl sm:text-4xl font-black tracking-tight">
-                {order.queueNumber || '-'}
+                {rawQueue || '-'}
               </div>
             </div>
 
             {/* Metadata Pesanan */}
             <div className="text-[10px] sm:text-[11px] space-y-0.5 my-2">
+              <div className="flex justify-between">
+                <span className="text-gray-700">Tipe:</span>
+                <span className="font-bold">{isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)'}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-gray-700">No. Order:</span>
                 <span className="font-bold">{order.orderNumber}</span>
@@ -194,7 +206,13 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
               <div className="flex justify-between">
                 <span>No. Antrean:</span>
                 <span className="font-bold">
-                  {order.queueNumber || order.queue_number || order.queue || order.queueNo || '-'}
+                  {rawQueue || '-'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Pesanan:</span>
+                <span className="font-bold">
+                  {isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)'}
                 </span>
               </div>
               <div className="flex justify-between">

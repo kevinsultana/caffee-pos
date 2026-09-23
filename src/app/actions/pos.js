@@ -182,6 +182,7 @@ export async function processPosCheckout({
   customerName = 'Pelanggan',
   customerPhone = '',
   queueNumber,
+  orderType = 'DINE_IN',
   paymentMethod,
   promoCode = '',
   cashReceived = 0,
@@ -740,6 +741,7 @@ export async function processPosCheckout({
       data: {
         orderNumber: transactionResult.order.orderNumber,
         queueNumber: transactionResult.order.queueNumber || queueNumber?.trim() || null,
+        orderType: orderType || (queueNumber?.trim()?.toUpperCase()?.startsWith('TA') ? 'TAKEAWAY' : 'DINE_IN'),
         publicQrToken: transactionResult.order.publicQrToken || null,
         grandTotal,
         promotionDiscount: totalPromoDiscount,
@@ -751,6 +753,7 @@ export async function processPosCheckout({
           id: transactionResult.order.id,
           orderNumber: transactionResult.order.orderNumber,
           queueNumber: transactionResult.order.queueNumber || queueNumber?.trim() || null,
+          orderType: orderType || (queueNumber?.trim()?.toUpperCase()?.startsWith('TA') ? 'TAKEAWAY' : 'DINE_IN'),
           createdAt: transactionResult.order.createdAt,
           paidAt: transactionResult.order.paidAt,
           customerNameSnapshot: transactionResult.order.customerNameSnapshot,
