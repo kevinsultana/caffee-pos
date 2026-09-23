@@ -268,6 +268,79 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
   return concat(...parts);
 }
 
+/**
+ * Build ESC/POS bytes untuk CETAK TENT CARD QR MEJA (Thermal Printer)
+ */
+export function buildQrCardBytes({
+  storeName = 'SCHAW CAFE',
+  tableNumber = '01',
+  menuUrl = 'http://localhost:3000/menu',
+  printerWidth = 58,
+}) {
+  const cols = (printerWidth || 58) === 80 ? 48 : 32;
+  const sep = '='.repeat(cols);
+  const thinSep = '-'.repeat(cols);
+
+  const parts = [];
+
+  // 1. Initialize printer
+  parts.push(new Uint8Array([ESC, 0x40]));
+
+  // 2. Center alignment
+  parts.push(new Uint8Array([ESC, 0x61, 0x01]));
+
+  // 3. Store name header (Bold, Double Height)
+  parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold ON
+  parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
+  parts.push(enc((storeName || 'SCHAW CAFE').toUpperCase() + '\n'));
+  parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal font size
+  parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold OFF
+  parts.push(enc('PESAN MENU DARI MEJA\n'));
+  parts.push(enc(sep + '\n\n'));
+
+  // 4. Meja Info (Big Bold: Double width + double height)
+  parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold ON
+  parts.push(new Uint8Array([ESC, 0x21, 0x30])); // double width + double height (0x20 | 0x10)
+  parts.push(enc(`MEJA #${tableNumber || '01'}\n`));
+  parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
+  parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold OFF
+  parts.push(enc(thinSep + '\n\n'));
+
+  // 5. ESC/POS Standard 2D QR Code
+  const qrString = String(menuUrl || 'http://localhost:3000/menu');
+  const qrData = enc(qrString);
+  const moduleSize = cols === 48 ? 8 : 6; // dot size per module
+
+  // 5a. Function 165: Model 2 (49 65 50 0)
+  parts.push(new Uint8Array([GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]));
+  // 5b. Function 167: Module size (49 67 moduleSize)
+  parts.push(new Uint8Array([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, moduleSize]));
+  // 5c. Function 169: Error correction Level M (49 69 49)
+  parts.push(new Uint8Array([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]));
+  // 5d. Function 180: Store data (49 80 48 data...)
+  const storeLen = qrData.length + 3;
+  const pL = storeLen & 0xff;
+  const pH = (storeLen >> 8) & 0xff;
+  parts.push(new Uint8Array([GS, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30]));
+  parts.push(qrData);
+  // 5e. Function 181: Print symbol (49 81 48)
+  parts.push(new Uint8Array([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]));
+
+  // 6. Subtext / Instructions below QR
+  parts.push(enc('\n'));
+  parts.push(enc('Scan QR Code di atas\n'));
+  parts.push(enc('menggunakan kamera smartphone Anda\n'));
+  parts.push(enc('untuk langsung memilih menu & pesan.\n'));
+  parts.push(enc(sep + '\n'));
+  parts.push(enc('Selamat Menikmati Hidangan!\n'));
+
+  // 7. Feed 5 lines & paper cut
+  parts.push(new Uint8Array([ESC, 0x64, 0x05]));
+  parts.push(new Uint8Array([GS, 0x56, 0x00]));
+
+  return concat(...parts);
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 export function BluetoothPrinterProvider({ children }) {
   const deviceRef = useRef(null);
@@ -470,6 +543,7 @@ export function BluetoothPrinterProvider({ children }) {
     disconnect,
     printBytes,
     buildReceiptBytes,
+    buildQrCardBytes,
     setBtServiceUuid,
   };
 
