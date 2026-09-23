@@ -14,10 +14,14 @@ import ThermalReceipt from '@/components/pos/ThermalReceipt';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
 
 export default function PosScreenPage() {
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
+
+  // Bluetooth Printer — koneksi global dari context (persist lintas halaman)
+  const { isConnected: btConnected, printBytes, btDeviceName } = useBluetooth();
 
   // Mode Tab: 'CATALOG' | 'ONLINE_ORDERS'
   const [activeTab, setActiveTab] = useState('CATALOG');
@@ -418,35 +422,46 @@ export default function PosScreenPage() {
       return;
     }
 
-    try {
+    // ── Path 1: Bluetooth BLE (jika printer terhubung via context) ────────────
+    if (btConnected) {
+      const store = {
+        name: storeInfo?.name || 'SCHAW CAFE',
+        printerWidth: settings?.printerWidth || 58,
+        code: storeInfo?.code || 'MAIN',
+      };
+
+      toast.loading(
+        mode === 'KITCHEN' ? 'Mengirim tiket dapur ke printer...' : 'Mengirim struk ke printer Bluetooth...',
+        { id: 'pos-thermal-print', duration: 8000 }
+      );
+
       setPrintOrder(orderToPrint);
       setPrintMode(mode);
-      toast.loading('Mengirim ke printer thermal Bluetooth...', {
-        id: 'pos-thermal-print',
-        duration: 1500,
-      });
 
-      setTimeout(() => {
-        try {
-          window.print();
+      const bytes = buildReceiptBytes(orderToPrint, store, mode);
+
+      printBytes(bytes)
+        .then(() => {
           toast.success(
-            mode === 'KITCHEN'
-              ? 'Perintah cetak tiket dapur berhasil dikirim!'
-              : 'Perintah cetak struk berhasil dikirim ke printer!',
+            mode === 'KITCHEN' ? 'Tiket dapur berhasil dicetak!' : 'Struk berhasil dicetak!',
             { id: 'pos-thermal-print', duration: 3000 }
           );
-        } catch (err) {
-          console.error('[window.print Error]', err);
+        })
+        .catch((err) => {
+          console.error('[BLE Print Error]', err);
           toast.error(
-            'Gagal mencetak: ' + (err.message || 'Periksa koneksi Bluetooth printer Anda.'),
+            'Gagal cetak via Bluetooth: ' + (err.message || 'Cek koneksi printer.'),
             { id: 'pos-thermal-print' }
           );
-        }
-      }, 120);
-    } catch (err) {
-      console.error('[handlePrint Error]', err);
-      toast.error('Gagal memproses cetak struk.', { id: 'pos-thermal-print' });
+        });
+      return;
     }
+
+    // Printer BLE tidak terhubung — tampilkan pesan yang jelas
+    toast.error(
+      'Printer Bluetooth belum terhubung. Hubungkan printer di halaman Pengaturan terlebih dahulu.',
+      { duration: 5000 }
+    );
   };
 
   function handleProcessCheckout(e) {

@@ -1,8 +1,55 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { logout } from '@/app/actions/auth';
 import { cn } from '@/lib/utils';
+import { useBluetooth } from '@/contexts/BluetoothPrinterContext';
+
+// ── Bluetooth Printer Status Badge (ditampilkan di semua halaman dashboard) ──
+function BluetoothBadge() {
+  const { btStatus, btDeviceName } = useBluetooth();
+  const isConnected = btStatus === 'connected';
+  const isReconnecting = btStatus === 'reconnecting';
+
+  return (
+    <Link
+      href="/dashboard/settings"
+      title={
+        isConnected
+          ? `Printer terhubung: ${btDeviceName}`
+          : isReconnecting
+            ? 'Reconnecting ke printer...'
+            : 'Klik untuk mengatur koneksi Bluetooth printer'
+      }
+      className={cn(
+        'hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all',
+        isConnected
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+          : isReconnecting
+            ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+            : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+      )}
+    >
+      {isConnected ? (
+        <span className="flex h-2 w-2 relative">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        </span>
+      ) : isReconnecting ? (
+        <span className="flex h-2 w-2 relative">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+        </span>
+      ) : (
+        <span className="inline-flex h-2 w-2 rounded-full bg-slate-300" />
+      )}
+      <span className="hidden md:inline max-w-30 truncate">
+        {isConnected ? btDeviceName : isReconnecting ? 'Reconnecting...' : 'Printer BT'}
+      </span>
+    </Link>
+  );
+}
 
 export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onToggleCollapse }) {
   const router = useRouter();
@@ -107,6 +154,10 @@ export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onTog
 
       {/* Right section: User Profile & Actions */}
       <div className="flex items-center gap-3 ml-auto">
+
+        {/* ── Bluetooth Printer Status Badge ─────────────────────────── */}
+        <BluetoothBadge />
+
         {/* User Info & Badge */}
         <div className="flex items-center gap-2.5 pl-2">
           <div className="hidden sm:flex flex-col items-end">

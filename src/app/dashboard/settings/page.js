@@ -11,6 +11,7 @@ import {
   removeQrisImage,
 } from '@/app/actions/settings';
 import { cn } from '@/lib/utils';
+import { useBluetooth, BLE_PROFILES, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
 
 // ── Sub-komponen: Toggle Switch ───────────────────────────────────────────────
 function Toggle({ id, checked, onChange, disabled }) {
@@ -99,6 +100,19 @@ export default function SettingsPage() {
   const [serviceChargeRate, setServiceChargeRate] = useState(0);
   const [cashRoundingEnabled, setCashRoundingEnabled] = useState(false);
   const [cashRoundingUnit, setCashRoundingUnit] = useState(0);
+
+  // ── Bluetooth Printer — dari Global Context (persists across navigations) ─
+  const {
+    btStatus,
+    btDeviceName,
+    btServiceUuid,
+    btErrorMsg,
+    connect: handleBtConnect,
+    disconnect: handleBtDisconnect,
+    printBytes,
+    setBtServiceUuid,
+  } = useBluetooth();
+  const [isTestPrinting, setIsTestPrinting] = useState(false);
 
   // Load initial settings
   const loadData = async () => {
@@ -244,6 +258,57 @@ export default function SettingsPage() {
       setQrisImageUrl(null);
     }
     setIsUploadingQris(false);
+  };
+
+  // Handle Test Print — menggunakan context printBytes
+  const handleTestPrint = async () => {
+    if (btStatus !== 'connected') {
+      toast.error('Belum terhubung ke printer Bluetooth.');
+      return;
+    }
+    setIsTestPrinting(true);
+    const toastId = toast.loading('Mengirim data ke printer...');
+    try {
+      // Buat objek order dummy untuk test print
+      const testOrder = {
+        orderNumber: 'TEST-001',
+        queueNumber: 'A-00',
+        createdAt: new Date().toISOString(),
+        paidAt: new Date().toISOString(),
+        customerNameSnapshot: 'Test Print',
+        createdBy: { name: 'Kasir' },
+        source: 'POS',
+        items: [
+          {
+            productNameSnapshot: 'KONEKSI BLUETOOTH',
+            variantNameSnapshot: null,
+            quantity: 1,
+            unitPrice: 0,
+            subtotal: 0,
+            notes: 'OK',
+            promotionDiscount: 0,
+          },
+        ],
+        productSubtotal: 0,
+        promotionDiscount: 0,
+        serviceChargeAmount: 0,
+        serviceChargeRate: 0,
+        taxAmount: 0,
+        taxRate: 0,
+        roundingAmount: 0,
+        cashPayable: 0,
+        grandTotal: 0,
+        payment: { method: 'CASH', cashReceived: 0, changeAmount: 0 },
+      };
+      const storeInfo = { name: storeName || 'SCHAW CAFE', printerWidth, code: 'MAIN' };
+      const bytes = buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
+      await printBytes(bytes);
+      toast.success('Struk test berhasil dicetak!', { id: toastId });
+    } catch (err) {
+      toast.error('Gagal mencetak: ' + (err.message || 'Cek koneksi Bluetooth.'), { id: toastId });
+    } finally {
+      setIsTestPrinting(false);
+    }
   };
 
   // Handle Save Settings
@@ -538,6 +603,199 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+        </div>
+      </SettingsCard>
+
+      {/* ─── BLUETOOTH PRINTER ────────────────────────────────────────────── */}
+      <SettingsCard
+        title="Koneksi Bluetooth Printer Termal"
+        description="Hubungkan langsung printer thermal Bluetooth via Web Bluetooth API (BLE). Tersedia di Google Chrome & Microsoft Edge."
+      >
+        {/* Status Badge */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            {btStatus === 'connected' && (
+              <>
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                <span className="text-xs font-semibold text-emerald-700">
+                  Terhubung ke <span className="font-bold">{btDeviceName}</span>
+                </span>
+              </>
+            )}
+            {btStatus === 'connecting' && (
+              <>
+                <svg className="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-xs font-semibold text-blue-600">Menghubungkan...</span>
+              </>
+            )}
+            {btStatus === 'reconnecting' && (
+              <>
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                </span>
+                <svg className="w-3.5 h-3.5 animate-spin text-amber-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-xs font-semibold text-amber-600">Reconnecting otomatis...</span>
+              </>
+            )}
+            {btStatus === 'disconnecting' && (
+              <>
+                <svg className="w-4 h-4 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-xs font-semibold text-slate-500">Memutus koneksi...</span>
+              </>
+            )}
+            {btStatus === 'error' && (
+              <>
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="text-xs font-semibold text-rose-600">Gagal Terhubung</span>
+              </>
+            )}
+            {btStatus === 'unsupported' && (
+              <>
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+                <span className="text-xs font-semibold text-amber-700">Browser Tidak Didukung</span>
+              </>
+            )}
+            {btStatus === 'idle' && (
+              <>
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-slate-300" />
+                <span className="text-xs font-semibold text-slate-500">Belum Terhubung</span>
+              </>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {btStatus !== 'connected' ? (
+              <button
+                id="btn-bt-connect"
+                type="button"
+                onClick={handleBtConnect}
+                disabled={btStatus === 'connecting' || btStatus === 'disconnecting' || btStatus === 'reconnecting'}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                </svg>
+                Scan &amp; Hubungkan
+              </button>
+            ) : (
+              <button
+                id="btn-bt-disconnect"
+                type="button"
+                onClick={handleBtDisconnect}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 border border-slate-200 hover:border-rose-200 transition-all cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728M9 9l6 6m0-6l-6 6" />
+                </svg>
+                Putuskan Koneksi
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {(btStatus === 'error' || btStatus === 'unsupported') && btErrorMsg && (
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-700 flex items-start gap-2">
+            <svg className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <span>{btErrorMsg}</span>
+          </div>
+        )}
+
+        {/* Service UUID Selector */}
+        <div>
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+            BLE Service Profile (UUID)
+          </label>
+          <select
+            id="select-bt-service-uuid"
+            value={btServiceUuid}
+            onChange={(e) => {
+              setBtServiceUuid(e.target.value);
+              // Jika sudah connected, disconnect dulu saat ganti profile
+              if (btStatus === 'connected') {
+                handleBtDisconnect();
+              }
+            }}
+            disabled={btStatus === 'connecting' || btStatus === 'disconnecting'}
+            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all cursor-pointer"
+          >
+            {BLE_PROFILES.map((p) => (
+              <option key={p.serviceUuid} value={p.serviceUuid}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-slate-400 mt-1.5">
+            Jika <strong>Auto-Detect</strong> gagal, coba pilih profile yang sesuai merk printer Anda secara manual.
+          </p>
+        </div>
+
+        {/* Test Print Button */}
+        <div className="pt-1 border-t border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-slate-900">Test Print Struk</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Cetak struk percobaan untuk memverifikasi koneksi dan format kertas printer.
+              </p>
+            </div>
+            <button
+              id="btn-bt-test-print"
+              type="button"
+              onClick={handleTestPrint}
+              disabled={btStatus !== 'connected' || isTestPrinting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isTestPrinting ? (
+                <>
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Mencetak...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                  </svg>
+                  Cetak Struk Test
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Info Box */}
+        <div className="p-3 bg-blue-50 rounded-xl border border-blue-200/80 text-[11px] text-blue-700 space-y-1.5">
+          <p className="font-semibold text-blue-800 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+            </svg>
+            Web Bluetooth API — Panduan Penggunaan
+          </p>
+          <ul className="space-y-1 pl-1 list-none">
+            <li>✅ <strong>Didukung:</strong> Google Chrome &amp; Microsoft Edge (versi terbaru)</li>
+            <li>❌ <strong>Tidak didukung:</strong> Firefox, Safari, dan browser lainnya</li>
+            <li>🔒 <strong>HTTPS wajib</strong> di production — localhost tetap berfungsi</li>
+            <li>📱 <strong>Printer BLE</strong> yang kompatibel: Xprinter, GOOJPRT, RONGTA, Cashino, dll.</li>
+          </ul>
         </div>
       </SettingsCard>
 

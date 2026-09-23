@@ -7,6 +7,7 @@ import DashboardHeader from '@/components/layout/DashboardHeader';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { getRequiredPermissionForRoute, hasPermission, getDefaultRouteForUser } from '@/lib/permissions';
+import { BluetoothPrinterProvider } from '@/contexts/BluetoothPrinterContext';
 
 /**
  * Client shell yang mengelola state sidebar open/close (mobile) dan collapsed (desktop).
@@ -53,7 +54,7 @@ export default function DashboardShell({ user, children }) {
   }, [pathname, user, router]);
 
   return (
-    <>
+    <BluetoothPrinterProvider>
       {/* Global toast provider untuk seluruh dashboard */}
       <Toaster
         position="top-right"
@@ -104,6 +105,6 @@ export default function DashboardShell({ user, children }) {
           {children}
         </div>
       </main>
-    </>
+    </BluetoothPrinterProvider>
   );
 }
