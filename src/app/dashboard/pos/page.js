@@ -1165,7 +1165,7 @@ export default function PosScreenPage() {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 items-center justify-between">
                       <span>Antrean <span className="text-rose-500 font-bold">*</span></span>
                       <span className={cn('text-[9px] font-bold px-1 rounded', orderType === 'TAKEAWAY' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')}>
                         {orderType === 'TAKEAWAY' ? 'TA' : 'A'}
