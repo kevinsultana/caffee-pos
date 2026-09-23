@@ -786,6 +786,8 @@ model Order {
   @@index([storeId, createdAt])
   @@index([createdAt])
   @@index([storeId, status])
+  @@index([storeId, source])       // Filter pesanan QR vs POS
+  @@index([storeId, paidAt])       // Laporan pendapatan harian/periodik
   @@index([customerId])
   @@index([createdById])
 }
@@ -856,6 +858,8 @@ model Payment {
   shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
 
   @@index([shiftId])
+  @@index([shiftId, status])       // Filter payment PAID per shift
+  @@index([shiftId, method])       // Filter CASH vs QRIS untuk kalkulasi laci kasir
 }
 
 model Shift {
@@ -914,6 +918,7 @@ model CashMovement {
 
   @@index([storeId, createdAt])
   @@index([shiftId, createdAt])
+  @@index([shiftId, type])         // Aggregate CASH_IN vs CASH_OUT per shift
   @@index([userId])
 }
 

@@ -800,6 +800,8 @@ export async function processPosCheckout({
  * Digunakan untuk pemantauan transaksi kasir dan cetak ulang struk thermal.
  */
 export async function getShiftTransactions({ shiftId = null, limit = 100 } = {}) {
+  // Hard cap: tidak boleh melebihi 200 record per request untuk mencegah query tidak terkontrol
+  const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 200);
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
@@ -876,7 +878,7 @@ export async function getShiftTransactions({ shiftId = null, limit = 100 } = {})
       orderBy: {
         createdAt: 'desc',
       },
-      take: limit,
+      take: safeLimit,
     });
 
     // 3. Serialisasi Decimal fields ke Number agar aman dikirim ke Client Components

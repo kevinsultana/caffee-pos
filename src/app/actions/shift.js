@@ -223,23 +223,43 @@ export async function closeShift({ actualCash, depositedCash = 0, notes }) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
+    // ── Validasi ketat actualCash ─────────────────────────────────────────────
+    // Tolak null, undefined, string kosong, boolean, atau objek
+    if (actualCash === null || actualCash === undefined || actualCash === '') {
+      return { error: 'Jumlah uang fisik aktual wajib diisi.' };
+    }
+    const actual = Number(actualCash);
+    if (!Number.isFinite(actual)) {
+      return { error: 'Jumlah uang fisik aktual harus berupa angka yang valid.' };
+    }
+    if (actual < 0) {
+      return { error: 'Jumlah uang fisik aktual tidak boleh negatif.' };
+    }
+    // Batas wajar: maksimal Rp 1.000.000.000 per shift
+    if (actual > 1_000_000_000) {
+      return { error: 'Jumlah uang fisik aktual melebihi batas wajar (maks Rp 1.000.000.000).' };
+    }
+
+    // ── Validasi ketat depositedCash ──────────────────────────────────────────
+    const deposited = depositedCash === null || depositedCash === undefined
+      ? 0
+      : Number(depositedCash);
+    if (!Number.isFinite(deposited)) {
+      return { error: 'Nominal uang disetor harus berupa angka yang valid.' };
+    }
+    if (deposited < 0) {
+      return { error: 'Nominal uang disetor tidak boleh negatif.' };
+    }
+    if (deposited > actual) {
+      return { error: 'Nominal uang disetor tidak boleh melebihi uang fisik aktual di laci.' };
+    }
+
     const shiftRes = await getCurrentShift();
     if (!shiftRes.data) {
       return { error: 'Tidak ada shift aktif yang ditemukan untuk ditutup.' };
     }
 
     const currentShift = shiftRes.data;
-    const actual = Number(actualCash);
-    const deposited = Number(depositedCash);
-
-    if (isNaN(actual) || actual < 0) {
-      return { error: 'Jumlah uang fisik aktual di laci harus diisi dengan benar.' };
-    }
-
-    if (isNaN(deposited) || deposited < 0) {
-      return { error: 'Nominal uang disetor ke owner harus berupa angka valid non-negatif.' };
-    }
-
     const expected = currentShift.expectedCash;
     const difference = actual - expected;
 
