@@ -792,14 +792,15 @@ export async function processPosCheckout({
 }
 
 /**
- * Mengambil riwayat transaksi Order pada shift kasir yang sedang aktif (OPEN).
+ * Mengambil riwayat transaksi Order pada kasir POS.
+ * Menyertakan relasi kasir (createdBy) dan shift (payment.shift.user)
  * Digunakan untuk pemantauan transaksi kasir dan cetak ulang struk thermal.
  */
-export async function getShiftTransactions() {
+export async function getShiftTransactions({ shiftId = null, limit = 100 } = {}) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
-    // 1. Ambil data shift aktif saat ini
+    // 1. Ambil data shift aktif saat ini (jika ada)
     const activeShift = await prisma.shift.findFirst({
       where: {
         storeId,
@@ -829,24 +830,14 @@ export async function getShiftTransactions() {
       timezone: store?.settings?.timezone || 'Asia/Jakarta',
     };
 
-    if (!activeShift) {
-      return {
-        data: {
-          shift: null,
-          store: storeInfo,
-          transactions: [],
-        },
-      };
-    }
+    // 2. Ambil riwayat transaksi pesanan (dengan relasi Kasir & Shift)
+    const whereClause = {
+      storeId,
+      ...(shiftId ? { payment: { shiftId } } : {}),
+    };
 
-    // 2. Ambil transaksi pesanan yang pembayarannya tercatat pada shift ini
     const orders = await prisma.order.findMany({
-      where: {
-        storeId,
-        payment: {
-          shiftId: activeShift.id,
-        },
-      },
+      where: whereClause,
       include: {
         items: {
           include: {
@@ -855,7 +846,6 @@ export async function getShiftTransactions() {
           },
         },
         customer: true,
-        payment: true,
         promotions: true,
         createdBy: {
           select: {
@@ -864,10 +854,26 @@ export async function getShiftTransactions() {
             username: true,
           },
         },
+        payment: {
+          include: {
+            shift: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
       },
+      take: limit,
     });
 
     // 3. Serialisasi Decimal fields ke Number agar aman dikirim ke Client Components
@@ -887,6 +893,13 @@ export async function getShiftTransactions() {
       grandTotal: Number(order.grandTotal || 0),
       roundingAmount: Number(order.roundingAmount || 0),
       cashPayable: Number(order.cashPayable || 0),
+      createdBy: order.createdBy
+        ? {
+            id: order.createdBy.id,
+            name: order.createdBy.name,
+            username: order.createdBy.username,
+          }
+        : null,
       payment: order.payment
         ? {
             ...order.payment,
@@ -895,6 +908,17 @@ export async function getShiftTransactions() {
             changeAmount: order.payment.changeAmount ? Number(order.payment.changeAmount) : null,
             paidAt: order.payment.paidAt?.toISOString?.() || null,
             createdAt: order.payment.createdAt?.toISOString?.() || null,
+            shift: order.payment.shift
+              ? {
+                  id: order.payment.shift.id,
+                  status: order.payment.shift.status,
+                  openedAt: order.payment.shift.openedAt?.toISOString?.() || null,
+                  closedAt: order.payment.shift.closedAt?.toISOString?.() || null,
+                  openingCash: Number(order.payment.shift.openingCash || 0),
+                  actualCash: order.payment.shift.actualCash ? Number(order.payment.shift.actualCash) : null,
+                  user: order.payment.shift.user || null,
+                }
+              : null,
           }
         : null,
       items: (order.items || []).map((item) => ({
@@ -940,13 +964,16 @@ export async function getShiftTransactions() {
 
     return {
       data: {
-        shift: {
-          id: activeShift.id,
-          openedAt: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
-          startTime: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
-          openingCash: Number(activeShift.openingCash || 0),
-          user: activeShift.user,
-        },
+        shift: activeShift
+          ? {
+              id: activeShift.id,
+              status: activeShift.status,
+              openedAt: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
+              startTime: (activeShift.openedAt || activeShift.createdAt)?.toISOString?.() || null,
+              openingCash: Number(activeShift.openingCash || 0),
+              user: activeShift.user,
+            }
+          : null,
         store: storeInfo,
         transactions: serializedOrders,
       },

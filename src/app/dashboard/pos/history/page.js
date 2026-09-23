@@ -108,8 +108,10 @@ export default function ShiftHistoryPage() {
       const matchQueue = order.queueNumber?.toLowerCase().includes(q);
       const matchCustomer = order.customerNameSnapshot?.toLowerCase().includes(q);
       const matchPhone = order.customerPhoneSnapshot?.toLowerCase().includes(q);
+      const matchCashier = (order.createdBy?.name || order.payment?.shift?.user?.name)?.toLowerCase().includes(q);
+      const matchShift = order.payment?.shift?.id?.toLowerCase().includes(q);
 
-      return matchMethod && (matchOrderNum || matchQueue || matchCustomer || matchPhone);
+      return matchMethod && (matchOrderNum || matchQueue || matchCustomer || matchPhone || matchCashier || matchShift);
     });
   }, [transactions, searchQuery, methodFilter]);
 
@@ -196,10 +198,10 @@ export default function ShiftHistoryPage() {
             <span className="text-xs text-slate-500 font-medium">Kasir POS</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            Riwayat Transaksi Shift
+            Riwayat Transaksi
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Daftar seluruh transaksi penjualan pada shift kasir yang sedang aktif dan cetak ulang struk.
+            Daftar riwayat transaksi penjualan kasir, informasi kasir &amp; shift yang melayani, serta cetak ulang struk.
           </p>
         </div>
 
@@ -276,21 +278,18 @@ export default function ShiftHistoryPage() {
           </div>
         </div>
       ) : !loading && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-2xs">
+          <div className="flex items-center gap-2.5 text-slate-600">
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+            <span>
+              <strong>Mode Riwayat Toko:</strong> Tidak ada shift aktif untuk kasir Anda saat ini. Menampilkan riwayat transaksi penjualan toko.
+            </span>
           </div>
-          <h2 className="text-base font-bold text-amber-900">Shift Kasir Belum Dibuka</h2>
-          <p className="text-sm text-amber-700 max-w-md mx-auto mt-1">
-            Anda belum membuka shift kasir saat ini. Buka shift terlebih dahulu untuk mulai melayani transaksi penjualan dan mencatat kas.
-          </p>
           <Link
             href="/dashboard/pos/shift"
-            className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors shrink-0"
           >
-            Buka Shift Kasir Sekarang
+            Buka Shift Kasir Baru &rarr;
           </Link>
         </div>
       )}
@@ -375,6 +374,8 @@ export default function ShiftHistoryPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   <th className="py-3 px-4">Waktu</th>
                   <th className="py-3 px-4">No. Order</th>
+                  <th className="py-3 px-4">Kasir</th>
+                  <th className="py-3 px-4">Shift</th>
                   <th className="py-3 px-4">Antrean</th>
                   <th className="py-3 px-4">Pelanggan</th>
                   <th className="py-3 px-4">Menu Items</th>
@@ -408,6 +409,52 @@ export default function ShiftHistoryPage() {
                       {/* No Order */}
                       <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-800">
                         {order.orderNumber}
+                      </td>
+
+                      {/* Kasir */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                          </svg>
+                          <span className="truncate max-w-28">
+                            {order.createdBy?.name || order.payment?.shift?.user?.name || 'Kasir'}
+                          </span>
+                        </div>
+                        {(order.createdBy?.username || order.payment?.shift?.user?.username) && (
+                          <div className="text-[10px] text-slate-400 font-mono pl-5">
+                            @{order.createdBy?.username || order.payment?.shift?.user?.username}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Shift */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {order.payment?.shift ? (
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-slate-800 text-xs">
+                                Shift #{order.payment.shift.id.slice(-6).toUpperCase()}
+                              </span>
+                              <span
+                                className={cn(
+                                  'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                                  order.payment.shift.status === 'OPEN'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                )}
+                              >
+                                {order.payment.shift.status === 'OPEN' ? 'Aktif' : 'Tutup'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              {formatTime(order.payment.shift.openedAt)}
+                              {order.payment.shift.closedAt ? ` - ${formatTime(order.payment.shift.closedAt)}` : ' - Sekarang'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Tanpa Shift</span>
+                        )}
                       </td>
 
                       {/* Antrean */}
@@ -541,13 +588,15 @@ export default function ShiftHistoryPage() {
 
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                    Kasir Penanggung Jawab
+                    Kasir &amp; Shift
                   </span>
                   <span className="font-semibold text-slate-800">
-                    {selectedOrder.createdBy?.name || 'Kasir'}
+                    {selectedOrder.createdBy?.name || selectedOrder.payment?.shift?.user?.name || 'Kasir'}
                   </span>
                   <span className="text-[11px] text-slate-500 block">
-                    Sumber: {selectedOrder.source === 'PUBLIC_QR' ? 'QR Meja Online' : 'Kasir POS'}
+                    {selectedOrder.payment?.shift
+                      ? `Shift #${selectedOrder.payment.shift.id.slice(-6).toUpperCase()} (${selectedOrder.payment.shift.status === 'OPEN' ? 'Aktif' : 'Tutup'})`
+                      : 'Sumber: ' + (selectedOrder.source === 'PUBLIC_QR' ? 'QR Meja Online' : 'Kasir POS')}
                   </span>
                 </div>
               </div>

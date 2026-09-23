@@ -194,15 +194,26 @@ export default function ShiftManagementPage() {
             Buka sesi shift kasir, catat modal awal, monitor arus kas laci, dan rekonsiliasi tutup shift.
           </p>
         </div>
-        <Link
-          href="/dashboard/pos"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors w-fit"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
-          Layar Kasir (POS)
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/pos/history"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Riwayat Transaksi
+          </Link>
+          <Link
+            href="/dashboard/pos"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+            Layar Kasir (POS)
+          </Link>
+        </div>
       </div>
 
       {/* ─── KONDISI 1: TIDAK ADA SHIFT AKTIF (BUKA SHIFT) ──────────────────── */}
@@ -298,33 +309,51 @@ export default function ShiftManagementPage() {
           </div>
 
           {/* KPI Laci Kas Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Modal Awal Kasir</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Modal Awal Kasir</p>
               <p className="text-lg font-bold font-mono text-slate-900 mt-1">
                 {formatRupiah(shift.openingCash)}
               </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Kas laci saat buka</p>
             </div>
 
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Penjualan Tunai (Cash)</p>
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Penjualan Tunai</p>
               <p className="text-lg font-bold font-mono text-emerald-700 mt-1">
                 +{formatRupiah(shift.cashSales)}
               </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Uang kas dari order</p>
             </div>
 
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kas Masuk/Keluar</p>
-              <p className="text-lg font-bold font-mono text-slate-700 mt-1">
-                {formatRupiah(shift.totalCashIn - shift.totalCashOut)}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Penjualan QRIS</p>
+              <p className="text-lg font-bold font-mono text-blue-700 mt-1">
+                {formatRupiah(shift.qrisSales)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Non-tunai (masuk rekening)</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Mutasi Kas Laci</p>
+              <p className={cn(
+                'text-lg font-bold font-mono mt-1',
+                (shift.cashIn || 0) - (shift.cashOut || 0) >= 0 ? 'text-slate-800' : 'text-rose-600'
+              )}>
+                {((shift.cashIn || 0) - (shift.cashOut || 0) >= 0 ? '+' : '') +
+                  formatRupiah((shift.cashIn || 0) - (shift.cashOut || 0))}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                In: +{formatRupiah(shift.cashIn || 0)} / Out: -{formatRupiah(shift.cashOut || 0)}
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 shadow-sm">
-              <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Kas Seharusnya di Laci</p>
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/90 shadow-2xs">
+              <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Kas di Laci (Saldo Akhir)</p>
               <p className="text-xl font-black font-mono text-emerald-700 mt-1">
                 {formatRupiah(shift.expectedCash)}
               </p>
+              <p className="text-[10px] text-emerald-600 font-medium mt-0.5">Target hitung fisik laci</p>
             </div>
           </div>
 
