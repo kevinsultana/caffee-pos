@@ -144,6 +144,13 @@ export const MENU_PERMISSIONS = [
     category: 'Konfigurasi',
     defaultRoute: '/dashboard/settings',
   },
+  {
+    code: 'MENU_ALL_TRANSACTIONS',
+    label: 'Akses Semua Transaksi Toko',
+    description: 'Melihat seluruh riwayat transaksi toko dengan filter kasir, tanggal, dan metode pembayaran. Khusus Owner/Manager.',
+    category: 'Laporan & Keuangan',
+    defaultRoute: '/dashboard/transactions',
+  },
 ];
 
 /**
@@ -170,6 +177,7 @@ export const ROUTE_PERMISSION_MAP = [
   { prefix: '/dashboard/users', permission: 'MENU_USERS' },
   { prefix: '/dashboard/audit', permission: 'MENU_AUDIT' },
   { prefix: '/dashboard/settings', permission: 'MENU_SETTINGS' },
+  { prefix: '/dashboard/transactions', permission: 'MENU_ALL_TRANSACTIONS' },
   { prefix: '/dashboard', permission: 'MENU_DASHBOARD', exact: true },
 ];
 

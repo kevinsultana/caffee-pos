@@ -992,3 +992,210 @@ export async function getShiftTransactions({ shiftId = null, limit = 100 } = {})
     };
   }
 }
+
+/**
+ * Mengambil SEMUA transaksi toko dengan filter fleksibel — khusus Owner/Manager.
+ * Berbeda dengan getShiftTransactions (yang dibatasi per shift kasir),
+ * fungsi ini memberikan pandangan menyeluruh atas seluruh penjualan toko.
+ *
+ * @param {Object} options
+ * @param {string|null} options.dateFrom  - ISO date string batas awal (inklusif, jam 00:00:00)
+ * @param {string|null} options.dateTo    - ISO date string batas akhir (inklusif, jam 23:59:59)
+ * @param {string|null} options.cashierId - ID kasir (createdById) untuk filter per kasir
+ * @param {string|null} options.paymentMethod - 'CASH' | 'QRIS' | null (semua)
+ * @param {number} options.limit          - Jumlah maks record (hard cap 500)
+ */
+export async function getAllTransactions({
+  dateFrom = null,
+  dateTo = null,
+  cashierId = null,
+  paymentMethod = null,
+  limit = 200,
+} = {}) {
+  // Hard cap: maksimal 500 per request untuk mencegah timeout
+  const safeLimit = Math.min(Math.max(1, Number(limit) || 200), 500);
+
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    // ── Build date filter menggunakan Prisma gte/lte ───────────────────────────
+    const dateFilter = {};
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      dateFilter.gte = from;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      dateFilter.lte = to;
+    }
+    const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+    // ── Build payment method filter (via nested relation) ─────────────────────
+    const paymentFilter =
+      paymentMethod && paymentMethod !== 'ALL'
+        ? { payment: { method: paymentMethod } }
+        : {};
+
+    // ── Where clause final ─────────────────────────────────────────────────────
+    const whereClause = {
+      storeId,
+      status: 'PAID',
+      ...(hasDateFilter ? { createdAt: dateFilter } : {}),
+      ...(cashierId ? { createdById: cashierId } : {}),
+      ...paymentFilter,
+    };
+
+    // ── Paralel: ambil store info + daftar kasir + transaksi ──────────────────
+    const [store, cashiers, orders] = await Promise.all([
+      prisma.store.findUnique({
+        where: { id: storeId },
+        include: { settings: true },
+      }),
+      prisma.user.findMany({
+        where: { storeId, status: 'ACTIVE' },
+        select: { id: true, name: true, username: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.order.findMany({
+        where: whereClause,
+        include: {
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
+          },
+          customer: true,
+          promotions: true,
+          createdBy: {
+            select: { id: true, name: true, username: true },
+          },
+          payment: {
+            include: {
+              shift: {
+                include: {
+                  user: { select: { id: true, name: true, username: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: safeLimit,
+      }),
+    ]);
+
+    const storeInfo = {
+      name: store?.name || 'Schaw Cafe',
+      code: store?.code || 'MAIN',
+      logoUrl: store?.logoUrl || null,
+      printerWidth: store?.settings?.printerWidth || 58,
+      taxRate: Number(store?.settings?.taxRate || 0),
+      taxEnabled: store?.settings?.taxEnabled || false,
+      serviceChargeRate: Number(store?.settings?.serviceChargeRate || 0),
+      serviceChargeEnabled: store?.settings?.serviceChargeEnabled || false,
+      timezone: store?.settings?.timezone || 'Asia/Jakarta',
+    };
+
+    // ── Serialisasi (sama persis dengan getShiftTransactions) ─────────────────
+    const serializedOrders = orders.map((order) => ({
+      ...order,
+      createdAt: order.createdAt?.toISOString?.() || null,
+      updatedAt: order.updatedAt?.toISOString?.() || null,
+      paidAt: order.paidAt?.toISOString?.() || null,
+      productSubtotal: Number(order.productSubtotal || 0),
+      promotionDiscount: Number(order.promotionDiscount || 0),
+      taxableSubtotal: Number(order.taxableSubtotal || 0),
+      serviceChargeRate: Number(order.serviceChargeRate || 0),
+      serviceChargeAmount: Number(order.serviceChargeAmount || 0),
+      taxRate: Number(order.taxRate || 0),
+      taxBase: Number(order.taxBase || 0),
+      taxAmount: Number(order.taxAmount || 0),
+      grandTotal: Number(order.grandTotal || 0),
+      roundingAmount: Number(order.roundingAmount || 0),
+      cashPayable: Number(order.cashPayable || 0),
+      createdBy: order.createdBy || null,
+      payment: order.payment
+        ? {
+            ...order.payment,
+            amount: Number(order.payment.amount || 0),
+            cashReceived: order.payment.cashReceived ? Number(order.payment.cashReceived) : null,
+            changeAmount: order.payment.changeAmount ? Number(order.payment.changeAmount) : null,
+            paidAt: order.payment.paidAt?.toISOString?.() || null,
+            createdAt: order.payment.createdAt?.toISOString?.() || null,
+            shift: order.payment.shift
+              ? {
+                  id: order.payment.shift.id,
+                  status: order.payment.shift.status,
+                  openedAt: order.payment.shift.openedAt?.toISOString?.() || null,
+                  closedAt: order.payment.shift.closedAt?.toISOString?.() || null,
+                  openingCash: Number(order.payment.shift.openingCash || 0),
+                  actualCash: order.payment.shift.actualCash
+                    ? Number(order.payment.shift.actualCash)
+                    : null,
+                  user: order.payment.shift.user || null,
+                }
+              : null,
+          }
+        : null,
+      items: (order.items || []).map((item) => ({
+        ...item,
+        createdAt: item.createdAt?.toISOString?.() || null,
+        unitPrice: Number(item.unitPrice || 0),
+        promotionDiscount: Number(item.promotionDiscount || 0),
+        subtotal: Number(item.subtotal || 0),
+        hppUnit: Number(item.hppUnit || 0),
+        hppTotal: Number(item.hppTotal || 0),
+        product: item.product
+          ? {
+              ...item.product,
+              price: Number(item.product.price || 0),
+              createdAt: item.product.createdAt?.toISOString?.() || null,
+              updatedAt: item.product.updatedAt?.toISOString?.() || null,
+            }
+          : null,
+        variant: item.variant
+          ? {
+              ...item.variant,
+              price: Number(item.variant.price || 0),
+              createdAt: item.variant.createdAt?.toISOString?.() || null,
+              updatedAt: item.variant.updatedAt?.toISOString?.() || null,
+            }
+          : null,
+      })),
+      promotions: (order.promotions || []).map((promo) => ({
+        ...promo,
+        valueSnapshot: Number(promo.valueSnapshot || 0),
+        maxDiscountSnapshot: promo.maxDiscountSnapshot ? Number(promo.maxDiscountSnapshot) : null,
+        discountAmount: Number(promo.discountAmount || 0),
+        createdAt: promo.createdAt?.toISOString?.() || null,
+      })),
+      customer: order.customer
+        ? {
+            ...order.customer,
+            createdAt: order.customer.createdAt?.toISOString?.() || null,
+            updatedAt: order.customer.updatedAt?.toISOString?.() || null,
+          }
+        : null,
+    }));
+
+    return {
+      data: {
+        transactions: serializedOrders,
+        cashiers,
+        store: storeInfo,
+        totalCount: serializedOrders.length,
+        isCapped: serializedOrders.length >= safeLimit,
+      },
+    };
+  } catch (error) {
+    console.error('[getAllTransactions] Error:', error);
+    const isSessionError = Boolean(error.message?.includes('Sesi tidak valid'));
+    return {
+      error: error.message || 'Gagal memuat semua transaksi toko.',
+      sessionRevoked: isSessionError,
+    };
+  }
+}

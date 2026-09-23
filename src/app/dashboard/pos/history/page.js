@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { getShiftTransactions } from '@/app/actions/pos';
+import { getCurrentShift } from '@/app/actions/shift';
 import ThermalReceipt from '@/components/pos/ThermalReceipt';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
@@ -50,6 +51,8 @@ export default function ShiftHistoryPage() {
   const [shiftData, setShiftData] = useState(null);
   const [storeData, setStoreData] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  // hasNoShift: true jika kasir belum membuka shift — blokir fetch transaksi
+  const [hasNoShift, setHasNoShift] = useState(false);
 
   // Filter & Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,14 +68,23 @@ export default function ShiftHistoryPage() {
 
   async function loadTransactions() {
     setLoading(true);
+    setHasNoShift(false);
     try {
-      const res = await getShiftTransactions();
+      // ── 1. Cek shift aktif kasir terlebih dahulu ───────────────────────────
+      const shiftRes = await getCurrentShift();
+
+      if (!shiftRes?.data) {
+        // Tidak ada shift aktif — tampilkan empty state, JANGAN fetch transaksi
+        setHasNoShift(true);
+        setLoading(false);
+        return;
+      }
+
+      // ── 2. Ada shift aktif — fetch HANYA transaksi shift ini ──────────────
+      const res = await getShiftTransactions({ shiftId: shiftRes.data.id });
       if (res?.error) {
         if (res.sessionRevoked || res.error.includes('Sesi tidak valid')) {
-          try {
-            sessionStorage.clear();
-            localStorage.clear();
-          } catch { }
+          try { sessionStorage.clear(); localStorage.clear(); } catch { }
           window.location.replace('/api/auth/clear-session');
           return;
         }
@@ -225,8 +237,53 @@ export default function ShiftHistoryPage() {
         </div>
       </div>
 
-      {/* ─── 2. Shift Info & Stats Card ─────────────────────────────────────── */}
-      {shiftData ? (
+      {/* ─── 2. Empty State — Belum Buka Shift ───────────────────────────────── */}
+      {!loading && hasNoShift && (
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-5 border-2 border-slate-200">
+            <svg className="w-9 h-9 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Shift Kasir Belum Dibuka</h2>
+          <p className="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
+            Anda harus membuka shift kasir terlebih dahulu untuk melihat riwayat transaksi.
+            Riwayat hanya menampilkan transaksi dari shift Anda yang sedang aktif.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <Link
+              href="/dashboard/pos/shift"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-sm transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              Buka Shift Kasir Sekarang
+            </Link>
+            <Link
+              href="/dashboard/pos"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl shadow-2xs transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+              Kembali ke Layar POS
+            </Link>
+          </div>
+          <p className="text-xs text-slate-400 mt-6">
+            Ingin melihat semua transaksi toko? Akses menu{' '}
+            <Link href="/dashboard/transactions" className="text-emerald-600 font-semibold hover:underline">
+              Semua Transaksi
+            </Link>{' '}(khusus Owner).
+          </p>
+        </div>
+      )}
+
+      {/* ─── Konten Utama (Shift Aktif) ─────────────────────────────────────── */}
+      {!hasNoShift && (
+        <>
+          {/* ─── 2. Shift Info & Stats Card ─────────────────────────────────── */}
+          {shiftData ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs">
             <div className="flex items-center justify-between">
@@ -741,6 +798,8 @@ export default function ShiftHistoryPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
