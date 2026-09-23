@@ -40,6 +40,7 @@ export async function getStoreSettings() {
               cashRoundingEnabled: store.settings.cashRoundingEnabled,
               cashRoundingUnit: Number(store.settings.cashRoundingUnit),
               timezone: store.settings.timezone,
+              maxActiveShifts: store.settings.maxActiveShifts ?? 1,
             }
           : {
               printerWidth: 58,
@@ -52,6 +53,7 @@ export async function getStoreSettings() {
               cashRoundingEnabled: false,
               cashRoundingUnit: 0,
               timezone: 'Asia/Jakarta',
+              maxActiveShifts: 1,
             },
       },
     };
@@ -409,6 +411,7 @@ export async function updateStoreSettings(payload) {
     serviceChargeRate,
     cashRoundingEnabled,
     cashRoundingUnit,
+    maxActiveShifts = 1,
   } = payload;
 
   // ── Validasi Nama Toko ───────────────────────────────────────────────
@@ -418,6 +421,9 @@ export async function updateStoreSettings(payload) {
 
   // ── Validasi Printer Width ───────────────────────────────────────────
   const validPrinterWidth = Number(printerWidth) === 80 ? 80 : 58;
+
+  // ── Validasi Maksimal Shift Aktif ────────────────────────────────────
+  const validMaxActiveShifts = Math.max(1, parseInt(maxActiveShifts, 10) || 1);
 
   // ── Validasi nilai rate ───────────────────────────────────────────────
   if (taxEnabled && (isNaN(taxRate) || taxRate < 0 || taxRate > 100)) {
@@ -455,6 +461,7 @@ export async function updateStoreSettings(payload) {
         serviceChargeRate,
         cashRoundingEnabled,
         cashRoundingUnit,
+        maxActiveShifts: validMaxActiveShifts,
       },
       create: {
         storeId: store.id,
@@ -466,6 +473,7 @@ export async function updateStoreSettings(payload) {
         serviceChargeRate,
         cashRoundingEnabled,
         cashRoundingUnit,
+        maxActiveShifts: validMaxActiveShifts,
       },
     });
 

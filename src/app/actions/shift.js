@@ -133,7 +133,7 @@ export async function openShift({ openingCash }) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
-    // Check if user already has an active OPEN shift
+    // a. Validasi Double Shift Kasir: Cek apakah kasir yang sedang login masih memiliki shift OPEN
     const existing = await prisma.shift.findFirst({
       where: {
         storeId,
@@ -143,7 +143,27 @@ export async function openShift({ openingCash }) {
     });
 
     if (existing) {
-      return { error: 'Anda masih memiliki sesi shift kasir yang sedang aktif.' };
+      return { error: 'Anda masih memiliki shift yang sedang aktif. Silakan tutup terlebih dahulu.' };
+    }
+
+    // b. Validasi Limit Toko: Cek jumlah shift aktif di storeId terhadap maxActiveShifts
+    const storeSettings = await prisma.storeSettings.findUnique({
+      where: { storeId },
+      select: { maxActiveShifts: true },
+    });
+    const maxActiveShifts = storeSettings?.maxActiveShifts ?? 1;
+
+    const currentOpenShiftsCount = await prisma.shift.count({
+      where: {
+        storeId,
+        status: 'OPEN',
+      },
+    });
+
+    if (currentOpenShiftsCount >= maxActiveShifts) {
+      return {
+        error: `Maksimal shift aktif bersamaan (limit: ${maxActiveShifts}) telah tercapai. Tutup shift lain terlebih dahulu.`,
+      };
     }
 
     const initialCash = Number(openingCash);
@@ -162,6 +182,7 @@ export async function openShift({ openingCash }) {
 
     revalidatePath('/dashboard/pos');
     revalidatePath('/dashboard/pos/shift');
+    revalidatePath('/dashboard/pos/manage-shifts');
     return {
       success: true,
       data: formatShiftForClient(shift),

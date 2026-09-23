@@ -100,6 +100,7 @@ export default function SettingsPage() {
   const [serviceChargeRate, setServiceChargeRate] = useState(0);
   const [cashRoundingEnabled, setCashRoundingEnabled] = useState(false);
   const [cashRoundingUnit, setCashRoundingUnit] = useState(0);
+  const [maxActiveShifts, setMaxActiveShifts] = useState(1);
 
   // ── Bluetooth Printer — dari Global Context (persists across navigations) ─
   const {
@@ -135,6 +136,7 @@ export default function SettingsPage() {
       setServiceChargeRate(settings.serviceChargeRate ?? 0);
       setCashRoundingEnabled(settings.cashRoundingEnabled ?? false);
       setCashRoundingUnit(settings.cashRoundingUnit ?? 0);
+      setMaxActiveShifts(settings.maxActiveShifts ?? 1);
     }
     setIsLoading(false);
   };
@@ -330,6 +332,7 @@ export default function SettingsPage() {
         serviceChargeRate,
         cashRoundingEnabled,
         cashRoundingUnit,
+        maxActiveShifts: Math.max(1, parseInt(maxActiveShifts, 10) || 1),
       });
 
       if (result.error) {
@@ -452,6 +455,47 @@ export default function SettingsPage() {
                 Format didukung: <strong>PNG, JPG, WEBP, SVG</strong> (Maksimal 5MB). Logo akan otomatis tersimpan di Supabase Storage bucket <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono text-[10px]">store-assets</code>.
               </p>
             </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      {/* ─── OPERASIONAL & LIMIT SHIFT KASIR ─────────────────────────────── */}
+      <SettingsCard
+        title="Operasional & Limit Shift Kasir"
+        description="Atur batasan jumlah shift aktif yang boleh berjalan bersamaan di toko ini untuk mencegah double shift dan tumpang tindih kasir."
+      >
+        <div className="max-w-md space-y-3">
+          <div>
+            <label htmlFor="input-max-active-shifts" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Maksimal Shift Aktif Bersamaan *
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id="input-max-active-shifts"
+                type="number"
+                min="1"
+                max="50"
+                value={maxActiveShifts}
+                onChange={(e) => setMaxActiveShifts(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                disabled={isSaving}
+                className="w-28 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-center"
+                required
+              />
+              <span className="text-xs text-slate-600 font-semibold">Shift Aktif</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+            <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+              Proteksi Anti Double-Shift
+            </p>
+            <p>
+              Bila diatur <strong>1</strong> (default), hanya 1 sesi kasir yang diperbolehkan aktif pada satu waktu. Kasir lain tidak dapat membuka shift baru sebelum shift yang sedang berjalan ditutup.
+            </p>
+            <p className="text-[10px] text-slate-400">
+              Ubah ke angka lebih besar (misal 2 atau 3) hanya jika toko Anda memiliki beberapa terminal mesin kasir fisik yang beroperasi serentak.
+            </p>
           </div>
         </div>
       </SettingsCard>

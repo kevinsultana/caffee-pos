@@ -298,20 +298,34 @@ export default function ManageShiftsPage() {
                       key={s.id}
                       onClick={() => openDetailModal(s.id)}
                       className={cn(
-                        'transition-colors cursor-pointer group',
-                        isOpen ? 'bg-emerald-50/20 hover:bg-emerald-50/50' : 'hover:bg-slate-50/80'
+                        'transition-all cursor-pointer group relative',
+                        isOpen
+                          ? 'bg-emerald-50/70 hover:bg-emerald-100/60 ring-1 ring-inset ring-emerald-300/50'
+                          : 'hover:bg-slate-50/80'
                       )}
                     >
                       {/* Kasir */}
                       <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn(
+                            'w-8 h-8 rounded-full font-bold flex items-center justify-center text-xs shrink-0 transition-transform group-hover:scale-105',
+                            isOpen
+                              ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300'
+                              : 'bg-slate-100 text-slate-700'
+                          )}>
                             {s.user?.name?.slice(0, 1)?.toUpperCase() || 'K'}
                           </div>
                           <div>
-                            <p className="font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
-                              {s.user?.name || 'Kasir'}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                                {s.user?.name || 'Kasir'}
+                              </p>
+                              {isOpen && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-2xs">
+                                  JAGA SEKARANG
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-slate-400 font-mono">@{s.user?.username || 'user'}</p>
                           </div>
                         </div>
@@ -339,12 +353,12 @@ export default function ManageShiftsPage() {
                       {/* Status Badge */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {isOpen ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            OPEN
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-wider bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 animate-pulse">
+                            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                            SEDANG AKTIF
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                             CLOSED
                           </span>
                         )}
@@ -438,11 +452,12 @@ export default function ManageShiftsPage() {
                     Detail Rekap Sesi Shift
                   </h3>
                   {shiftDetail?.status === 'OPEN' ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      OPEN
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-emerald-600 text-white shadow-xs animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                      SEDANG AKTIF
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">
                       CLOSED
                     </span>
                   )}
