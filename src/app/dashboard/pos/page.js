@@ -422,6 +422,21 @@ export default function PosScreenPage() {
       return;
     }
 
+    // Pastikan nomor antrean selalu terisi dari orderToPrint atau fallback ke state queueNumber kasir
+    const resolvedQueueNumber =
+      orderToPrint.queueNumber ||
+      orderToPrint.queue_number ||
+      orderToPrint.queue ||
+      orderToPrint.queueNo ||
+      orderToPrint.antrean ||
+      queueNumber ||
+      '-';
+
+    const safeOrderToPrint = {
+      ...orderToPrint,
+      queueNumber: resolvedQueueNumber,
+    };
+
     // ── Path 1: Bluetooth BLE (jika printer terhubung via context) ────────────
     if (btConnected) {
       const store = {
@@ -435,10 +450,10 @@ export default function PosScreenPage() {
         { id: 'pos-thermal-print', duration: 8000 }
       );
 
-      setPrintOrder(orderToPrint);
+      setPrintOrder(safeOrderToPrint);
       setPrintMode(mode);
 
-      const bytes = buildReceiptBytes(orderToPrint, store, mode);
+      const bytes = buildReceiptBytes(safeOrderToPrint, store, mode);
 
       printBytes(bytes)
         .then(() => {
@@ -516,7 +531,13 @@ export default function PosScreenPage() {
 
         // Cetak struk otomatis ke printer Bluetooth jika autoPrintEnabled aktif
         if (autoPrintEnabled && res.data.orderForPrint) {
-          handlePrint(res.data.orderForPrint, 'CUSTOMER');
+          handlePrint(
+            {
+              ...res.data.orderForPrint,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+            },
+            'CUSTOMER'
+          );
         }
 
         const Swal = (await import('sweetalert2')).default;
@@ -577,9 +598,21 @@ export default function PosScreenPage() {
         });
 
         if (swalRes.isDenied && res.data.orderForPrint) {
-          handlePrint(res.data.orderForPrint, 'KITCHEN');
+          handlePrint(
+            {
+              ...res.data.orderForPrint,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+            },
+            'KITCHEN'
+          );
         } else if (swalRes.dismiss === Swal.DismissReason.cancel && res.data.orderForPrint) {
-          handlePrint(res.data.orderForPrint, 'CUSTOMER');
+          handlePrint(
+            {
+              ...res.data.orderForPrint,
+              queueNumber: res.data.queueNumber || res.data.orderForPrint.queueNumber || queueNumber,
+            },
+            'CUSTOMER'
+          );
         }
 
         loadData();

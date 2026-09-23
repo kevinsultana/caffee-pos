@@ -169,6 +169,18 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
 
             <div className="border-b border-dashed border-black my-1.5" />
 
+            {/* Nomor Antrean Menonjol untuk Pelanggan */}
+            {(order.queueNumber || order.queue_number || order.queue || order.queueNo) && (
+              <div className="text-center border border-black rounded p-1 my-1">
+                <div className="text-[9px] uppercase font-bold tracking-widest text-gray-700">
+                  NOMOR ANTREAN
+                </div>
+                <div className="text-2xl font-black tracking-tight">
+                  {order.queueNumber || order.queue_number || order.queue || order.queueNo}
+                </div>
+              </div>
+            )}
+
             {/* Info Transaksi */}
             <div className="text-[10px] space-y-0.5">
               <div className="flex justify-between">
@@ -181,7 +193,9 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
               </div>
               <div className="flex justify-between">
                 <span>No. Antrean:</span>
-                <span className="font-bold">{order.queueNumber || '-'}</span>
+                <span className="font-bold">
+                  {order.queueNumber || order.queue_number || order.queue || order.queueNo || '-'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Kasir:</span>

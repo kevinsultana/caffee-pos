@@ -739,7 +739,7 @@ export async function processPosCheckout({
       success: true,
       data: {
         orderNumber: transactionResult.order.orderNumber,
-        queueNumber: transactionResult.order.queueNumber,
+        queueNumber: transactionResult.order.queueNumber || queueNumber?.trim() || null,
         publicQrToken: transactionResult.order.publicQrToken || null,
         grandTotal,
         promotionDiscount: totalPromoDiscount,
@@ -750,7 +750,7 @@ export async function processPosCheckout({
         orderForPrint: {
           id: transactionResult.order.id,
           orderNumber: transactionResult.order.orderNumber,
-          queueNumber: transactionResult.order.queueNumber,
+          queueNumber: transactionResult.order.queueNumber || queueNumber?.trim() || null,
           createdAt: transactionResult.order.createdAt,
           paidAt: transactionResult.order.paidAt,
           customerNameSnapshot: transactionResult.order.customerNameSnapshot,

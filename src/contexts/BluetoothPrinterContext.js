@@ -124,6 +124,15 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
   const sep = '-'.repeat(cols);
   const isKitchen = mode === 'KITCHEN';
 
+  // Resolusi nomor antrean dari berbagai kemungkinan properti
+  const queueNum =
+    order?.queueNumber ||
+    order?.queue_number ||
+    order?.queue ||
+    order?.queueNo ||
+    order?.antrean ||
+    '-';
+
   const parts = [];
 
   // Init
@@ -139,12 +148,17 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
     parts.push(enc(sep + '\n'));
 
-    // Nomor antrean besar
-    parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
-    parts.push(new Uint8Array([ESC, 0x21, 0x31])); // double height + width + bold
-    parts.push(enc((order.queueNumber || '-') + '\n'));
-    parts.push(new Uint8Array([ESC, 0x21, 0x00]));
-    parts.push(enc(sep + '\n'));
+    // Nomor antrean besar & jelas untuk pelanggan
+    if (queueNum && queueNum !== '-') {
+      parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
+      parts.push(enc('NOMOR ANTREAN\n'));
+      parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold on
+      parts.push(new Uint8Array([ESC, 0x21, 0x30])); // double height + double width
+      parts.push(enc(queueNum + '\n'));
+      parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
+      parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
+      parts.push(enc(sep + '\n'));
+    }
 
     // Meta
     parts.push(new Uint8Array([ESC, 0x61, 0x00])); // left
@@ -184,11 +198,12 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(enc('Cabang ' + (store?.code || 'MAIN') + '\n'));
     parts.push(enc(sep + '\n'));
 
+
     // Meta transaksi
     parts.push(new Uint8Array([ESC, 0x61, 0x00])); // left
     parts.push(enc('Waktu    : ' + fmtDt(order.paidAt || order.createdAt) + '\n'));
     parts.push(enc('No.Order : ' + (order.orderNumber || '-') + '\n'));
-    parts.push(enc('Antrean  : ' + (order.queueNumber || '-') + '\n'));
+    parts.push(enc('Antrean  : ' + queueNum + '\n'));
     parts.push(enc('Kasir    : ' + (order.createdBy?.name || 'Kasir') + '\n'));
     parts.push(enc('Pelanggan: ' + (order.customerNameSnapshot || order.customer?.name || 'Umum') + '\n'));
     parts.push(enc(sep + '\n'));

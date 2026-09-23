@@ -107,6 +107,25 @@ export async function getCurrentShift() {
   }
 }
 
+function formatShiftForClient(shift) {
+  if (!shift) return null;
+  return {
+    id: shift.id,
+    storeId: shift.storeId,
+    userId: shift.userId,
+    status: shift.status,
+    openingCash: shift.openingCash != null ? Number(shift.openingCash) : 0,
+    expectedCash: shift.expectedCash != null ? Number(shift.expectedCash) : null,
+    actualCash: shift.actualCash != null ? Number(shift.actualCash) : null,
+    difference: shift.difference != null ? Number(shift.difference) : null,
+    depositedCash: shift.depositedCash != null ? Number(shift.depositedCash) : 0,
+    openedAt: shift.openedAt ? new Date(shift.openedAt).toISOString() : null,
+    closedAt: shift.closedAt ? new Date(shift.closedAt).toISOString() : null,
+    createdAt: shift.createdAt ? new Date(shift.createdAt).toISOString() : null,
+    updatedAt: shift.updatedAt ? new Date(shift.updatedAt).toISOString() : null,
+  };
+}
+
 /**
  * Buka shift kasir baru dengan modal awal (Opening Cash).
  */
@@ -145,10 +164,7 @@ export async function openShift({ openingCash }) {
     revalidatePath('/dashboard/pos/shift');
     return {
       success: true,
-      data: {
-        ...shift,
-        openingCash: Number(shift.openingCash),
-      },
+      data: formatShiftForClient(shift),
     };
   } catch (error) {
     console.error('[openShift] Error:', error);
@@ -198,14 +214,7 @@ export async function closeShift({ actualCash, depositedCash = 0, notes }) {
     revalidatePath('/dashboard');
     return {
       success: true,
-      data: {
-        ...closed,
-        openingCash: Number(closed.openingCash),
-        expectedCash: expected,
-        actualCash: actual,
-        difference: difference,
-        depositedCash: deposited,
-      },
+      data: formatShiftForClient(closed),
     };
   } catch (error) {
     console.error('[closeShift] Error:', error);
