@@ -10,21 +10,17 @@ async function getAuthenticatedUserAndStore() {
   return { user, storeId: user.storeId };
 }
 
-export const getCachedSuppliers = unstable_cache(
-  async (storeId) => {
-    return await prisma.supplier.findMany({
-      where: { storeId },
-      orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: { purchases: true },
-        },
+export const getCachedSuppliers = async (storeId) => {
+  return await prisma.supplier.findMany({
+    where: { storeId },
+    orderBy: { name: 'asc' },
+    include: {
+      _count: {
+        select: { purchases: true },
       },
-    });
-  },
-  ['suppliers'],
-  { tags: ['suppliers'], revalidate: 3600 }
-);
+    },
+  });
+};
 
 export async function getSuppliers() {
   try {
@@ -145,5 +141,80 @@ export async function deleteSupplier(id) {
   } catch (error) {
     console.error('[deleteSupplier] Error:', error);
     return { error: error.message || 'Gagal menghapus supplier.' };
+  }
+}
+
+/**
+ * Mengambil detail data Supplier beserta riwayat transaksi pembelian (PO) dan item barangnya.
+ * Dibatasi maksimal 50 transaksi terakhir untuk efisiensi performa.
+ */
+export async function getSupplierPurchaseHistory(id) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    const supplier = await prisma.supplier.findFirst({
+      where: { id, storeId },
+      include: {
+        purchases: {
+          orderBy: { purchasedAt: 'desc' },
+          take: 50,
+          include: {
+            createdBy: {
+              select: { id: true, name: true, username: true },
+            },
+            items: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    category: { select: { id: true, name: true } },
+                    baseUnit: { select: { id: true, name: true, code: true } },
+                  },
+                },
+                purchaseUnit: {
+                  select: { id: true, name: true, code: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!supplier) {
+      return { error: 'Supplier tidak ditemukan.' };
+    }
+
+    const serializedPurchases = supplier.purchases.map((p) => ({
+      ...p,
+      purchasedAt: p.purchasedAt?.toISOString?.() || null,
+      createdAt: p.createdAt?.toISOString?.() || null,
+      updatedAt: p.updatedAt?.toISOString?.() || null,
+      totalAmount: p.totalAmount != null ? Number(p.totalAmount) : 0,
+      items: (p.items || []).map((it) => ({
+        ...it,
+        quantity: it.quantity != null ? Number(it.quantity) : 0,
+        unitPrice: it.unitPrice != null ? Number(it.unitPrice) : 0,
+        baseQuantity: it.baseQuantity != null ? Number(it.baseQuantity) : 0,
+        baseUnitCost: it.baseUnitCost != null ? Number(it.baseUnitCost) : 0,
+        subtotal: it.subtotal != null ? Number(it.subtotal) : 0,
+      })),
+    }));
+
+    return {
+      data: {
+        id: supplier.id,
+        name: supplier.name,
+        phone: supplier.phone,
+        address: supplier.address,
+        createdAt: supplier.createdAt?.toISOString?.() || null,
+        updatedAt: supplier.updatedAt?.toISOString?.() || null,
+        purchases: serializedPurchases,
+      },
+    };
+  } catch (error) {
+    console.error('[getSupplierPurchaseHistory] Error:', error);
+    return { error: error.message || 'Gagal memuat riwayat pembelian supplier.' };
   }
 }

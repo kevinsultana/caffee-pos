@@ -231,6 +231,10 @@ export async function createPurchase({ supplierId, purchasedAt, items }) {
     });
 
     revalidatePath('/dashboard/inventory/purchases');
+    revalidatePath('/dashboard/inventory/suppliers');
+    if (supplierId) {
+      revalidatePath(`/dashboard/inventory/suppliers/${supplierId}`);
+    }
     return { success: true, data: serializePurchase(purchase) };
   } catch (error) {
     console.error('[createPurchase] Error:', error);
@@ -356,6 +360,7 @@ export async function confirmPurchase(id) {
     revalidatePath('/dashboard/inventory/purchases');
     revalidatePath('/dashboard/inventory/items');
     revalidatePath('/dashboard/inventory/movements');
+    revalidatePath('/dashboard/inventory/suppliers');
 
     return { success: true, data: serializePurchase(result) };
   } catch (error) {
@@ -388,6 +393,7 @@ export async function deletePurchase(id) {
     await prisma.purchase.delete({ where: { id } });
 
     revalidatePath('/dashboard/inventory/purchases');
+    revalidatePath('/dashboard/inventory/suppliers');
     return { success: true };
   } catch (error) {
     console.error('[deletePurchase] Error:', error);
