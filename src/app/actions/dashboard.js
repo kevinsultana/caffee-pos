@@ -60,60 +60,85 @@ const _getCachedMetrics = unstable_cache(
       createdAt: { gte: start, lte: end },
     };
 
-    const [orderAgg, hppAgg, paymentGroups, topItemGroups, recentOrdersData, inventoryItems] =
-      await Promise.all([
-        prisma.order.aggregate({
-          where: orderWherePaid,
-          _count: { id: true },
-          _sum: {
-            productSubtotal: true,
-            promotionDiscount: true,
-            taxAmount: true,
-            serviceChargeAmount: true,
-            grandTotal: true,
+    // Rentang waktu khusus hari ini untuk ringkasan shift harian
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [
+      orderAgg,
+      hppAgg,
+      paymentGroups,
+      topItemGroups,
+      recentOrdersData,
+      inventoryItems,
+      todayShifts,
+    ] = await Promise.all([
+      prisma.order.aggregate({
+        where: orderWherePaid,
+        _count: { id: true },
+        _sum: {
+          productSubtotal: true,
+          promotionDiscount: true,
+          taxAmount: true,
+          serviceChargeAmount: true,
+          grandTotal: true,
+        },
+      }),
+      prisma.orderItem.aggregate({
+        where: { order: orderWherePaid },
+        _sum: { hppTotal: true },
+      }),
+      prisma.payment.groupBy({
+        by: ['method'],
+        where: { order: orderWherePaid, status: 'PAID' },
+        _sum: { amount: true },
+      }),
+      prisma.orderItem.groupBy({
+        by: ['productNameSnapshot'],
+        where: { order: orderWherePaid },
+        _sum: { quantity: true, subtotal: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+      prisma.order.findMany({
+        where: orderWherePaid,
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          orderNumber: true,
+          queueNumber: true,
+          customerNameSnapshot: true,
+          grandTotal: true,
+          createdAt: true,
+          payment: { select: { method: true } },
+        },
+      }),
+      prisma.inventoryItem.findMany({
+        where: { storeId },
+        select: {
+          id: true,
+          name: true,
+          minimumStock: true,
+          baseUnit: { select: { code: true } },
+          balance: { select: { quantity: true } },
+        },
+      }),
+      prisma.shift.findMany({
+        where: {
+          storeId,
+          openedAt: { gte: todayStart, lte: todayEnd },
+        },
+        include: {
+          payments: {
+            where: { status: 'PAID' },
+            select: { method: true, amount: true },
           },
-        }),
-        prisma.orderItem.aggregate({
-          where: { order: orderWherePaid },
-          _sum: { hppTotal: true },
-        }),
-        prisma.payment.groupBy({
-          by: ['method'],
-          where: { order: orderWherePaid, status: 'PAID' },
-          _sum: { amount: true },
-        }),
-        prisma.orderItem.groupBy({
-          by: ['productNameSnapshot'],
-          where: { order: orderWherePaid },
-          _sum: { quantity: true, subtotal: true },
-          orderBy: { _sum: { quantity: 'desc' } },
-          take: 5,
-        }),
-        prisma.order.findMany({
-          where: orderWherePaid,
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            orderNumber: true,
-            queueNumber: true,
-            customerNameSnapshot: true,
-            grandTotal: true,
-            createdAt: true,
-            payment: { select: { method: true } },
-          },
-        }),
-        prisma.inventoryItem.findMany({
-          where: { storeId },
-          select: {
-            id: true,
-            name: true,
-            minimumStock: true,
-            baseUnit: { select: { code: true } },
-            balance: { select: { quantity: true } },
-          },
-        }),
-      ]);
+        },
+      }),
+    ]);
 
     const grossSales = Number(orderAgg._sum.productSubtotal || 0);
     const totalDiscount = Number(orderAgg._sum.promotionDiscount || 0);
@@ -165,6 +190,24 @@ const _getCachedMetrics = unstable_cache(
       createdAt: o.createdAt,
     }));
 
+    // Agregasi shift hari ini
+    const totalOpeningCashToday = todayShifts.reduce(
+      (acc, s) => acc + Number(s.openingCash || 0),
+      0
+    );
+    const totalDepositedCashToday = todayShifts.reduce(
+      (acc, s) => acc + Number(s.depositedCash || 0),
+      0
+    );
+    const totalQrisToday = todayShifts.reduce((acc, s) => {
+      const qris = s.payments
+        .filter((p) => p.method === 'QRIS')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      return acc + qris;
+    }, 0);
+    const todayShiftCount = todayShifts.length;
+    const todayActiveShiftCount = todayShifts.filter((s) => s.status === 'OPEN').length;
+
     return {
       period,
       grossSales,
@@ -183,6 +226,13 @@ const _getCachedMetrics = unstable_cache(
       topProducts,
       stockAlerts,
       recentOrders,
+      todayShiftSummary: {
+        totalOpeningCash: totalOpeningCashToday,
+        totalDepositedCash: totalDepositedCashToday,
+        totalQris: totalQrisToday,
+        shiftCount: todayShiftCount,
+        activeShiftCount: todayActiveShiftCount,
+      },
     };
   },
   ['dashboard-metrics'],

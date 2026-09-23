@@ -33,6 +33,13 @@ export const MENU_PERMISSIONS = [
     defaultRoute: '/dashboard/pos/cash',
   },
   {
+    code: 'MENU_MANAGE_SHIFTS',
+    label: 'Akses Kelola Shift & Setoran',
+    description: 'Melihat rekap seluruh shift kasir, modal awal, omzet tunai & QRIS, dan uang setoran ke owner.',
+    category: 'Utama',
+    defaultRoute: '/dashboard/pos/manage-shifts',
+  },
+  {
     code: 'MENU_QR_TABLE',
     label: 'Akses Generate QR Meja',
     description: 'Membuat dan mencetak barcode QR meja untuk pesanan pelanggan.',
@@ -144,6 +151,7 @@ export const MENU_PERMISSIONS = [
  * Diurutkan dari yang paling spesifik ke umum.
  */
 export const ROUTE_PERMISSION_MAP = [
+  { prefix: '/dashboard/pos/manage-shifts', permission: 'MENU_MANAGE_SHIFTS' },
   { prefix: '/dashboard/pos/cash', permission: 'MENU_CASH_FLOW' },
   { prefix: '/dashboard/pos/history', permission: 'MENU_POS_HISTORY' },
   { prefix: '/dashboard/pos', permission: 'MENU_POS' },

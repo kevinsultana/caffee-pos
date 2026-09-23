@@ -156,10 +156,7 @@ export async function openShift({ openingCash }) {
   }
 }
 
-/**
- * Tutup shift kasir dengan memasukkan uang fisik aktual (Actual Cash).
- */
-export async function closeShift({ actualCash }) {
+export async function closeShift({ actualCash, depositedCash = 0, notes }) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
@@ -170,9 +167,14 @@ export async function closeShift({ actualCash }) {
 
     const currentShift = shiftRes.data;
     const actual = Number(actualCash);
+    const deposited = Number(depositedCash);
 
     if (isNaN(actual) || actual < 0) {
       return { error: 'Jumlah uang fisik aktual di laci harus diisi dengan benar.' };
+    }
+
+    if (isNaN(deposited) || deposited < 0) {
+      return { error: 'Nominal uang disetor ke owner harus berupa angka valid non-negatif.' };
     }
 
     const expected = currentShift.expectedCash;
@@ -186,11 +188,14 @@ export async function closeShift({ actualCash }) {
         expectedCash: expected,
         actualCash: actual,
         difference: difference,
+        depositedCash: deposited,
       },
     });
 
     revalidatePath('/dashboard/pos');
     revalidatePath('/dashboard/pos/shift');
+    revalidatePath('/dashboard/pos/manage-shifts');
+    revalidatePath('/dashboard');
     return {
       success: true,
       data: {
@@ -199,6 +204,7 @@ export async function closeShift({ actualCash }) {
         expectedCash: expected,
         actualCash: actual,
         difference: difference,
+        depositedCash: deposited,
       },
     };
   } catch (error) {
@@ -272,5 +278,279 @@ export async function addCashMovement({ type, amount, reason }) {
   } catch (error) {
     console.error('[addCashMovement] Error:', error);
     return { error: error.message || 'Gagal mencatat mutasi kas.' };
+  }
+}
+
+/**
+ * Mengambil seluruh data shift toko dengan filter periode waktu, status, dan kasir.
+ * Khusus untuk halaman "Kelola Shift" (Owner/Manager).
+ */
+export async function getAllShifts({
+  datePreset = 'TODAY',
+  startDate,
+  endDate,
+  status = 'ALL',
+  search = '',
+} = {}) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    const now = new Date();
+    let start = null;
+    let end = null;
+
+    if (datePreset === 'TODAY') {
+      start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+    } else if (datePreset === 'YESTERDAY') {
+      start = new Date(now);
+      start.setDate(now.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(now);
+      end.setDate(now.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+    } else if (datePreset === 'LAST_7_DAYS') {
+      start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+    } else if (datePreset === 'THIS_MONTH') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (datePreset === 'CUSTOM' && startDate && endDate) {
+      start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    const whereClause = { storeId };
+
+    if (start && end) {
+      whereClause.openedAt = { gte: start, lte: end };
+    }
+
+    if (status && status !== 'ALL') {
+      whereClause.status = status;
+    }
+
+    if (search?.trim()) {
+      whereClause.user = {
+        OR: [
+          { name: { contains: search.trim(), mode: 'insensitive' } },
+          { username: { contains: search.trim(), mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: whereClause,
+      orderBy: { openedAt: 'desc' },
+      take: 100,
+      include: {
+        user: { select: { id: true, name: true, username: true } },
+        payments: {
+          where: { status: 'PAID' },
+          select: { id: true, method: true, amount: true },
+        },
+        cashMovements: {
+          select: { id: true, type: true, amount: true },
+        },
+      },
+    });
+
+    const serializedShifts = shifts.map((s) => {
+      const openingCash = Number(s.openingCash || 0);
+
+      const cashSales = s.payments
+        .filter((p) => p.method === 'CASH')
+        .reduce((acc, p) => acc + Number(p.amount || 0), 0);
+
+      const qrisSales = s.payments
+        .filter((p) => p.method === 'QRIS')
+        .reduce((acc, p) => acc + Number(p.amount || 0), 0);
+
+      const cashIn = s.cashMovements
+        .filter((m) => m.type === 'CASH_IN')
+        .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+
+      const cashOut = s.cashMovements
+        .filter((m) => m.type === 'CASH_OUT')
+        .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+
+      const expectedCash =
+        s.expectedCash != null
+          ? Number(s.expectedCash)
+          : openingCash + cashSales + cashIn - cashOut;
+
+      const actualCash = s.actualCash != null ? Number(s.actualCash) : null;
+      const difference = s.difference != null ? Number(s.difference) : null;
+      const depositedCash = s.depositedCash != null ? Number(s.depositedCash) : 0;
+
+      return {
+        id: s.id,
+        status: s.status,
+        openedAt: s.openedAt.toISOString(),
+        closedAt: s.closedAt?.toISOString() || null,
+        user: s.user,
+        openingCash,
+        cashSales,
+        qrisSales,
+        totalSales: cashSales + qrisSales,
+        cashIn,
+        cashOut,
+        expectedCash,
+        actualCash,
+        difference,
+        depositedCash,
+        transactionCount: s.payments.length,
+        movementCount: s.cashMovements.length,
+      };
+    });
+
+    const totalOpeningCash = serializedShifts.reduce((acc, s) => acc + s.openingCash, 0);
+    const totalCashSales = serializedShifts.reduce((acc, s) => acc + s.cashSales, 0);
+    const totalQrisSales = serializedShifts.reduce((acc, s) => acc + s.qrisSales, 0);
+    const totalDepositedCash = serializedShifts.reduce((acc, s) => acc + s.depositedCash, 0);
+    const openShiftCount = serializedShifts.filter((s) => s.status === 'OPEN').length;
+    const closedShiftCount = serializedShifts.filter((s) => s.status === 'CLOSED').length;
+
+    return {
+      data: {
+        shifts: serializedShifts,
+        stats: {
+          totalShifts: serializedShifts.length,
+          openShiftCount,
+          closedShiftCount,
+          totalOpeningCash,
+          totalCashSales,
+          totalQrisSales,
+          totalDepositedCash,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('[getAllShifts] Error:', error);
+    return { error: error.message || 'Gagal memuat rekap shift.' };
+  }
+}
+
+/**
+ * Mendapatkan detail mendalam satu shift tertentu untuk modal rincian.
+ */
+export async function getShiftDetail(shiftId) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    const shift = await prisma.shift.findFirst({
+      where: { id: shiftId, storeId },
+      include: {
+        user: { select: { id: true, name: true, username: true } },
+        payments: {
+          where: { status: 'PAID' },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                queueNumber: true,
+                customerNameSnapshot: true,
+                grandTotal: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+        cashMovements: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!shift) {
+      return { error: 'Data shift tidak ditemukan.' };
+    }
+
+    const openingCash = Number(shift.openingCash || 0);
+
+    const cashSales = shift.payments
+      .filter((p) => p.method === 'CASH')
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const qrisSales = shift.payments
+      .filter((p) => p.method === 'QRIS')
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const cashIn = shift.cashMovements
+      .filter((m) => m.type === 'CASH_IN')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    const cashOut = shift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    const expectedCash =
+      shift.expectedCash != null
+        ? Number(shift.expectedCash)
+        : openingCash + cashSales + cashIn - cashOut;
+
+    const actualCash = shift.actualCash != null ? Number(shift.actualCash) : null;
+    const difference = shift.difference != null ? Number(shift.difference) : null;
+    const depositedCash = shift.depositedCash != null ? Number(shift.depositedCash) : 0;
+    const remainingInDrawer =
+      actualCash != null ? Math.max(0, actualCash - depositedCash) : null;
+
+    return {
+      data: {
+        id: shift.id,
+        status: shift.status,
+        openedAt: shift.openedAt.toISOString(),
+        closedAt: shift.closedAt?.toISOString() || null,
+        user: shift.user,
+        openingCash,
+        cashSales,
+        qrisSales,
+        totalSales: cashSales + qrisSales,
+        cashIn,
+        cashOut,
+        expectedCash,
+        actualCash,
+        difference,
+        depositedCash,
+        remainingInDrawer,
+        transactionCount: shift.payments.length,
+        payments: shift.payments.map((p) => ({
+          id: p.id,
+          method: p.method,
+          amount: Number(p.amount),
+          cashReceived: p.cashReceived ? Number(p.cashReceived) : null,
+          changeAmount: p.changeAmount ? Number(p.changeAmount) : null,
+          createdAt: p.createdAt.toISOString(),
+          order: p.order
+            ? {
+                id: p.order.id,
+                orderNumber: p.order.orderNumber,
+                queueNumber: p.order.queueNumber,
+                customerName: p.order.customerNameSnapshot,
+                grandTotal: Number(p.order.grandTotal),
+              }
+            : null,
+        })),
+        cashMovements: shift.cashMovements.map((m) => ({
+          id: m.id,
+          type: m.type,
+          amount: Number(m.amount),
+          reason: m.reason,
+          createdAt: m.createdAt.toISOString(),
+        })),
+      },
+    };
+  } catch (error) {
+    console.error('[getShiftDetail] Error:', error);
+    return { error: error.message || 'Gagal memuat detail shift.' };
   }
 }

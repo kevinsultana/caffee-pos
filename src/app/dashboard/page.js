@@ -152,6 +152,91 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* ─── 1.5 TODAY'S SHIFT & DEPOSIT SUMMARY ────────────────────────── */}
+          <div className="p-6 rounded-3xl bg-linear-to-br from-slate-900 via-slate-900 to-slate-800 text-white shadow-md space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    SETORAN HARIAN
+                  </span>
+                  <h2 className="text-base font-bold text-white tracking-tight">
+                    Ringkasan Shift & Setoran Kasir Hari Ini
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Pantau modal kas kecil, uang setoran fisik ke owner, omzet QRIS, dan status shift kasir hari ini.
+                </p>
+              </div>
+
+              <Link
+                href="/dashboard/pos/manage-shifts"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold backdrop-blur-xs border border-white/10 transition-colors w-fit"
+              >
+                <span>Kelola Shift Lengkap</span>
+                <span className="text-emerald-400">&rarr;</span>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+              {/* Total Modal Awal */}
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs space-y-1">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Total Modal Awal Hari Ini
+                </p>
+                <p className="text-xl font-black font-mono text-white">
+                  {formatRupiah(metrics.todayShiftSummary?.totalOpeningCash || 0)}
+                </p>
+                <p className="text-[10px] text-slate-400">Modal kas kecil kasir hari ini</p>
+              </div>
+
+              {/* Total Uang Disetor ke Owner */}
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 backdrop-blur-xs space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
+                    Total Disetor ke Owner
+                  </p>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <p className="text-xl font-black font-mono text-emerald-400">
+                  {formatRupiah(metrics.todayShiftSummary?.totalDepositedCash || 0)}
+                </p>
+                <p className="text-[10px] text-emerald-300/80">Uang fisik diserahkan ke owner</p>
+              </div>
+
+              {/* Total QRIS Hari Ini */}
+              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 backdrop-blur-xs space-y-1">
+                <p className="text-[11px] font-bold text-blue-300 uppercase tracking-wider">
+                  Total QRIS Hari Ini
+                </p>
+                <p className="text-xl font-black font-mono text-blue-300">
+                  {formatRupiah(metrics.todayShiftSummary?.totalQris || 0)}
+                </p>
+                <p className="text-[10px] text-blue-300/80">Langsung masuk ke rekening bank</p>
+              </div>
+
+              {/* Status Shift Hari Ini */}
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs space-y-1">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Shift Berjalan Hari Ini
+                </p>
+                <p className="text-xl font-black font-mono text-white">
+                  {metrics.todayShiftSummary?.shiftCount || 0} Shift
+                </p>
+                <div className="text-[10px] text-slate-400 flex items-center gap-1.5 font-medium">
+                  {metrics.todayShiftSummary?.activeShiftCount > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {metrics.todayShiftSummary.activeShiftCount} Shift Sedang Aktif
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Semua shift telah ditutup</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ─── 2. PAYMENT METRICS & REVENUE BREAKDOWN ─────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Payment Method Breakdown */}

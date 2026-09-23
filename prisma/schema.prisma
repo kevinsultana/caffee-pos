@@ -866,9 +866,10 @@ model Shift {
 
   openingCash Decimal @db.Decimal(18, 2)
 
-  expectedCash Decimal? @db.Decimal(18, 2)
-  actualCash   Decimal? @db.Decimal(18, 2)
-  difference   Decimal? @db.Decimal(18, 2)
+  expectedCash  Decimal? @db.Decimal(18, 2)
+  actualCash    Decimal? @db.Decimal(18, 2)
+  difference    Decimal? @db.Decimal(18, 2)
+  depositedCash Decimal? @default(0) @db.Decimal(18, 2)
 
   openedAt DateTime  @default(now())
   closedAt DateTime?
