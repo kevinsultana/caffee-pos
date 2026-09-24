@@ -25,9 +25,11 @@ async function getAuthenticatedUserAndStore() {
 // 1. UNIT ACTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-export const getCachedUnits = unstable_cache(
-  async (storeId) => {
-    return await prisma.unit.findMany({
+export async function getUnits() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    let units = await prisma.unit.findMany({
       where: { storeId },
       orderBy: [{ isSystem: 'desc' }, { code: 'asc' }],
       include: {
@@ -40,16 +42,6 @@ export const getCachedUnits = unstable_cache(
         },
       },
     });
-  },
-  ['units'],
-  { tags: ['units'], revalidate: 3600 }
-);
-
-export async function getUnits() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-
-    let units = await getCachedUnits(storeId);
 
     // Auto-seed default system units if none exist for this store
     if (!units || units.length === 0) {
@@ -65,8 +57,19 @@ export async function getUnits() {
           },
         });
       }
-      revalidateTag('units', 'max');
-      units = await getCachedUnits(storeId);
+      units = await prisma.unit.findMany({
+        where: { storeId },
+        orderBy: [{ isSystem: 'desc' }, { code: 'asc' }],
+        include: {
+          _count: {
+            select: {
+              baseInventoryItems: true,
+              purchaseConversions: true,
+              purchaseItems: true,
+            },
+          },
+        },
+      });
     }
 
     return { data: units };
@@ -75,6 +78,8 @@ export async function getUnits() {
     return { error: error.message || 'Gagal memuat daftar unit satuan.' };
   }
 }
+
+export const getCachedUnits = getUnits;
 
 export async function createUnit({ code, name }) {
   try {
@@ -194,9 +199,10 @@ export async function deleteUnit(id) {
 // 2. INVENTORY CATEGORY ACTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-export const getCachedInventoryCategories = unstable_cache(
-  async (storeId) => {
-    return await prisma.inventoryCategory.findMany({
+export async function getInventoryCategories() {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const categories = await prisma.inventoryCategory.findMany({
       where: { storeId },
       orderBy: { name: 'asc' },
       include: {
@@ -205,21 +211,14 @@ export const getCachedInventoryCategories = unstable_cache(
         },
       },
     });
-  },
-  ['inventory-categories'],
-  { tags: ['inventory-categories'], revalidate: 3600 }
-);
-
-export async function getInventoryCategories() {
-  try {
-    const { storeId } = await getAuthenticatedUserAndStore();
-    const categories = await getCachedInventoryCategories(storeId);
     return { data: categories };
   } catch (error) {
     console.error('[getInventoryCategories] Error:', error);
     return { error: error.message || 'Gagal memuat kategori inventaris.' };
   }
 }
+
+export const getCachedInventoryCategories = getInventoryCategories;
 
 export async function createInventoryCategory({ name }) {
   try {

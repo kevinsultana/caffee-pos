@@ -108,6 +108,31 @@ async function main() {
   });
   console.log(`✅ User     : ${user.username} / ${user.name}`);
 
+  // ─── 4. Default Units ────────────────────────────────────────────────────────
+  const defaultUnits = [
+    { code: 'g', name: 'Gram' },
+    { code: 'kg', name: 'Kilogram' },
+    { code: 'ml', name: 'Mililiter' },
+    { code: 'L', name: 'Liter' },
+    { code: 'pcs', name: 'Pieces' },
+  ];
+
+  for (const u of defaultUnits) {
+    const unit = await prisma.unit.upsert({
+      where: {
+        storeId_code: { storeId: store.id, code: u.code },
+      },
+      update: {},
+      create: {
+        storeId: store.id,
+        code: u.code,
+        name: u.name,
+        isSystem: true,
+      },
+    });
+    console.log(`✅ Unit     : ${unit.code} (${unit.name})`);
+  }
+
   console.log('\n🎉 Seed selesai dengan sukses!\n');
   console.log('─────────────────────────────────────────');
   console.log('  Login credentials:');

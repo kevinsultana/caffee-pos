@@ -128,6 +128,15 @@ export default function ProductDetailPage() {
           quantity: ing.quantity,
         }))
       );
+    } else if (variant && product.recipe && product.recipe.activeVersion?.ingredients?.length > 0) {
+      // Otomatis salin komposisi dari Resep Induk produk sebagai bahan acuan dasar varian
+      setRecipeIngredients(
+        product.recipe.activeVersion.ingredients.map((ing) => ({
+          inventoryItemId: ing.inventoryItemId,
+          quantity: ing.quantity,
+        }))
+      );
+      toast('Formulasi otomatis disalin dari Resep Induk sebagai dasar varian.', { icon: '💡' });
     } else {
       setRecipeIngredients([
         {
@@ -734,6 +743,39 @@ export default function ProductDetailPage() {
 
               {/* Dynamic Ingredients Rows */}
               <div className="space-y-3">
+                {recipeTargetVariant && (
+                  <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base shrink-0">💡</span>
+                      <div>
+                        <p className="font-semibold">
+                          Resep Khusus Varian: <span className="font-bold">{recipeTargetVariant.name}</span>
+                        </p>
+                        <p className="text-[11px] text-blue-700 mt-0.5">
+                          Formulasi dasar diambil dari Resep Induk produk. Anda cukup menambah atau menyesuaikan takaran bahan sesuai kebutuhan varian ini.
+                        </p>
+                      </div>
+                    </div>
+                    {product.recipe?.activeVersion?.ingredients?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecipeIngredients(
+                            product.recipe.activeVersion.ingredients.map((ing) => ({
+                              inventoryItemId: ing.inventoryItemId,
+                              quantity: ing.quantity,
+                            }))
+                          );
+                          toast.success('Formulasi berhasil di-reset sesuai Resep Induk.');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold shrink-0 transition-colors shadow-2xs"
+                      >
+                        Salin Ulang Resep Induk
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Daftar Komposisi Bahan Baku *

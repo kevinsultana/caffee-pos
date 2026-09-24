@@ -858,16 +858,27 @@ export async function createProductVariant({
 /**
  * Memperbarui data Varian Produk.
  */
-export async function updateProductVariant({
-  id,
-  name,
-  sku,
-  price,
-  availability,
-  discontinued = false,
-  inventoryItemId,
-}) {
+export async function updateProductVariant(arg1, arg2) {
   try {
+    const payload =
+      typeof arg1 === 'string'
+        ? { id: arg1, ...(arg2 || {}) }
+        : { ...(arg1 || {}), ...(arg2 || {}) };
+
+    const {
+      id,
+      name,
+      sku,
+      price,
+      availability,
+      discontinued = false,
+      inventoryItemId,
+    } = payload;
+
+    if (!id) {
+      return { error: 'ID varian produk tidak valid atau tidak disertakan.' };
+    }
+
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
     const targetVariant = await prisma.productVariant.findUnique({
