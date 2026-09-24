@@ -595,10 +595,10 @@ export default function ProductDetailPage() {
               <p className="text-xl font-bold font-mono text-emerald-700 mt-1">
                 {product.price > 0 && product.recipe?.activeVersion?.estimatedHpp
                   ? `${(
-                      ((product.price - product.recipe.activeVersion.estimatedHpp) /
-                        product.price) *
-                      100
-                    ).toFixed(1)}%`
+                    ((product.price - product.recipe.activeVersion.estimatedHpp) /
+                      product.price) *
+                    100
+                  ).toFixed(1)}%`
                   : '-'}
               </p>
             </div>
@@ -1008,17 +1008,10 @@ export default function ProductDetailPage() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
+                <div>
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Daftar Komposisi Bahan Baku *
                   </label>
-                  <button
-                    type="button"
-                    onClick={addIngredientRow}
-                    className="px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1"
-                  >
-                    + Tambah Baris Bahan
-                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -1098,6 +1091,18 @@ export default function ProductDetailPage() {
                     );
                   })}
                 </div>
+
+                {/* ── Tombol Tambah Baris — di antara tabel bahan baku dan estimasi HPP ── */}
+                <div className="flex justify-start pt-1">
+                  <button
+                    type="button"
+                    onClick={addIngredientRow}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 hover:border-emerald-400 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                  >
+                    <span className="w-5 h-5 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 text-emerald-700 flex items-center justify-center font-bold text-sm transition-colors">+</span>
+                    Tambah Baris Bahan
+                  </button>
+                </div>
               </div>
 
               {/* Summary Calculations Footer */}
@@ -1128,8 +1133,8 @@ export default function ProductDetailPage() {
                     {isPending
                       ? 'Menyimpan Resep...'
                       : editingVersion
-                      ? `Simpan Perubahan Versi ${editingVersion.versionNumber}`
-                      : 'Simpan & Terapkan Resep Baru'}
+                        ? `Simpan Perubahan Versi ${editingVersion.versionNumber}`
+                        : 'Simpan & Terapkan Resep Baru'}
                   </button>
                 </div>
               </div>
