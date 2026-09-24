@@ -156,6 +156,38 @@ export default function PromoModal({
           </button>
         </div>
 
+        {/* Active Promo Banner with Batal Gunakan Promo Option */}
+        {appliedPromo && (
+          <div className="mx-5 mt-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-xs shadow-2xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="p-1.5 rounded-xl bg-emerald-600 text-white font-mono font-bold text-xs shrink-0">
+                {appliedPromo.code}
+              </span>
+              <div className="min-w-0">
+                <p className="font-bold text-slate-900 truncate">
+                  Promo Aktif: {appliedPromo.name || appliedPromo.code}
+                </p>
+                <p className="text-[11px] text-emerald-700 font-semibold">
+                  Sedang digunakan pada pesanan saat ini
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (onRemovePromo) onRemovePromo();
+                onClose();
+              }}
+              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span>Batal Gunakan Promo</span>
+            </button>
+          </div>
+        )}
+
         {/* Filter Bar & Search */}
         <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           {/* Tabs Filter */}
@@ -344,10 +376,14 @@ export default function PromoModal({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (onRemovePromo) onRemovePromo();
+                          onClose();
                         }}
-                        className="px-4 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                       >
-                        Hapus Promo dari Keranjang
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Batal Gunakan Promo</span>
                       </button>
                     ) : isEligible ? (
                       <button

@@ -397,7 +397,7 @@ export default function PosScreenPage() {
   function removePromo() {
     setAppliedPromo(null);
     setInputPromoCode('');
-    toast('Kode promo dihapus.', { icon: 'ℹ️' });
+    toast.success('Penggunaan promo berhasil dibatalkan.', { icon: '🗑️' });
   }
 
   // Otomatis sinkronisasi & validasi ulang promo saat item di keranjang berubah
@@ -603,6 +603,35 @@ export default function PosScreenPage() {
   // THERMAL RECEIPT PRINTING (BLUETOOTH / USB / KIOSK AUTO-PRINT)
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ── Konfigurasi Struk & Printer Terintegrasi (Sinkron Penuh dengan Store Settings) ──
+  const effectiveStore = useMemo(() => {
+    return {
+      name: storeInfo?.name || 'SCHAW CAFE',
+      code: storeInfo?.code || 'MAIN',
+      logoUrl: storeInfo?.logoUrl || null,
+      receiptLogoUrl: settings?.receiptLogoUrl || storeInfo?.receiptLogoUrl || null,
+      receiptShowLogo: settings?.receiptShowLogo ?? storeInfo?.receiptShowLogo ?? true,
+      receiptShowStoreName: settings?.receiptShowStoreName ?? storeInfo?.receiptShowStoreName ?? true,
+      receiptHeader: settings?.receiptHeader ?? storeInfo?.receiptHeader ?? '',
+      receiptHeaderAlign: settings?.receiptHeaderAlign ?? storeInfo?.receiptHeaderAlign ?? 'CENTER',
+      receiptHeaderBold: Boolean(settings?.receiptHeaderBold ?? storeInfo?.receiptHeaderBold),
+      receiptFooter:
+        settings?.receiptFooter ??
+        storeInfo?.receiptFooter ??
+        'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+      receiptFooterAlign: settings?.receiptFooterAlign ?? storeInfo?.receiptFooterAlign ?? 'CENTER',
+      receiptFooterBold: Boolean(settings?.receiptFooterBold ?? storeInfo?.receiptFooterBold),
+      receiptFontSize: settings?.receiptFontSize || storeInfo?.receiptFontSize || 'NORMAL',
+      receiptDoubleHeight: settings?.receiptDoubleHeight ?? storeInfo?.receiptDoubleHeight ?? true,
+      receiptCols: settings?.receiptCols
+        ? parseInt(settings.receiptCols, 10)
+        : storeInfo?.receiptCols
+          ? parseInt(storeInfo.receiptCols, 10)
+          : null,
+      printerWidth: settings?.printerWidth || storeInfo?.printerWidth || 58,
+    };
+  }, [storeInfo, settings]);
+
   const handlePrint = (orderToPrint, mode = 'CUSTOMER') => {
     if (!orderToPrint) {
       toast.error('Data transaksi untuk cetak tidak tersedia.');
@@ -631,20 +660,6 @@ export default function PosScreenPage() {
 
     // ── Path 1: Bluetooth BLE (jika printer terhubung via context) ────────────
     if (btConnected) {
-      const store = {
-        name: storeInfo?.name || 'SCHAW CAFE',
-        logoUrl: storeInfo?.logoUrl,
-        receiptShowLogo: settings?.receiptShowLogo ?? storeInfo?.receiptShowLogo ?? true,
-        receiptHeader: settings?.receiptHeader ?? storeInfo?.receiptHeader,
-        receiptHeaderAlign: settings?.receiptHeaderAlign ?? storeInfo?.receiptHeaderAlign ?? 'CENTER',
-        receiptHeaderBold: Boolean(settings?.receiptHeaderBold ?? storeInfo?.receiptHeaderBold),
-        receiptFooter: settings?.receiptFooter ?? storeInfo?.receiptFooter,
-        receiptFooterAlign: settings?.receiptFooterAlign ?? storeInfo?.receiptFooterAlign ?? 'CENTER',
-        receiptFooterBold: Boolean(settings?.receiptFooterBold ?? storeInfo?.receiptFooterBold),
-        printerWidth: settings?.printerWidth || storeInfo?.printerWidth || 58,
-        code: storeInfo?.code || 'MAIN',
-      };
-
       toast.loading(
         mode === 'KITCHEN' ? 'Mengirim tiket dapur ke printer...' : 'Mengirim struk ke printer Bluetooth...',
         { id: 'pos-thermal-print', duration: 8000 }
@@ -653,7 +668,7 @@ export default function PosScreenPage() {
       setPrintOrder(safeOrderToPrint);
       setPrintMode(mode);
 
-      buildReceiptBytes(safeOrderToPrint, store, mode)
+      buildReceiptBytes(safeOrderToPrint, effectiveStore, mode)
         .then((bytes) => printBytes(bytes))
         .then(() => {
           toast.success(
@@ -1003,6 +1018,25 @@ export default function PosScreenPage() {
               <span>Shift Aktif &bull; Modal: <strong className="text-slate-900 font-mono">{formatRupiah(activeShift.openingCash)}</strong></span>
             </div>
           )}
+
+          {/* Quick Printer Button & Status */}
+          <button
+            type="button"
+            onClick={() => setIsBtModalOpen(true)}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer",
+              btConnected
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
+            )}
+            title={btConnected ? `Printer Bluetooth: ${btDeviceName} (${effectiveStore.printerWidth}mm)` : 'Hubungkan atau tes cetak printer thermal'}
+          >
+            <span className={cn("w-2 h-2 rounded-full", btConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
+            <span>🖨️ {btConnected ? (btDeviceName || 'Printer Siap') : 'Printer'}</span>
+            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+              {effectiveStore.printerWidth}mm
+            </span>
+          </button>
 
           <Link
             href="/dashboard/pos/cash"
@@ -1505,10 +1539,11 @@ export default function PosScreenPage() {
                       <button
                         type="button"
                         onClick={removePromo}
-                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Hapus promo dari keranjang"
+                        className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Batal gunakan promo"
                       >
-                        &times;
+                        <span>Batal</span>
+                        <span className="text-xs">&times;</span>
                       </button>
                     </div>
                   </div>
@@ -1795,7 +1830,7 @@ export default function PosScreenPage() {
                 {formatRupiah(effectiveTotal)}
               </p>
               <div className="text-xs text-slate-500 mt-1 space-x-2">
-                <span>Antrean #{fullQueueNumber || 'Belum diisi'} ({orderType === 'TAKEAWAY' ? 'Takeaway' : 'Dine In'})</span>
+                <span>Antrean #{fullQueueNumber || 'Belum diisi'} ({orderType === 'TAKEAWAY' ? 'Takeaway / Bungkus' : 'Dine In / Di Tempat'})</span>
                 <span>&bull;</span>
                 <span>{customerName}</span>
                 {appliedPromo && (
@@ -2197,13 +2232,14 @@ export default function PosScreenPage() {
       )}
 
       {/* ─── Hidden Printable Thermal Receipt Container ───────────────────────── */}
-      <ThermalReceipt order={printOrder} store={storeInfo} printMode={printMode} />
+      <ThermalReceipt order={printOrder} store={effectiveStore} printMode={printMode} />
 
       {/* ─── MODAL KONEKSI PRINTER BLUETOOTH (QUICK CONNECT) ───────────────────── */}
       <BluetoothModal
         isOpen={isBtModalOpen}
         onClose={() => setIsBtModalOpen(false)}
         userName="Kasir"
+        storeInfo={effectiveStore}
         onConnectedContinue={() => {
           setIsBtModalOpen(false);
           handleProcessCheckout(null, true);

@@ -96,7 +96,7 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
             <div className="text-[10px] sm:text-[11px] space-y-0.5 my-2">
               <div className="flex justify-between">
                 <span className="text-gray-700">Tipe:</span>
-                <span className="font-bold">{isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)'}</span>
+                <span className="font-bold">{isTakeaway ? 'Takeaway / Bungkus' : 'Dine In / Di Tempat'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-700">No. Order:</span>
@@ -193,8 +193,8 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
                   store?.receiptHeaderAlign === 'LEFT'
                     ? 'text-left'
                     : store?.receiptHeaderAlign === 'RIGHT'
-                    ? 'text-right'
-                    : 'text-center',
+                      ? 'text-right'
+                      : 'text-center',
                   store?.receiptHeaderBold && 'font-bold'
                 )}
               >
@@ -239,7 +239,7 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
               <div className="flex justify-between">
                 <span>Pesanan:</span>
                 <span className="font-bold">
-                  {isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)'}
+                  {isTakeaway ? 'Takeaway / Bungkus' : 'Dine In / Di Tempat'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -378,8 +378,8 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
                   store?.receiptFooterAlign === 'LEFT'
                     ? 'text-left'
                     : store?.receiptFooterAlign === 'RIGHT'
-                    ? 'text-right'
-                    : 'text-center',
+                      ? 'text-right'
+                      : 'text-center',
                   store?.receiptFooterBold && 'font-bold'
                 )}
               >

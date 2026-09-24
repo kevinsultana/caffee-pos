@@ -21,6 +21,7 @@ export default function BluetoothModal({
   isOpen,
   onClose,
   userName = 'Kasir',
+  storeInfo = null,
   onConnectedContinue,
   onProceedWithoutPrinter,
   continueButtonText = 'Lanjutkan Konfirmasi & Cetak Struk',
@@ -80,8 +81,8 @@ export default function BluetoothModal({
         grandTotal: 0,
         payment: { method: 'CASH', cashReceived: 0, changeAmount: 0 },
       };
-      const storeInfo = { name: 'SCHAW CAFE', printerWidth: 58, code: 'MAIN' };
-      const bytes = await buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
+      const activeStore = storeInfo || { name: 'SCHAW CAFE', printerWidth: 58, code: 'MAIN' };
+      const bytes = await buildReceiptBytes(testOrder, activeStore, 'CUSTOMER');
       await printBytes(bytes);
       toast.success('Struk test berhasil dicetak!', { id: toastId });
     } catch (err) {
@@ -259,6 +260,35 @@ export default function BluetoothModal({
               </>
             )}
           </button>
+        )}
+
+        {/* Info Pengaturan Struk yang Sedang Aktif (Tersinkron dengan Store Settings) */}
+        {storeInfo && (
+          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between text-slate-700 font-bold border-b border-slate-200/60 pb-1">
+              <span className="flex items-center gap-1.5">
+                <span>⚙️</span>
+                <span>Format Struk (Tersinkron Pengaturan Toko)</span>
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-white border border-slate-200 text-slate-800">
+                {storeInfo.printerWidth || 58}mm
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-slate-600 text-[10px]">
+              <div>
+                Lebar Kolom: <strong className="text-slate-800">{storeInfo.receiptCols || (storeInfo.printerWidth === 80 ? (storeInfo.receiptFontSize === 'SMALL' ? 64 : 48) : (storeInfo.receiptFontSize === 'SMALL' ? 42 : 32))} Kolom</strong>
+              </div>
+              <div>
+                Ukuran Font: <strong className="text-slate-800">{storeInfo.receiptFontSize === 'SMALL' ? 'Font B (Kecil)' : 'Font A (Normal)'}</strong>
+              </div>
+              <div>
+                Logo Struk: <strong className="text-slate-800">{storeInfo.receiptShowLogo !== false ? (storeInfo.receiptLogoUrl ? 'Logo Khusus Struk' : storeInfo.logoUrl ? 'Logo Toko' : 'Tidak Ada Gambar') : 'Disembunyikan'}</strong>
+              </div>
+              <div>
+                Nama Toko: <strong className="text-slate-800">{storeInfo.receiptShowStoreName !== false ? 'Dicetak' : 'Disembunyikan'}</strong>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Profile UUID Selector */}

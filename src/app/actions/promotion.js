@@ -443,12 +443,10 @@ export async function validatePromoCode({ code, cartItems }) {
     let calculatedDiscount = 0;
     const actionValue = Number(action.value);
     const maxDiscount = action.maxDiscount ? Number(action.maxDiscount) : null;
+    const productCondition = conditions.find((c) => c.type === 'PRODUCT');
+    const targetProdId = productCondition?.productId || null;
 
     if (action.scope === 'PRODUCT') {
-      // Cari produk yang ditargetkan dalam kondisi
-      const productCondition = conditions.find((c) => c.type === 'PRODUCT');
-      const targetProdId = productCondition?.productId;
-
       // Filter item keranjang yang sesuai target
       const eligibleItems = cartItems.filter((it) => it.productId === targetProdId);
 

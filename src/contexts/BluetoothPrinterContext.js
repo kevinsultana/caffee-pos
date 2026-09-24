@@ -271,7 +271,7 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(enc('No. Order : ' + (order.orderNumber || '-') + '\n'));
     parts.push(enc('Waktu     : ' + fmtDt(order.createdAt) + '\n'));
     parts.push(enc('Pelanggan : ' + (order.customerNameSnapshot || order.customer?.name || 'Umum') + '\n'));
-    parts.push(enc('Tipe      : ' + (isTakeaway ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)') + '\n'));
+    parts.push(enc('Tipe      : ' + (isTakeaway ? 'Takeaway / Bungkus' : 'Dine In / Di Tempat') + '\n'));
     parts.push(enc('Sumber    : ' + (order.source === 'PUBLIC_QR' ? 'QR Online' : 'Kasir POS') + '\n'));
     parts.push(enc(sep + '\n'));
 
@@ -355,7 +355,7 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(enc('Waktu    : ' + fmtDt(order.paidAt || order.createdAt) + '\n'));
     parts.push(enc('No.Order : ' + (order.orderNumber || '-') + '\n'));
     parts.push(enc('Antrean  : ' + queueNum + '\n'));
-    parts.push(enc('Pesanan  : ' + (isTakeawayCust ? 'Takeaway (Bungkus)' : 'Dine In (Makan di Tempat)') + '\n'));
+    parts.push(enc('Pesanan  : ' + (isTakeawayCust ? 'Takeaway / Bungkus' : 'Dine In / Di Tempat') + '\n'));
     parts.push(enc('Kasir    : ' + (order.createdBy?.name || 'Kasir') + '\n'));
     parts.push(enc('Pelanggan: ' + (order.customerNameSnapshot || order.customer?.name || 'Umum') + '\n'));
     parts.push(enc(sep + '\n'));
