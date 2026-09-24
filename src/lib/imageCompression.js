@@ -98,19 +98,29 @@ export async function compressImage(file, options = {}) {
 
           // 4. Jika setelah menurunkan kualitas masih > 300KB, turunkan resolusi canvas
           let currentScale = 0.85;
-          while (blob && blob.size > maxSizeBytes && currentScale > 0.3) {
+          while (blob && blob.size > maxSizeBytes && currentScale > 0.2) {
             const scaledCanvas = document.createElement('canvas');
-            scaledCanvas.width = Math.max(300, Math.round(width * currentScale));
-            scaledCanvas.height = Math.max(300, Math.round(height * currentScale));
+            const newW = Math.max(200, Math.round(width * currentScale));
+            const newH = Math.max(200, Math.round(height * currentScale));
+            scaledCanvas.width = newW;
+            scaledCanvas.height = newH;
             const scaledCtx = scaledCanvas.getContext('2d');
 
             if (outputType === 'image/jpeg') {
               scaledCtx.fillStyle = '#ffffff';
-              scaledCtx.fillRect(0, 0, scaledCanvas.width, scaledCanvas.height);
+              scaledCtx.fillRect(0, 0, newW, newH);
             }
 
-            scaledCtx.drawImage(img, 0, 0, scaledCanvas.width, scaledCanvas.height);
+            scaledCtx.drawImage(img, 0, 0, newW, newH);
             blob = await toBlobPromise(scaledCanvas, 0.7);
+
+            // Jika masih lebih besar di canvas yang di-scale, turunkan kualitas di canvas ini
+            let subQuality = 0.6;
+            while (blob && blob.size > maxSizeBytes && subQuality >= 0.15) {
+              blob = await toBlobPromise(scaledCanvas, subQuality);
+              subQuality -= 0.1;
+            }
+
             currentScale -= 0.15;
           }
 

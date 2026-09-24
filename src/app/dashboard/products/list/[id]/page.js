@@ -8,6 +8,8 @@ import {
   getProductWithDetails,
   updateProduct,
   uploadProductImage,
+  deleteProductImageFile,
+  removeProductImage,
   createProductVariant,
   updateProductVariant,
   deleteProductVariant,
@@ -449,6 +451,12 @@ export default function ProductDetailPage() {
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
+        // Hapus foto lama dari Supabase jika ada foto sebelumnya yang digantikan
+        const oldImage = prodForm.imageUrl;
+        if (oldImage && oldImage !== res.imageUrl) {
+          await deleteProductImageFile(oldImage);
+        }
+
         toast.success(
           `Foto produk berhasil dikompres & diunggah (${(compressedSize / 1024).toFixed(0)} KB)!`,
           { id: toastId }
@@ -466,8 +474,33 @@ export default function ProductDetailPage() {
     }
   };
 
-  const handleRemoveImage = () => {
-    setProdForm((prev) => ({ ...prev, imageUrl: null }));
+  const handleRemoveImage = async () => {
+    const currentImageUrl = prodForm.imageUrl;
+    if (!currentImageUrl) return;
+
+    setIsUploadingImage(true);
+    const toastId = toast.loading('Menghapus foto dari Supabase storage...');
+
+    try {
+      // 1. Hapus file fisik langsung dari Supabase Storage
+      await deleteProductImageFile(currentImageUrl);
+
+      // 2. Jika produk di database memiliki gambar ini, kosongkan field imageUrl di database juga
+      if (product?.id && product.imageUrl === currentImageUrl) {
+        await removeProductImage(product.id);
+      }
+
+      setProdForm((prev) => ({ ...prev, imageUrl: null }));
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      toast.success('Foto berhasil dihapus dari Supabase storage.', { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menghapus foto dari storage.', { id: toastId });
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   // ─── PRODUCT INFO HANDLER ────────────────────────────────────────────────

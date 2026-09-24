@@ -254,7 +254,7 @@ export async function uploadProductImage(formData) {
       return { error: 'Format file tidak didukung. Harap gunakan PNG, JPG, WEBP, atau SVG.' };
     }
 
-    const MAX_SIZE = 350 * 1024; // Batas maksimal 300KB (toleransi 350KB)
+    const MAX_SIZE = 300 * 1024; // Batas maksimal tepat 300 KB
     if (file.size > MAX_SIZE) {
       return {
         error: `Ukuran file gambar (${(file.size / 1024).toFixed(1)} KB) melebihi batas maksimal 300 KB. Gambar harus dikompres terlebih dahulu.`,
@@ -301,17 +301,62 @@ export async function uploadProductImage(formData) {
  * Hapus file foto produk dari Supabase Storage jika tersimpan di bucket product-images
  */
 export async function deleteProductImageFile(imageUrl) {
-  if (!imageUrl || typeof imageUrl !== 'string') return;
+  if (!imageUrl || typeof imageUrl !== 'string') return { success: true };
   try {
+    if (!isSupabaseConfigured) {
+      console.warn('[deleteProductImageFile] Supabase belum dikonfigurasi.');
+      return { error: 'Supabase belum dikonfigurasi.' };
+    }
+
     if (imageUrl.includes('product-images/')) {
       const parts = imageUrl.split('product-images/');
       if (parts[1]) {
         const filePath = decodeURIComponent(parts[1].split('?')[0]);
-        await supabase.storage.from('product-images').remove([filePath]);
+        const { error } = await supabase.storage.from('product-images').remove([filePath]);
+        if (error) {
+          console.error('[deleteProductImageFile] Supabase Storage remove error:', error);
+          return { error: error.message };
+        }
       }
     }
+    return { success: true };
   } catch (err) {
     console.error('[deleteProductImageFile] Error:', err);
+    return { error: err.message };
+  }
+}
+
+/**
+ * Hapus foto produk dari Supabase Storage dan kosongkan field imageUrl pada data produk
+ */
+export async function removeProductImage(productId) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const product = await prisma.product.findFirst({
+      where: { id: productId, storeId },
+      select: { id: true, imageUrl: true },
+    });
+
+    if (!product) {
+      return { error: 'Produk tidak ditemukan.' };
+    }
+
+    if (product.imageUrl) {
+      await deleteProductImageFile(product.imageUrl);
+      await prisma.product.update({
+        where: { id: productId },
+        data: { imageUrl: null },
+      });
+    }
+
+    revalidatePath('/dashboard/products/list');
+    revalidatePath(`/dashboard/products/list/${productId}`);
+    revalidatePath('/dashboard/pos');
+
+    return { success: true };
+  } catch (error) {
+    console.error('[removeProductImage] Error:', error);
+    return { error: error.message || 'Gagal menghapus foto produk.' };
   }
 }
 

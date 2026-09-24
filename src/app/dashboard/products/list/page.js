@@ -9,6 +9,8 @@ import {
   updateProduct,
   deleteProduct,
   uploadProductImage,
+  deleteProductImageFile,
+  removeProductImage,
   getProductCategories,
 } from '@/app/actions/product';
 import { getInventoryItems } from '@/app/actions/inventory';
@@ -136,6 +138,12 @@ export default function ProductsListPage() {
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
+        // Hapus foto lama dari Supabase jika ada foto sebelumnya yang digantikan
+        const oldImage = imageUrl;
+        if (oldImage && oldImage !== res.imageUrl) {
+          await deleteProductImageFile(oldImage);
+        }
+
         toast.success(
           `Foto produk berhasil dikompres & diunggah (${(compressedSize / 1024).toFixed(0)} KB)!`,
           { id: toastId }
@@ -153,8 +161,46 @@ export default function ProductsListPage() {
     }
   }
 
-  function handleRemoveImage() {
-    setImageUrl(null);
+  async function handleRemoveImage() {
+    const currentImageUrl = imageUrl;
+    if (!currentImageUrl) return;
+
+    setIsUploadingImage(true);
+    const toastId = toast.loading('Menghapus foto dari Supabase storage...');
+
+    try {
+      // 1. Hapus fisik file langsung dari Supabase Storage
+      await deleteProductImageFile(currentImageUrl);
+
+      // 2. Jika sedang edit produk yang tersimpan di DB, perbarui juga record produk
+      if (editingProduct?.id && editingProduct.imageUrl === currentImageUrl) {
+        await removeProductImage(editingProduct.id);
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editingProduct.id ? { ...p, imageUrl: null } : p))
+        );
+      }
+
+      setImageUrl(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      toast.success('Foto berhasil dihapus dari Supabase storage.', { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menghapus foto dari storage.', { id: toastId });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }
+
+  function handleCloseModal() {
+    // Bersihkan file yang diunggah jika pembuatan produk atau perubahan dibatalkan
+    if (!editingProduct && imageUrl) {
+      deleteProductImageFile(imageUrl);
+    } else if (editingProduct && imageUrl && imageUrl !== editingProduct.imageUrl) {
+      deleteProductImageFile(imageUrl);
+    }
+    setModalOpen(false);
   }
 
   function handleSave(e) {
@@ -461,7 +507,7 @@ export default function ProductsListPage() {
                 {editingProduct ? 'Edit Produk Menu' : 'Tambah Produk Menu Baru'}
               </h3>
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={handleCloseModal}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -685,7 +731,7 @@ export default function ProductsListPage() {
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  onClick={handleCloseModal}
                   disabled={isPending}
                   className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                 >
