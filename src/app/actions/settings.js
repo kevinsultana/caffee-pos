@@ -42,6 +42,9 @@ export async function getStoreSettings() {
                 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
               receiptFooterAlign: store.settings.receiptFooterAlign || 'CENTER',
               receiptFooterBold: Boolean(store.settings.receiptFooterBold),
+              receiptFontSize: store.settings.receiptFontSize || 'NORMAL',
+              receiptDoubleHeight: store.settings.receiptDoubleHeight ?? true,
+              receiptCols: store.settings.receiptCols ?? null,
               qrisImageUrl: store.settings.qrisImageUrl || null,
               taxEnabled: store.settings.taxEnabled,
               taxRate: Number(store.settings.taxRate),
@@ -64,6 +67,9 @@ export async function getStoreSettings() {
               receiptFooter: 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
               receiptFooterAlign: 'CENTER',
               receiptFooterBold: false,
+              receiptFontSize: 'NORMAL',
+              receiptDoubleHeight: true,
+              receiptCols: null,
               qrisImageUrl: null,
               taxEnabled: false,
               taxRate: 0,
@@ -594,6 +600,9 @@ export async function updateStoreSettings(payload) {
     receiptFooter = 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
     receiptFooterAlign = 'CENTER',
     receiptFooterBold = false,
+    receiptFontSize = 'NORMAL',
+    receiptDoubleHeight = true,
+    receiptCols = null,
     printerWidth = 58,
     taxEnabled,
     taxRate,
@@ -620,6 +629,14 @@ export async function updateStoreSettings(payload) {
   const validFooterAlign = ['LEFT', 'CENTER', 'RIGHT'].includes(receiptFooterAlign)
     ? receiptFooterAlign
     : 'CENTER';
+
+  // ── Validasi Font Size, Double Height, Cols ──────────────────────────
+  const validFontSize = receiptFontSize === 'SMALL' ? 'SMALL' : 'NORMAL';
+  const validDoubleHeight = Boolean(receiptDoubleHeight);
+  const parsedCols = Number(receiptCols);
+  const validCols = (receiptCols !== null && receiptCols !== undefined && !isNaN(parsedCols) && parsedCols > 0)
+    ? Math.min(100, Math.max(20, Math.round(parsedCols)))
+    : null;
 
   // ── Validasi Maksimal Shift Aktif ────────────────────────────────────
   const validMaxActiveShifts = Math.max(1, parseInt(maxActiveShifts, 10) || 1);
@@ -662,6 +679,9 @@ export async function updateStoreSettings(payload) {
         receiptFooter: receiptFooter ? String(receiptFooter).trim() : null,
         receiptFooterAlign: validFooterAlign,
         receiptFooterBold: Boolean(receiptFooterBold),
+        receiptFontSize: validFontSize,
+        receiptDoubleHeight: validDoubleHeight,
+        receiptCols: validCols,
         taxEnabled,
         taxRate,
         taxBaseIncludesServiceCharge,
@@ -683,6 +703,9 @@ export async function updateStoreSettings(payload) {
         receiptFooter: receiptFooter ? String(receiptFooter).trim() : null,
         receiptFooterAlign: validFooterAlign,
         receiptFooterBold: Boolean(receiptFooterBold),
+        receiptFontSize: validFontSize,
+        receiptDoubleHeight: validDoubleHeight,
+        receiptCols: validCols,
         taxEnabled,
         taxRate,
         taxBaseIncludesServiceCharge,

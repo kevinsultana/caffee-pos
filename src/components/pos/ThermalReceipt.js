@@ -49,6 +49,8 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
 
   const isKitchen = printMode === 'KITCHEN';
   const is80mm = store?.printerWidth === 80;
+  const isSmallFont = store?.receiptFontSize === 'SMALL';
+  const isDoubleHeight = store?.receiptDoubleHeight !== false;
 
   const rawQueue = order.queueNumber || order.queue_number || order.queue || order.queueNo || '';
   const isTakeaway = rawQueue.toUpperCase().startsWith('TA') || order.orderType === 'TAKEAWAY';
@@ -58,7 +60,9 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
       <div
         className={cn(
           'mx-auto p-1 leading-tight',
-          is80mm ? 'w-[80mm] max-w-[80mm] text-xs' : 'w-[58mm] max-w-[58mm] text-[11px]'
+          is80mm
+            ? (isSmallFont ? 'w-[80mm] max-w-[80mm] text-[10.5px]' : 'w-[80mm] max-w-[80mm] text-xs')
+            : (isSmallFont ? 'w-[58mm] max-w-[58mm] text-[9.5px]' : 'w-[58mm] max-w-[58mm] text-[11px]')
         )}
       >
         {isKitchen ? (
@@ -173,7 +177,10 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
 
             {/* Nama Toko */}
             {store?.receiptShowStoreName !== false && (
-              <div className="text-center font-bold text-xs sm:text-sm uppercase tracking-wider">
+              <div className={cn(
+                'text-center font-bold uppercase tracking-wider',
+                isDoubleHeight ? 'text-xs sm:text-sm' : 'text-[11px]'
+              )}>
                 {store?.name || 'SCHAW CAFE'}
               </div>
             )}
@@ -323,7 +330,10 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
             {/* Garis Pembatas Total */}
             <div className="border-b border-black my-1" />
 
-            <div className="flex justify-between text-xs sm:text-sm font-black my-0.5">
+            <div className={cn(
+              'flex justify-between font-black my-0.5',
+              isDoubleHeight ? 'text-xs sm:text-sm' : 'text-[11px]'
+            )}>
               <span>TOTAL</span>
               <span>{formatRupiah(order.cashPayable || order.grandTotal)}</span>
             </div>

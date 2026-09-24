@@ -210,7 +210,13 @@ export async function rasterizeImageUrl(imageUrl, maxDots = 384) {
  * Build ESC/POS bytes untuk struk CUSTOMER
  */
 export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
-  const cols = (store?.printerWidth || 58) === 80 ? 48 : 32;
+  const isSmallFont = store?.receiptFontSize === 'SMALL';
+  const defaultCols = (store?.printerWidth || 58) === 80
+    ? (isSmallFont ? 64 : 48)
+    : (isSmallFont ? 42 : 32);
+  const cols = (store?.receiptCols && Number(store.receiptCols) > 0)
+    ? Number(store.receiptCols)
+    : defaultCols;
   const sep = '-'.repeat(cols);
   const isKitchen = mode === 'KITCHEN';
 
@@ -227,6 +233,13 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
 
   // Init
   parts.push(new Uint8Array([ESC, 0x40]));
+
+  // Font size selection: ESC M 0 (Font A / Standar) atau ESC M 1 (Font B / Kecil-Kompak)
+  if (isSmallFont) {
+    parts.push(new Uint8Array([ESC, 0x4D, 0x01]));
+  } else {
+    parts.push(new Uint8Array([ESC, 0x4D, 0x00]));
+  }
 
   if (isKitchen) {
     // ── TIKET DAPUR ──────────────────────────────────────────────────────────
@@ -302,9 +315,13 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     if (store?.receiptShowStoreName !== false) {
       parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
       parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold on
-      parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
+      if (store?.receiptDoubleHeight !== false) {
+        parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
+      }
       parts.push(enc((store?.name || 'SCHAW CAFE') + '\n'));
-      parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
+      if (store?.receiptDoubleHeight !== false) {
+        parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
+      }
       parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
     }
 
@@ -388,10 +405,14 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(enc(sep + '\n'));
     // TOTAL bold + double height
     parts.push(new Uint8Array([ESC, 0x45, 0x01]));
-    parts.push(new Uint8Array([ESC, 0x21, 0x10]));
+    if (store?.receiptDoubleHeight !== false) {
+      parts.push(new Uint8Array([ESC, 0x21, 0x10]));
+    }
     const totalStr = fmtRp(order.cashPayable || order.grandTotal);
     parts.push(enc(padRight('TOTAL', cols - totalStr.length) + totalStr + '\n'));
-    parts.push(new Uint8Array([ESC, 0x21, 0x00]));
+    if (store?.receiptDoubleHeight !== false) {
+      parts.push(new Uint8Array([ESC, 0x21, 0x00]));
+    }
     parts.push(new Uint8Array([ESC, 0x45, 0x00]));
     parts.push(enc(sep + '\n'));
 
@@ -428,6 +449,11 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
 
     if (footerBold) parts.push(new Uint8Array([ESC, 0x45, 0x00]));
     parts.push(new Uint8Array([ESC, 0x61, 0x00])); // reset alignment to left
+  }
+
+  // Reset font ke normal (Font A) jika sebelumnya Font B
+  if (isSmallFont) {
+    parts.push(new Uint8Array([ESC, 0x4D, 0x00]));
   }
 
   // Feed & full cut

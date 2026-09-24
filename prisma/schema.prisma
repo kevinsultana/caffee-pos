@@ -169,6 +169,10 @@ model StoreSettings {
   receiptFooterAlign String  @default("CENTER")
   receiptFooterBold  Boolean @default(false)
 
+  receiptFontSize     String  @default("NORMAL")
+  receiptDoubleHeight Boolean @default(true)
+  receiptCols         Int?
+
   qrisImageUrl String?
 
   timezone String @default("Asia/Jakarta")

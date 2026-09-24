@@ -144,6 +144,9 @@ function ReceiptPreviewCard({
   printerWidth,
   receiptShowLogo,
   receiptShowStoreName = true,
+  receiptFontSize = 'NORMAL',
+  receiptDoubleHeight = true,
+  receiptCols = null,
   receiptHeader,
   receiptHeaderAlign,
   receiptHeaderBold,
@@ -156,7 +159,9 @@ function ReceiptPreviewCard({
   btDeviceName,
 }) {
   const is80 = printerWidth === 80;
-  const cols = is80 ? 48 : 32;
+  const isSmallFont = receiptFontSize === 'SMALL';
+  const defaultCols = is80 ? (isSmallFont ? 64 : 48) : (isSmallFont ? 42 : 32);
+  const cols = (receiptCols && Number(receiptCols) > 0) ? Number(receiptCols) : defaultCols;
   const sep = '-'.repeat(cols);
   const activeLogo = receiptLogoUrl || logoUrl;
 
@@ -169,14 +174,19 @@ function ReceiptPreviewCard({
   return (
     <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 flex flex-col items-center shadow-2xs">
       <div className="w-full flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             Live Preview Struk
           </span>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
-            {printerWidth}mm
+            {printerWidth}mm • {cols} Col
           </span>
+          {isSmallFont && (
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-700">
+              Font B
+            </span>
+          )}
         </div>
 
         <button
@@ -208,7 +218,8 @@ function ReceiptPreviewCard({
       {/* Container Kertas Struk Termal */}
       <div
         className={cn(
-          'w-full bg-[#fcfcfa] text-stone-900 font-mono text-[11px] leading-tight px-4 py-6 rounded-md shadow-md border border-stone-200 transition-all relative',
+          'w-full bg-[#fcfcfa] text-stone-900 font-mono leading-tight px-4 py-6 rounded-md shadow-md border border-stone-200 transition-all relative',
+          isSmallFont ? 'text-[9.5px]' : 'text-[11px]',
           is80 ? 'max-w-85' : 'max-w-67.5'
         )}
       >
@@ -233,7 +244,10 @@ function ReceiptPreviewCard({
 
         {/* 2. Nama Toko */}
         {receiptShowStoreName && (
-          <div className="text-center font-black text-sm uppercase tracking-wider text-black">
+          <div className={cn(
+            'text-center font-black uppercase tracking-wider text-black',
+            receiptDoubleHeight ? 'text-sm' : 'text-xs'
+          )}>
             {storeName || 'SCHAW CAFE'}
           </div>
         )}
@@ -322,7 +336,10 @@ function ReceiptPreviewCard({
             <span>Subtotal:</span>
             <span>Rp 40.000</span>
           </div>
-          <div className="flex justify-between font-bold text-xs text-black pt-1 border-t border-dashed border-stone-300">
+          <div className={cn(
+            'flex justify-between font-bold text-black pt-1 border-t border-dashed border-stone-300',
+            receiptDoubleHeight ? 'text-xs sm:text-sm' : 'text-[11px]'
+          )}>
             <span>TOTAL:</span>
             <span>Rp 40.000</span>
           </div>
@@ -405,6 +422,9 @@ export default function SettingsPage() {
   const [receiptShowLogo, setReceiptShowLogo] = useState(true);
   const [receiptLogoUrl, setReceiptLogoUrl] = useState(null);
   const [receiptShowStoreName, setReceiptShowStoreName] = useState(true);
+  const [receiptFontSize, setReceiptFontSize] = useState('NORMAL');
+  const [receiptDoubleHeight, setReceiptDoubleHeight] = useState(true);
+  const [receiptCols, setReceiptCols] = useState('');
   const [receiptHeader, setReceiptHeader] = useState('');
   const [receiptHeaderAlign, setReceiptHeaderAlign] = useState('CENTER');
   const [receiptHeaderBold, setReceiptHeaderBold] = useState(false);
@@ -453,6 +473,9 @@ export default function SettingsPage() {
       setReceiptShowLogo(settings.receiptShowLogo ?? true);
       setReceiptLogoUrl(settings.receiptLogoUrl || null);
       setReceiptShowStoreName(settings.receiptShowStoreName ?? true);
+      setReceiptFontSize(settings.receiptFontSize || 'NORMAL');
+      setReceiptDoubleHeight(settings.receiptDoubleHeight ?? true);
+      setReceiptCols(settings.receiptCols !== null && settings.receiptCols !== undefined ? String(settings.receiptCols) : '');
       setReceiptHeader(settings.receiptHeader || '');
       setReceiptHeaderAlign(settings.receiptHeaderAlign || 'CENTER');
       setReceiptHeaderBold(Boolean(settings.receiptHeaderBold));
@@ -698,6 +721,9 @@ export default function SettingsPage() {
         logoUrl: logoUrl || null,
         receiptLogoUrl: receiptLogoUrl || null,
         receiptShowStoreName,
+        receiptFontSize,
+        receiptDoubleHeight,
+        receiptCols: receiptCols ? parseInt(receiptCols, 10) : null,
         printerWidth,
         code: 'MAIN',
         receiptShowLogo,
@@ -721,7 +747,7 @@ export default function SettingsPage() {
   // Handle Save Settings
   const handleSave = () => {
     if (!storeName.trim()) {
-      toast.error('Nama kafe/usaha tidak boleh kosong.');
+      toast.error('Nama Toko/usaha tidak boleh kosong.');
       return;
     }
 
@@ -731,6 +757,9 @@ export default function SettingsPage() {
         logoUrl,
         receiptLogoUrl,
         receiptShowStoreName,
+        receiptFontSize,
+        receiptDoubleHeight,
+        receiptCols: receiptCols ? parseInt(receiptCols, 10) : null,
         receiptShowLogo,
         receiptHeader,
         receiptHeaderAlign,
@@ -788,7 +817,7 @@ export default function SettingsPage() {
         {/* Input Nama Toko */}
         <div>
           <label htmlFor="input-store-name" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-            Nama Kafe / Usaha *
+            Nama Toko / Usaha *
           </label>
           <input
             id="input-store-name"
@@ -805,7 +834,7 @@ export default function SettingsPage() {
         {/* Upload Logo Toko */}
         <div className="pt-2 border-t border-slate-100">
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-            Logo Toko (Supabase Storage)
+            Logo Toko
           </label>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -899,18 +928,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
-            <p className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-              Proteksi Anti Double-Shift
-            </p>
-            <p>
-              Bila diatur <strong>1</strong> (default), hanya 1 sesi kasir yang diperbolehkan aktif pada satu waktu. Kasir lain tidak dapat membuka shift baru sebelum shift yang sedang berjalan ditutup.
-            </p>
-            <p className="text-[10px] text-slate-400">
-              Ubah ke angka lebih besar (misal 2 atau 3) hanya jika toko Anda memiliki beberapa terminal mesin kasir fisik yang beroperasi serentak.
-            </p>
-          </div>
+
         </div>
       </SettingsCard>
 
@@ -1176,12 +1194,12 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* Toggle Cetak Nama Kafe / Usaha (True/False) */}
+              {/* Toggle Cetak Nama Toko / Usaha (True/False) */}
               <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
                 <div>
-                  <p className="text-xs font-bold text-slate-800">Cetak Nama Kafe / Usaha</p>
+                  <p className="text-xs font-bold text-slate-800">Cetak Nama Toko / Usaha</p>
                   <p className="text-[11px] text-slate-500">
-                    Jika dinonaktifkan, teks nama kafe (&quot;{storeName || 'SCHAW CAFE'}&quot;) tidak akan dicetak.
+                    Jika dinonaktifkan, teks nama Toko (&quot;{storeName || 'SCHAW CAFE'}&quot;) tidak akan dicetak.
                   </p>
                 </div>
                 <Toggle
@@ -1243,11 +1261,170 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 2. BAGIAN FOOTER STRUK */}
+            {/* 2. UKURAN FONT & FORMAT CETAK */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                  2
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Ukuran Font &amp; Format Cetak
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Atur ukuran teks thermal, huruf tinggi (double-height), dan lebar karakter per baris
+                  </p>
+                </div>
+              </div>
+
+              {/* Ukuran Font: Normal (Font A) vs Kecil (Font B) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Ukuran Karakter / Font Printer
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    onClick={() => !isSaving && setReceiptFontSize('NORMAL')}
+                    className={cn(
+                      'p-3.5 rounded-xl border transition-all cursor-pointer select-none space-y-1',
+                      receiptFontSize === 'NORMAL'
+                        ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          'w-4 h-4 rounded-full border flex items-center justify-center',
+                          receiptFontSize === 'NORMAL' ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                        )}>
+                          {receiptFontSize === 'NORMAL' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <span className="text-xs font-bold text-slate-900">Normal (Font A)</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700">
+                        12x24 dot
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6">
+                      Ukuran standar printer termal. Font jelas dan mudah terbaca dari jarak wajar.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => !isSaving && setReceiptFontSize('SMALL')}
+                    className={cn(
+                      'p-3.5 rounded-xl border transition-all cursor-pointer select-none space-y-1',
+                      receiptFontSize === 'SMALL'
+                        ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          'w-4 h-4 rounded-full border flex items-center justify-center',
+                          receiptFontSize === 'SMALL' ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                        )}>
+                          {receiptFontSize === 'SMALL' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <span className="text-xs font-bold text-slate-900">Kecil / Kompak (Font B)</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-700">
+                        9x17 dot
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6">
+                      Ukuran font lebih kecil &amp; padat. Muat lebih banyak detail menu serta hemat kertas struk.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Toggle Double-Height */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Huruf Tinggi (Double Height)</p>
+                  <p className="text-[11px] text-slate-500">
+                    Cetak nama usaha dan teks <strong>TOTAL</strong> 2x lebih tinggi dari teks biasa agar menonjol. Nonaktifkan jika ingin font ukuran seragam/normal.
+                  </p>
+                </div>
+                <Toggle
+                  id="toggle-receipt-double-height"
+                  checked={receiptDoubleHeight}
+                  onChange={setReceiptDoubleHeight}
+                  disabled={isSaving}
+                />
+              </div>
+
+              {/* Lebar Karakter per Baris (Kolom Margin Kanan-Kiri) */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label htmlFor="input-receipt-cols" className="text-xs font-bold text-slate-800 block">
+                      Jumlah Karakter per Baris (Lebar Kolom)
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Standar: <strong>{printerWidth === 80 ? (receiptFontSize === 'SMALL' ? '64' : '48') : (receiptFontSize === 'SMALL' ? '42' : '32')}</strong> karakter. Jika hasil print teks sebelah kanan terasa ada celah atau kurang 1 karakter dari tepi kertas, naikkan nilainya (misal ke {printerWidth === 80 ? '49' : '33'}).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentVal = parseInt(receiptCols || (printerWidth === 80 ? (receiptFontSize === 'SMALL' ? 64 : 48) : (receiptFontSize === 'SMALL' ? 42 : 32)), 10);
+                        setReceiptCols(String(Math.max(20, currentVal - 1)));
+                      }}
+                      disabled={isSaving}
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 text-sm shadow-2xs"
+                      title="Kurangi 1 Karakter"
+                    >
+                      -
+                    </button>
+                    <input
+                      id="input-receipt-cols"
+                      type="number"
+                      min={20}
+                      max={100}
+                      value={receiptCols}
+                      onChange={(e) => setReceiptCols(e.target.value)}
+                      placeholder={String(printerWidth === 80 ? (receiptFontSize === 'SMALL' ? 64 : 48) : (receiptFontSize === 'SMALL' ? 42 : 32))}
+                      disabled={isSaving}
+                      className="w-20 text-center px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentVal = parseInt(receiptCols || (printerWidth === 80 ? (receiptFontSize === 'SMALL' ? 64 : 48) : (receiptFontSize === 'SMALL' ? 42 : 32)), 10);
+                        setReceiptCols(String(Math.min(100, currentVal + 1)));
+                      }}
+                      disabled={isSaving}
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 text-sm shadow-2xs"
+                      title="Tambah 1 Karakter (+1 agar lebih ke kanan)"
+                    >
+                      +
+                    </button>
+                    {receiptCols && (
+                      <button
+                        type="button"
+                        onClick={() => setReceiptCols('')}
+                        disabled={isSaving}
+                        className="px-2 py-1.5 text-[10px] font-bold text-slate-500 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Kembalikan ke Default Otomatis"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. BAGIAN FOOTER STRUK */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
                 <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  2
+                  3
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -1320,6 +1497,9 @@ export default function SettingsPage() {
               printerWidth={printerWidth}
               receiptShowLogo={receiptShowLogo}
               receiptShowStoreName={receiptShowStoreName}
+              receiptFontSize={receiptFontSize}
+              receiptDoubleHeight={receiptDoubleHeight}
+              receiptCols={receiptCols}
               receiptHeader={receiptHeader}
               receiptHeaderAlign={receiptHeaderAlign}
               receiptHeaderBold={receiptHeaderBold}
@@ -1475,41 +1655,6 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {/* Test Print Button */}
-        <div className="pt-1 border-t border-slate-100">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold text-slate-900">Test Print Struk</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Cetak struk percobaan untuk memverifikasi koneksi dan format kertas printer.
-              </p>
-            </div>
-            <button
-              id="btn-bt-test-print"
-              type="button"
-              onClick={handleTestPrint}
-              disabled={btStatus !== 'connected' || isTestPrinting}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isTestPrinting ? (
-                <>
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Mencetak...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
-                  </svg>
-                  Cetak Struk Test
-                </>
-              )}
-            </button>
-          </div>
-        </div>
 
         {/* Info Box */}
         <div className="p-3 bg-blue-50 rounded-xl border border-blue-200/80 text-[11px] text-blue-700 space-y-1.5">
