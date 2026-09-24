@@ -380,7 +380,7 @@ export default function SettingsPage() {
             </button>
 
             {mobileMenuOpen && (
-              <div className="mt-1 rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y divide-slate-100">
+              <div className="mt-1 rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y">
                 {TABS.map((tab) => (
                   <button
                     key={tab.id}
