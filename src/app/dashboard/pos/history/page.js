@@ -151,6 +151,14 @@ export default function ShiftHistoryPage() {
     if (btConnected) {
       const store = {
         name: storeData?.name || 'SCHAW CAFE',
+        logoUrl: storeData?.logoUrl,
+        receiptShowLogo: storeData?.receiptShowLogo ?? true,
+        receiptHeader: storeData?.receiptHeader,
+        receiptHeaderAlign: storeData?.receiptHeaderAlign,
+        receiptHeaderBold: storeData?.receiptHeaderBold,
+        receiptFooter: storeData?.receiptFooter,
+        receiptFooterAlign: storeData?.receiptFooterAlign,
+        receiptFooterBold: storeData?.receiptFooterBold,
         printerWidth: storeData?.printerWidth || storeData?.settings?.printerWidth || 58,
         code: storeData?.code || 'MAIN',
       };
@@ -163,8 +171,8 @@ export default function ShiftHistoryPage() {
       setPrintOrder(order);
       setPrintMode(mode);
 
-      const bytes = buildReceiptBytes(order, store, mode);
-      printBytes(bytes)
+      buildReceiptBytes(order, store, mode)
+        .then((bytes) => printBytes(bytes))
         .then(() => {
           toast.success(
             mode === 'KITCHEN' ? 'Tiket dapur berhasil dicetak!' : 'Struk berhasil dicetak!',

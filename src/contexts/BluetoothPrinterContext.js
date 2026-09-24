@@ -117,9 +117,99 @@ function fmtDt(dateVal) {
 }
 
 /**
+ * Convert an image URL to ESC/POS raster bit image command (GS v 0).
+ * Mode 0: GS v 0 0 xL xH yL yH d1...dk
+ */
+export async function rasterizeImageUrl(imageUrl, maxDots = 384) {
+  if (typeof window === 'undefined' || !imageUrl) return null;
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          let origW = img.naturalWidth || img.width;
+          let origH = img.naturalHeight || img.height;
+          if (!origW || !origH) return resolve(null);
+
+          // Batasi lebar maksimum dan pastikan kelipatan 8 dots
+          let targetW = Math.min(origW, maxDots);
+          targetW = Math.max(8, Math.floor(targetW / 8) * 8);
+          let targetH = Math.round((origH * targetW) / origW);
+          if (targetH <= 0) return resolve(null);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(null);
+
+          // Background putih untuk gambar dengan transparansi PNG / SVG
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetW, targetH);
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          const imgData = ctx.getImageData(0, 0, targetW, targetH);
+          const data = imgData.data;
+
+          const bytesWidth = targetW / 8;
+          const rasterBytes = new Uint8Array(8 + bytesWidth * targetH);
+
+          // GS v 0 0 xL xH yL yH
+          rasterBytes[0] = GS;
+          rasterBytes[1] = 0x76;
+          rasterBytes[2] = 0x30;
+          rasterBytes[3] = 0x00; // mode 0: normal
+          rasterBytes[4] = bytesWidth & 0xff; // xL
+          rasterBytes[5] = (bytesWidth >> 8) & 0xff; // xH
+          rasterBytes[6] = targetH & 0xff; // yL
+          rasterBytes[7] = (targetH >> 8) & 0xff; // yH
+
+          let offset = 8;
+          for (let y = 0; y < targetH; y++) {
+            for (let b = 0; b < bytesWidth; b++) {
+              let byteVal = 0;
+              for (let bit = 0; bit < 8; bit++) {
+                const x = b * 8 + bit;
+                const idx = (y * targetW + x) * 4;
+                const r = data[idx];
+                const g = data[idx + 1];
+                const bl = data[idx + 2];
+                const a = data[idx + 3];
+
+                // Hitung luminance grayscale (jika transparan -> putih)
+                const lum = a < 128 ? 255 : 0.299 * r + 0.587 * g + 0.114 * bl;
+                if (lum < 165) {
+                  byteVal |= 0x80 >> bit;
+                }
+              }
+              rasterBytes[offset++] = byteVal;
+            }
+          }
+
+          resolve(rasterBytes);
+        } catch (canvasErr) {
+          console.warn('[rasterizeImageUrl] Canvas error:', canvasErr);
+          resolve(null);
+        }
+      };
+      img.onerror = (e) => {
+        console.warn('[rasterizeImageUrl] Image load error:', e);
+        resolve(null);
+      };
+      img.src = imageUrl;
+    } catch (err) {
+      console.warn('[rasterizeImageUrl] Error:', err);
+      resolve(null);
+    }
+  });
+}
+
+/**
  * Build ESC/POS bytes untuk struk CUSTOMER
  */
-export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
+export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
   const cols = (store?.printerWidth || 58) === 80 ? 48 : 32;
   const sep = '-'.repeat(cols);
   const isKitchen = mode === 'KITCHEN';
@@ -192,14 +282,53 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     parts.push(new Uint8Array([ESC, 0x45, 0x00]));
   } else {
     // ── STRUK CUSTOMER ───────────────────────────────────────────────────────
-    // Header nama toko
-    parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
-    parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold on
-    parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
-    parts.push(enc((store?.name || 'SCHAW CAFE') + '\n'));
-    parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
-    parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
-    parts.push(enc('Cabang ' + (store?.code || 'MAIN') + '\n'));
+    // 1. Logo Toko (Foto Khusus Struk atau Logo Toko Utama)
+    const activeLogoUrl = store?.receiptLogoUrl || store?.logoUrl;
+    if (store?.receiptShowLogo !== false && activeLogoUrl) {
+      try {
+        const maxDots = (store?.printerWidth === 80) ? 384 : 256;
+        const logoBytes = await rasterizeImageUrl(activeLogoUrl, maxDots);
+        if (logoBytes) {
+          parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
+          parts.push(logoBytes);
+          parts.push(enc('\n'));
+        }
+      } catch (err) {
+        console.warn('[buildReceiptBytes] Logo print error:', err);
+      }
+    }
+
+    // 2. Header nama toko (Bisa diaktifkan/dinonaktifkan jika memilih hanya logo)
+    if (store?.receiptShowStoreName !== false) {
+      parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
+      parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold on
+      parts.push(new Uint8Array([ESC, 0x21, 0x10])); // double height
+      parts.push(enc((store?.name || 'SCHAW CAFE') + '\n'));
+      parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
+      parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold off
+    }
+
+    // 3. Teks Header Kustom (Align & Bold dinamis)
+    const headerAlignCode =
+      store?.receiptHeaderAlign === 'LEFT' ? 0x00 : store?.receiptHeaderAlign === 'RIGHT' ? 0x02 : 0x01;
+    const headerBold = Boolean(store?.receiptHeaderBold);
+
+    parts.push(new Uint8Array([ESC, 0x61, headerAlignCode]));
+    if (headerBold) parts.push(new Uint8Array([ESC, 0x45, 0x01]));
+
+    if (store?.receiptHeader && store.receiptHeader.trim()) {
+      const headerLines = store.receiptHeader.split('\n');
+      for (const line of headerLines) {
+        if (line.trim().length > 0) {
+          parts.push(enc(line + '\n'));
+        }
+      }
+    } else {
+      parts.push(enc('Cabang ' + (store?.code || 'MAIN') + '\n'));
+    }
+
+    if (headerBold) parts.push(new Uint8Array([ESC, 0x45, 0x00]));
+    parts.push(new Uint8Array([ESC, 0x61, 0x01]));
     parts.push(enc(sep + '\n'));
 
 
@@ -276,10 +405,29 @@ export function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     }
 
     parts.push(enc(sep + '\n'));
-    // Footer
-    parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
-    parts.push(enc('Terima kasih atas kunjungan Anda!\n'));
-    parts.push(enc('Simpan struk sebagai bukti pembayaran.\n'));
+
+    // Footer dinamis (Align & Bold)
+    const footerAlignCode =
+      store?.receiptFooterAlign === 'LEFT' ? 0x00 : store?.receiptFooterAlign === 'RIGHT' ? 0x02 : 0x01;
+    const footerBold = Boolean(store?.receiptFooterBold);
+
+    parts.push(new Uint8Array([ESC, 0x61, footerAlignCode]));
+    if (footerBold) parts.push(new Uint8Array([ESC, 0x45, 0x01]));
+
+    if (store?.receiptFooter && store.receiptFooter.trim()) {
+      const footerLines = store.receiptFooter.split('\n');
+      for (const line of footerLines) {
+        if (line.trim().length > 0) {
+          parts.push(enc(line + '\n'));
+        }
+      }
+    } else {
+      parts.push(enc('Terima kasih atas kunjungan Anda!\n'));
+      parts.push(enc('Simpan struk sebagai bukti pembayaran.\n'));
+    }
+
+    if (footerBold) parts.push(new Uint8Array([ESC, 0x45, 0x00]));
+    parts.push(new Uint8Array([ESC, 0x61, 0x00])); // reset alignment to left
   }
 
   // Feed & full cut

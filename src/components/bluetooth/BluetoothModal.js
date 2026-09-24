@@ -81,7 +81,7 @@ export default function BluetoothModal({
         payment: { method: 'CASH', cashReceived: 0, changeAmount: 0 },
       };
       const storeInfo = { name: 'SCHAW CAFE', printerWidth: 58, code: 'MAIN' };
-      const bytes = buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
+      const bytes = await buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
       await printBytes(bytes);
       toast.success('Struk test berhasil dicetak!', { id: toastId });
     } catch (err) {

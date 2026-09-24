@@ -459,7 +459,15 @@ export default function PosScreenPage() {
     if (btConnected) {
       const store = {
         name: storeInfo?.name || 'SCHAW CAFE',
-        printerWidth: settings?.printerWidth || 58,
+        logoUrl: storeInfo?.logoUrl,
+        receiptShowLogo: settings?.receiptShowLogo ?? storeInfo?.receiptShowLogo ?? true,
+        receiptHeader: settings?.receiptHeader ?? storeInfo?.receiptHeader,
+        receiptHeaderAlign: settings?.receiptHeaderAlign ?? storeInfo?.receiptHeaderAlign ?? 'CENTER',
+        receiptHeaderBold: Boolean(settings?.receiptHeaderBold ?? storeInfo?.receiptHeaderBold),
+        receiptFooter: settings?.receiptFooter ?? storeInfo?.receiptFooter,
+        receiptFooterAlign: settings?.receiptFooterAlign ?? storeInfo?.receiptFooterAlign ?? 'CENTER',
+        receiptFooterBold: Boolean(settings?.receiptFooterBold ?? storeInfo?.receiptFooterBold),
+        printerWidth: settings?.printerWidth || storeInfo?.printerWidth || 58,
         code: storeInfo?.code || 'MAIN',
       };
 
@@ -471,9 +479,8 @@ export default function PosScreenPage() {
       setPrintOrder(safeOrderToPrint);
       setPrintMode(mode);
 
-      const bytes = buildReceiptBytes(safeOrderToPrint, store, mode);
-
-      printBytes(bytes)
+      buildReceiptBytes(safeOrderToPrint, store, mode)
+        .then((bytes) => printBytes(bytes))
         .then(() => {
           toast.success(
             mode === 'KITCHEN' ? 'Tiket dapur berhasil dicetak!' : 'Struk berhasil dicetak!',

@@ -159,25 +159,45 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
              Diskon, Pajak, Grand Total, dan Informasi Pembayaran.
              ══════════════════════════════════════════════════════════════════ */
           <div>
-            {/* Logo Toko */}
-            {store?.logoUrl && (
+            {/* Logo Toko (Khusus Struk atau Logo Utama) */}
+            {store?.receiptShowLogo !== false && (store?.receiptLogoUrl || store?.logoUrl) && (
               <div className="text-center mb-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={store.logoUrl}
+                  src={store.receiptLogoUrl || store.logoUrl}
                   alt={store.name || 'Logo'}
                   className="mx-auto max-h-12 max-w-[40mm] object-contain filter grayscale"
                 />
               </div>
             )}
 
-            {/* Nama & Info Toko */}
-            <div className="text-center font-bold text-xs sm:text-sm uppercase tracking-wider">
-              {store?.name || 'SCHAW CAFE'}
-            </div>
-            <div className="text-center text-[10px] text-gray-600">
-              Cabang {store?.code || 'MAIN'}
-            </div>
+            {/* Nama Toko */}
+            {store?.receiptShowStoreName !== false && (
+              <div className="text-center font-bold text-xs sm:text-sm uppercase tracking-wider">
+                {store?.name || 'SCHAW CAFE'}
+              </div>
+            )}
+
+            {/* Sub-Header Kustom */}
+            {store?.receiptHeader && store.receiptHeader.trim() ? (
+              <div
+                className={cn(
+                  'text-[10px] text-gray-700 whitespace-pre-line my-0.5',
+                  store?.receiptHeaderAlign === 'LEFT'
+                    ? 'text-left'
+                    : store?.receiptHeaderAlign === 'RIGHT'
+                    ? 'text-right'
+                    : 'text-center',
+                  store?.receiptHeaderBold && 'font-bold'
+                )}
+              >
+                {store.receiptHeader}
+              </div>
+            ) : (
+              <div className="text-center text-[10px] text-gray-600">
+                Cabang {store?.code || 'MAIN'}
+              </div>
+            )}
 
             <div className="border-b border-dashed border-black my-1.5" />
 
@@ -340,11 +360,27 @@ export default function ThermalReceipt({ order, store, printMode = 'CUSTOMER' })
 
             <div className="border-b border-dashed border-black my-2" />
 
-            {/* Footer Ucapan */}
-            <div className="text-center text-[10px] space-y-0.5 text-gray-700">
-              <div className="font-semibold">Terima kasih atas kunjungan Anda!</div>
-              <div className="text-[9px]">Simpan struk ini sebagai bukti pembayaran yang sah.</div>
-            </div>
+            {/* Footer Ucapan Dinamis */}
+            {store?.receiptFooter && store.receiptFooter.trim() ? (
+              <div
+                className={cn(
+                  'text-[10px] space-y-0.5 whitespace-pre-line text-gray-800',
+                  store?.receiptFooterAlign === 'LEFT'
+                    ? 'text-left'
+                    : store?.receiptFooterAlign === 'RIGHT'
+                    ? 'text-right'
+                    : 'text-center',
+                  store?.receiptFooterBold && 'font-bold'
+                )}
+              >
+                {store.receiptFooter}
+              </div>
+            ) : (
+              <div className="text-center text-[10px] space-y-0.5 text-gray-700">
+                <div className="font-semibold">Terima kasih atas kunjungan Anda!</div>
+                <div className="text-[9px]">Simpan struk ini sebagai bukti pembayaran yang sah.</div>
+              </div>
+            )}
           </div>
         )}
       </div>

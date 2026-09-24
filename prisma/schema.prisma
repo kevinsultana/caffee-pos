@@ -158,6 +158,17 @@ model StoreSettings {
 
   printerWidth Int @default(58)
 
+  receiptShowLogo      Boolean @default(true)
+  receiptLogoUrl       String?
+  receiptShowStoreName Boolean @default(true)
+  receiptHeader        String?
+  receiptHeaderAlign   String  @default("CENTER")
+  receiptHeaderBold    Boolean @default(false)
+
+  receiptFooter      String?
+  receiptFooterAlign String  @default("CENTER")
+  receiptFooterBold  Boolean @default(false)
+
   qrisImageUrl String?
 
   timezone String @default("Asia/Jakarta")

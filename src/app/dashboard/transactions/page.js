@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -104,15 +104,31 @@ export default function AllTransactionsPage() {
     return { totalTrx: filteredTransactions.length, totalOmset, cashCount: cashTrx.length, qrisCount: qrisTrx.length, cashOmset, qrisOmset };
   }, [filteredTransactions]);
 
-  const handlePrint = (order, mode) => {
+  const handlePrint = async (order, mode) => {
     if (!order) { toast.error('Data transaksi tidak tersedia.'); return; }
     if (btConnected) {
-      const store = { name: storeData?.name || 'SCHAW CAFE', printerWidth: storeData?.printerWidth || 58, code: storeData?.code || 'MAIN' };
+      const store = {
+        name: storeData?.name || 'SCHAW CAFE',
+        logoUrl: storeData?.logoUrl,
+        receiptShowLogo: storeData?.receiptShowLogo ?? true,
+        receiptHeader: storeData?.receiptHeader,
+        receiptHeaderAlign: storeData?.receiptHeaderAlign,
+        receiptHeaderBold: storeData?.receiptHeaderBold,
+        receiptFooter: storeData?.receiptFooter,
+        receiptFooterAlign: storeData?.receiptFooterAlign,
+        receiptFooterBold: storeData?.receiptFooterBold,
+        printerWidth: storeData?.printerWidth || 58,
+        code: storeData?.code || 'MAIN',
+      };
       toast.loading(mode === 'KITCHEN' ? 'Mencetak tiket dapur...' : 'Mencetak struk...', { id: 'thermal-print', duration: 8000 });
       setPrintOrder(order); setPrintMode(mode);
-      printBytes(buildReceiptBytes(order, store, mode))
-        .then(() => toast.success(mode === 'KITCHEN' ? 'Tiket dapur dicetak!' : 'Struk dicetak!', { id: 'thermal-print', duration: 3000 }))
-        .catch((err) => toast.error('Gagal cetak: ' + (err.message || 'Cek printer.'), { id: 'thermal-print' }));
+      try {
+        const bytes = await buildReceiptBytes(order, store, mode);
+        await printBytes(bytes);
+        toast.success(mode === 'KITCHEN' ? 'Tiket dapur dicetak!' : 'Struk dicetak!', { id: 'thermal-print', duration: 3000 });
+      } catch (err) {
+        toast.error('Gagal cetak: ' + (err.message || 'Cek printer.'), { id: 'thermal-print' });
+      }
       return;
     }
     toast.error('Printer Bluetooth belum terhubung. Hubungkan di Pengaturan.', { duration: 5000 });

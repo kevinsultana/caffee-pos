@@ -120,6 +120,18 @@ export async function getPosInitData() {
         settings: store?.settings
           ? {
               qrisImageUrl: store.settings.qrisImageUrl || null,
+              printerWidth: store.settings.printerWidth || 58,
+              receiptShowLogo: store.settings.receiptShowLogo ?? true,
+              receiptLogoUrl: store.settings.receiptLogoUrl || null,
+              receiptShowStoreName: store.settings.receiptShowStoreName ?? true,
+              receiptHeader: store.settings.receiptHeader || '',
+              receiptHeaderAlign: store.settings.receiptHeaderAlign || 'CENTER',
+              receiptHeaderBold: Boolean(store.settings.receiptHeaderBold),
+              receiptFooter:
+                store.settings.receiptFooter ??
+                'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+              receiptFooterAlign: store.settings.receiptFooterAlign || 'CENTER',
+              receiptFooterBold: Boolean(store.settings.receiptFooterBold),
               taxEnabled: store.settings.taxEnabled,
               taxRate: Number(store.settings.taxRate),
               taxBaseIncludesServiceCharge: store.settings.taxBaseIncludesServiceCharge,
@@ -130,6 +142,16 @@ export async function getPosInitData() {
             }
           : {
               qrisImageUrl: null,
+              printerWidth: 58,
+              receiptShowLogo: true,
+              receiptLogoUrl: null,
+              receiptShowStoreName: true,
+              receiptHeader: '',
+              receiptHeaderAlign: 'CENTER',
+              receiptHeaderBold: false,
+              receiptFooter: 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+              receiptFooterAlign: 'CENTER',
+              receiptFooterBold: false,
               taxEnabled: false,
               taxRate: 0,
               taxBaseIncludesServiceCharge: false,
@@ -144,6 +166,17 @@ export async function getPosInitData() {
               code: store.code,
               logoUrl: store.logoUrl || null,
               printerWidth: store.settings?.printerWidth || 58,
+              receiptShowLogo: store.settings?.receiptShowLogo ?? true,
+              receiptLogoUrl: store.settings?.receiptLogoUrl || null,
+              receiptShowStoreName: store.settings?.receiptShowStoreName ?? true,
+              receiptHeader: store.settings?.receiptHeader || '',
+              receiptHeaderAlign: store.settings?.receiptHeaderAlign || 'CENTER',
+              receiptHeaderBold: Boolean(store.settings?.receiptHeaderBold),
+              receiptFooter:
+                store.settings?.receiptFooter ??
+                'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+              receiptFooterAlign: store.settings?.receiptFooterAlign || 'CENTER',
+              receiptFooterBold: Boolean(store.settings?.receiptFooterBold),
             }
           : null,
         activeShift: shift
@@ -828,6 +861,17 @@ export async function getShiftTransactions({ shiftId = null, limit = 100 } = {})
       code: store?.code || 'MAIN',
       logoUrl: store?.logoUrl || null,
       printerWidth: store?.settings?.printerWidth || 58,
+      receiptShowLogo: store?.settings?.receiptShowLogo ?? true,
+      receiptLogoUrl: store?.settings?.receiptLogoUrl || null,
+      receiptShowStoreName: store?.settings?.receiptShowStoreName ?? true,
+      receiptHeader: store?.settings?.receiptHeader || '',
+      receiptHeaderAlign: store?.settings?.receiptHeaderAlign || 'CENTER',
+      receiptHeaderBold: Boolean(store?.settings?.receiptHeaderBold),
+      receiptFooter:
+        store?.settings?.receiptFooter ??
+        'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+      receiptFooterAlign: store?.settings?.receiptFooterAlign || 'CENTER',
+      receiptFooterBold: Boolean(store?.settings?.receiptFooterBold),
       taxRate: Number(store?.settings?.taxRate || 0),
       taxEnabled: store?.settings?.taxEnabled || false,
       serviceChargeRate: Number(store?.settings?.serviceChargeRate || 0),
@@ -1092,6 +1136,17 @@ export async function getAllTransactions({
       code: store?.code || 'MAIN',
       logoUrl: store?.logoUrl || null,
       printerWidth: store?.settings?.printerWidth || 58,
+      receiptShowLogo: store?.settings?.receiptShowLogo ?? true,
+      receiptLogoUrl: store?.settings?.receiptLogoUrl || null,
+      receiptShowStoreName: store?.settings?.receiptShowStoreName ?? true,
+      receiptHeader: store?.settings?.receiptHeader || '',
+      receiptHeaderAlign: store?.settings?.receiptHeaderAlign || 'CENTER',
+      receiptHeaderBold: Boolean(store?.settings?.receiptHeaderBold),
+      receiptFooter:
+        store?.settings?.receiptFooter ??
+        'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+      receiptFooterAlign: store?.settings?.receiptFooterAlign || 'CENTER',
+      receiptFooterBold: Boolean(store?.settings?.receiptFooterBold),
       taxRate: Number(store?.settings?.taxRate || 0),
       taxEnabled: store?.settings?.taxEnabled || false,
       serviceChargeRate: Number(store?.settings?.serviceChargeRate || 0),

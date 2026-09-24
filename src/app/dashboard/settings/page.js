@@ -7,6 +7,8 @@ import {
   updateStoreSettings,
   uploadStoreLogo,
   removeStoreLogo,
+  uploadReceiptLogo,
+  removeReceiptLogo,
   uploadQrisImage,
   removeQrisImage,
 } from '@/app/actions/settings';
@@ -79,20 +81,339 @@ function SettingsCard({ title, description, children }) {
   );
 }
 
+// ── Sub-komponen: Align Selector ──────────────────────────────────────────────
+function AlignSelector({ id, value, onChange, disabled }) {
+  const options = [
+    {
+      id: 'LEFT',
+      label: 'Kiri',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h10.5m-10.5 5.25h16.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'CENTER',
+      label: 'Tengah',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M6.75 12h10.5m-13.5 5.25h16.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'RIGHT',
+      label: 'Kanan',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M9.75 12h10.5m-16.5 5.25h16.5" />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div id={id} className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt.id)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer disabled:opacity-50',
+            value === opt.id
+              ? 'bg-white text-emerald-700 shadow-2xs font-bold border border-slate-200/60'
+              : 'text-slate-600 hover:text-slate-900'
+          )}
+        >
+          {opt.icon}
+          <span>{opt.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Sub-komponen: Live Receipt Preview Card ──────────────────────────────────
+function ReceiptPreviewCard({
+  storeName,
+  logoUrl,
+  receiptLogoUrl,
+  printerWidth,
+  receiptShowLogo,
+  receiptShowStoreName = true,
+  receiptHeader,
+  receiptHeaderAlign,
+  receiptHeaderBold,
+  receiptFooter,
+  receiptFooterAlign,
+  receiptFooterBold,
+  onTestPrint,
+  isTestPrinting,
+  btConnected,
+  btDeviceName,
+}) {
+  const is80 = printerWidth === 80;
+  const cols = is80 ? 48 : 32;
+  const sep = '-'.repeat(cols);
+  const activeLogo = receiptLogoUrl || logoUrl;
+
+  const getAlignClass = (align) => {
+    if (align === 'LEFT') return 'text-left';
+    if (align === 'RIGHT') return 'text-right';
+    return 'text-center';
+  };
+
+  return (
+    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 flex flex-col items-center shadow-2xs">
+      <div className="w-full flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Preview Struk
+          </span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
+            {printerWidth}mm
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onTestPrint}
+          disabled={!btConnected || isTestPrinting}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          title={btConnected ? 'Test print ke printer Bluetooth' : 'Printer belum terhubung'}
+        >
+          {isTestPrinting ? (
+            <>
+              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Mencetak...</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+              </svg>
+              <span>Test Print</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Container Kertas Struk Termal */}
+      <div
+        className={cn(
+          'w-full bg-[#fcfcfa] text-stone-900 font-mono text-[11px] leading-tight px-4 py-6 rounded-md shadow-md border border-stone-200 transition-all relative',
+          is80 ? 'max-w-85' : 'max-w-67.5'
+        )}
+      >
+        {/* Paper Tear Effect Top */}
+        <div className="absolute -top-1 left-0 right-0 h-1 overflow-hidden flex justify-between opacity-20 pointer-events-none">
+          {Array.from({ length: 30 }).map((_, i) => (
+            <span key={i} className="inline-block w-2 h-2 bg-stone-400 rotate-45 transform origin-bottom" />
+          ))}
+        </div>
+
+        {/* 1. Logo Toko */}
+        {receiptShowLogo && activeLogo && (
+          <div className="flex justify-center mb-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={activeLogo}
+              alt="Logo Struk"
+              className="max-h-12 max-w-30 object-contain filter grayscale contrast-125"
+            />
+          </div>
+        )}
+
+        {/* 2. Nama Toko */}
+        {receiptShowStoreName && (
+          <div className="text-center font-black text-sm uppercase tracking-wider text-black">
+            {storeName || 'SCHAW CAFE'}
+          </div>
+        )}
+
+        {/* 3. Sub-header Kustom */}
+        {receiptHeader && receiptHeader.trim() ? (
+          <div
+            className={cn(
+              'text-[10px] text-stone-700 whitespace-pre-line my-1',
+              getAlignClass(receiptHeaderAlign),
+              receiptHeaderBold && 'font-bold text-stone-950'
+            )}
+          >
+            {receiptHeader}
+          </div>
+        ) : (
+          <div className="text-center text-[10px] text-stone-500 my-0.5">
+            Cabang MAIN
+          </div>
+        )}
+
+        {/* Separator */}
+        <div className="text-stone-400 select-none overflow-hidden my-1 text-center font-mono">
+          {sep}
+        </div>
+
+        {/* Meta Transaksi Mock */}
+        <div className="text-[10px] space-y-0.5 text-stone-600">
+          <div className="flex justify-between">
+            <span>Waktu:</span>
+            <span>24/09/2026 17:00</span>
+          </div>
+          <div className="flex justify-between">
+            <span>No. Order:</span>
+            <span className="font-semibold text-stone-900">#ORD-1029</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Antrean:</span>
+            <span className="font-bold text-stone-900">A-01</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Pesanan:</span>
+            <span>Dine In (Di Tempat)</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Kasir:</span>
+            <span>Kasir Utama</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Pelanggan:</span>
+            <span>Budi Santoso</span>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="text-stone-400 select-none overflow-hidden my-1 text-center font-mono">
+          {sep}
+        </div>
+
+        {/* Items Mock */}
+        <div className="space-y-1 text-[10px]">
+          <div>
+            <div className="font-semibold text-stone-900">Kopi Susu Gula Aren</div>
+            <div className="flex justify-between text-stone-600">
+              <span>1x Rp 18.000</span>
+              <span className="font-semibold text-stone-900">Rp 18.000</span>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-stone-900">Croissant Butter</div>
+            <div className="flex justify-between text-stone-600">
+              <span>1x Rp 22.000</span>
+              <span className="font-semibold text-stone-900">Rp 22.000</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="text-stone-400 select-none overflow-hidden my-1 text-center font-mono">
+          {sep}
+        </div>
+
+        {/* Financial Mock */}
+        <div className="text-[10px] space-y-0.5 text-stone-600">
+          <div className="flex justify-between">
+            <span>Subtotal:</span>
+            <span>Rp 40.000</span>
+          </div>
+          <div className="flex justify-between font-bold text-xs text-black pt-1 border-t border-dashed border-stone-300">
+            <span>TOTAL:</span>
+            <span>Rp 40.000</span>
+          </div>
+          <div className="flex justify-between pt-0.5">
+            <span>Metode Bayar:</span>
+            <span className="font-semibold text-stone-800">CASH</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Uang Diterima:</span>
+            <span>Rp 50.000</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Kembalian:</span>
+            <span>Rp 10.000</span>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="text-stone-400 select-none overflow-hidden my-1 text-center font-mono">
+          {sep}
+        </div>
+
+        {/* 4. Footer Kustom */}
+        {receiptFooter && receiptFooter.trim() ? (
+          <div
+            className={cn(
+              'text-[10px] whitespace-pre-line text-stone-700 my-1.5',
+              getAlignClass(receiptFooterAlign),
+              receiptFooterBold && 'font-bold text-stone-950'
+            )}
+          >
+            {receiptFooter}
+          </div>
+        ) : (
+          <div className="text-center text-[10px] text-stone-600 space-y-0.5 my-1.5">
+            <div>Terima kasih atas kunjungan Anda!</div>
+            <div className="text-[9px] text-stone-500">Simpan struk sebagai bukti pembayaran.</div>
+          </div>
+        )}
+
+        {/* Paper Tear Effect Bottom */}
+        <div className="absolute -bottom-1 left-0 right-0 h-1 overflow-hidden flex justify-between opacity-20 pointer-events-none">
+          {Array.from({ length: 30 }).map((_, i) => (
+            <span key={i} className="inline-block w-2 h-2 bg-stone-400 rotate-45 transform origin-top" />
+          ))}
+        </div>
+      </div>
+
+      {/* Info Status Bluetooth */}
+      <div className="mt-3 text-[11px] text-slate-500 flex items-center gap-1.5">
+        <span className={cn('w-2 h-2 rounded-full', btConnected ? 'bg-emerald-500' : 'bg-slate-300')} />
+        <span>
+          {btConnected
+            ? `Printer Bluetooth Siap (${btDeviceName})`
+            : 'Printer belum terhubung'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page Component ───────────────────────────────────────────────────────
 export default function SettingsPage() {
   const [isPending, startTransition] = useTransition();
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingQris, setIsUploadingQris] = useState(false);
+  const [isUploadingReceiptLogo, setIsUploadingReceiptLogo] = useState(false);
   const fileInputRef = useRef(null);
   const qrisFileInputRef = useRef(null);
+  const receiptLogoFileInputRef = useRef(null);
 
   // Form state
   const [storeName, setStoreName] = useState('');
   const [logoUrl, setLogoUrl] = useState(null);
   const [qrisImageUrl, setQrisImageUrl] = useState(null);
   const [printerWidth, setPrinterWidth] = useState(58);
+
+  // Kustomisasi Struk Kasir
+  const [receiptShowLogo, setReceiptShowLogo] = useState(true);
+  const [receiptLogoUrl, setReceiptLogoUrl] = useState(null);
+  const [receiptShowStoreName, setReceiptShowStoreName] = useState(true);
+  const [receiptHeader, setReceiptHeader] = useState('');
+  const [receiptHeaderAlign, setReceiptHeaderAlign] = useState('CENTER');
+  const [receiptHeaderBold, setReceiptHeaderBold] = useState(false);
+  const [receiptFooter, setReceiptFooter] = useState(
+    'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.'
+  );
+  const [receiptFooterAlign, setReceiptFooterAlign] = useState('CENTER');
+  const [receiptFooterBold, setReceiptFooterBold] = useState(false);
+
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxRate, setTaxRate] = useState(0);
   const [taxBaseIncludesServiceCharge, setTaxBaseIncludesServiceCharge] = useState(false);
@@ -129,6 +450,18 @@ export default function SettingsPage() {
     setQrisImageUrl(qris || settings?.qrisImageUrl || null);
     if (settings) {
       setPrinterWidth(settings.printerWidth || 58);
+      setReceiptShowLogo(settings.receiptShowLogo ?? true);
+      setReceiptLogoUrl(settings.receiptLogoUrl || null);
+      setReceiptShowStoreName(settings.receiptShowStoreName ?? true);
+      setReceiptHeader(settings.receiptHeader || '');
+      setReceiptHeaderAlign(settings.receiptHeaderAlign || 'CENTER');
+      setReceiptHeaderBold(Boolean(settings.receiptHeaderBold));
+      setReceiptFooter(
+        settings.receiptFooter ??
+        'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.'
+      );
+      setReceiptFooterAlign(settings.receiptFooterAlign || 'CENTER');
+      setReceiptFooterBold(Boolean(settings.receiptFooterBold));
       setTaxEnabled(settings.taxEnabled ?? false);
       setTaxRate(settings.taxRate ?? 0);
       setTaxBaseIncludesServiceCharge(settings.taxBaseIncludesServiceCharge ?? false);
@@ -262,6 +595,64 @@ export default function SettingsPage() {
     setIsUploadingQris(false);
   };
 
+  // Handle Receipt Logo Upload
+  const handleReceiptLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Format file harus berupa PNG, JPG, WEBP, atau SVG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB.');
+      return;
+    }
+
+    setIsUploadingReceiptLogo(true);
+    const toastId = toast.loading('Mengunggah logo khusus struk ke Supabase Storage...');
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('file', file);
+      formData.append('receiptLogo', file);
+
+      const res = await uploadReceiptLogo(formData);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success(res.message || 'Logo struk berhasil diperbarui!', { id: toastId });
+        setReceiptLogoUrl(res.receiptLogoUrl);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunggah logo struk.', { id: toastId });
+    } finally {
+      setIsUploadingReceiptLogo(false);
+      if (receiptLogoFileInputRef.current) {
+        receiptLogoFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle Remove Receipt Logo
+  const handleRemoveReceiptLogo = async () => {
+    setIsUploadingReceiptLogo(true);
+    const toastId = toast.loading('Menghapus logo khusus struk...');
+
+    const res = await removeReceiptLogo();
+    if (res.error) {
+      toast.error(res.error, { id: toastId });
+    } else {
+      toast.success('Logo struk berhasil dihapus.', { id: toastId });
+      setReceiptLogoUrl(null);
+    }
+    setIsUploadingReceiptLogo(false);
+  };
+
   // Handle Test Print — menggunakan context printBytes
   const handleTestPrint = async () => {
     if (btStatus !== 'connected') {
@@ -302,8 +693,22 @@ export default function SettingsPage() {
         grandTotal: 0,
         payment: { method: 'CASH', cashReceived: 0, changeAmount: 0 },
       };
-      const storeInfo = { name: storeName || 'SCHAW CAFE', printerWidth, code: 'MAIN' };
-      const bytes = buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
+      const storeInfo = {
+        name: storeName || 'SCHAW CAFE',
+        logoUrl: logoUrl || null,
+        receiptLogoUrl: receiptLogoUrl || null,
+        receiptShowStoreName,
+        printerWidth,
+        code: 'MAIN',
+        receiptShowLogo,
+        receiptHeader,
+        receiptHeaderAlign,
+        receiptHeaderBold,
+        receiptFooter,
+        receiptFooterAlign,
+        receiptFooterBold,
+      };
+      const bytes = await buildReceiptBytes(testOrder, storeInfo, 'CUSTOMER');
       await printBytes(bytes);
       toast.success('Struk test berhasil dicetak!', { id: toastId });
     } catch (err) {
@@ -324,6 +729,15 @@ export default function SettingsPage() {
       const result = await updateStoreSettings({
         storeName: storeName.trim(),
         logoUrl,
+        receiptLogoUrl,
+        receiptShowStoreName,
+        receiptShowLogo,
+        receiptHeader,
+        receiptHeaderAlign,
+        receiptHeaderBold,
+        receiptFooter,
+        receiptFooterAlign,
+        receiptFooterBold,
         printerWidth,
         taxEnabled,
         taxRate,
@@ -352,7 +766,7 @@ export default function SettingsPage() {
     );
   }
 
-  const isSaving = isPending || isUploadingLogo || isUploadingQris;
+  const isSaving = isPending || isUploadingLogo || isUploadingQris || isUploadingReceiptLogo;
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -646,6 +1060,277 @@ export default function SettingsPage() {
                 Lebar struk standar 80mm (48 karakter/baris). Cocok untuk printer kasir desktop, USB, Ethernet LAN / Auto-Cutter.
               </p>
             </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      {/* ─── KUSTOMISASI STRUK KASIR & LIVE PREVIEW ────────────────────────── */}
+      <SettingsCard
+        title="Kustomisasi Struk Kasir & Live Preview"
+        description="Atur tampilan header, logo, teks tambahan, footer, perataan teks (alignment), serta format tebal (bold) pada nota struk fisik yang dicetak oleh kasir."
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Kolom Kiri: Form Kustomisasi Header & Footer (7 Kolom) */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* 1. BAGIAN HEADER STRUK */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                  1
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Header Struk (Bagian Atas)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Nama toko, logo, dan alamat/kontak usaha di bagian atas struk
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Tampilkan Logo & Upload Logo Struk */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Tampilkan Logo di Struk</p>
+                    <p className="text-[11px] text-slate-500">
+                      Cetak gambar logo di bagian atas struk kasir
+                    </p>
+                  </div>
+                  <Toggle
+                    id="toggle-receipt-logo"
+                    checked={receiptShowLogo}
+                    onChange={setReceiptShowLogo}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                {receiptShowLogo && (
+                  <div className="pt-3 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                        {receiptLogoUrl || logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={receiptLogoUrl || logoUrl}
+                            alt="Logo Struk"
+                            className="w-full h-full object-contain p-1 filter grayscale contrast-125"
+                          />
+                        ) : (
+                          <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-slate-800">
+                            {receiptLogoUrl ? 'Foto/Logo Khusus Struk' : logoUrl ? 'Menggunakan Logo Toko' : 'Belum Ada Foto Struk'}
+                          </p>
+                          {receiptLogoUrl && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                              Khusus Struk
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {receiptLogoUrl
+                            ? 'Foto khusus struk aktif digunakan pada thermal printer.'
+                            : logoUrl
+                              ? 'Default menggunakan logo toko. Anda dapat mengunggah foto khusus receipt di sini.'
+                              : 'Unggah gambar hitam-putih / kontras tinggi agar tajam pada printer thermal.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                      <input
+                        ref={receiptLogoFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={handleReceiptLogoChange}
+                        disabled={isSaving}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => receiptLogoFileInputRef.current?.click()}
+                        disabled={isSaving}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {isUploadingReceiptLogo ? 'Mengunggah...' : receiptLogoUrl ? 'Ganti Foto Struk' : 'Upload Foto Struk'}
+                      </button>
+                      {receiptLogoUrl && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveReceiptLogo}
+                          disabled={isSaving}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+                          title="Hapus foto khusus struk (kembali ke default)"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Toggle Cetak Nama Kafe / Usaha (True/False) */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Cetak Nama Kafe / Usaha</p>
+                  <p className="text-[11px] text-slate-500">
+                    Jika dinonaktifkan, teks nama kafe (&quot;{storeName || 'SCHAW CAFE'}&quot;) tidak akan dicetak.
+                  </p>
+                </div>
+                <Toggle
+                  id="toggle-receipt-show-store-name"
+                  checked={receiptShowStoreName}
+                  onChange={setReceiptShowStoreName}
+                  disabled={isSaving}
+                />
+              </div>
+
+              {/* Teks Sub-Header */}
+              <div>
+                <label
+                  htmlFor="input-receipt-header"
+                  className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5"
+                >
+                  Teks Header Tambahan (Sub-Header)
+                </label>
+                <textarea
+                  id="input-receipt-header"
+                  rows={3}
+                  value={receiptHeader}
+                  onChange={(e) => setReceiptHeader(e.target.value)}
+                  disabled={isSaving}
+                  placeholder="Contoh: Jl. Sudirman No. 12, Jakarta&#10;Telp/WA: 0812-3456-7890&#10;Instagram: @schawcafe"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-mono leading-relaxed"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Bisa multi-baris (gunakan Enter). Jika dikosongkan, default cabang &quot;Cabang MAIN&quot; akan digunakan.
+                </p>
+              </div>
+
+              {/* Formatting Sub-Header: Align & Bold */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Perataan (Alignment)
+                  </label>
+                  <AlignSelector
+                    id="select-header-align"
+                    value={receiptHeaderAlign}
+                    onChange={setReceiptHeaderAlign}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-6">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Teks Tebal (Bold)</span>
+                    <span className="text-[10px] text-slate-400">Gunakan font bold ESC/POS</span>
+                  </div>
+                  <Toggle
+                    id="toggle-header-bold"
+                    checked={receiptHeaderBold}
+                    onChange={setReceiptHeaderBold}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. BAGIAN FOOTER STRUK */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
+                  2
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Footer Struk (Bagian Bawah)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Pesan penutup, ucapan terima kasih, info wifi, atau akun sosmed
+                  </p>
+                </div>
+              </div>
+
+              {/* Teks Footer */}
+              <div>
+                <label
+                  htmlFor="input-receipt-footer"
+                  className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5"
+                >
+                  Teks Footer Struk
+                </label>
+                <textarea
+                  id="input-receipt-footer"
+                  rows={3}
+                  value={receiptFooter}
+                  onChange={(e) => setReceiptFooter(e.target.value)}
+                  disabled={isSaving}
+                  placeholder="Contoh: Terima kasih atas kunjungan Anda!&#10;Wifi: kopienak / pass: nikmat123&#10;Simpan struk sebagai bukti pembayaran yang sah."
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-mono leading-relaxed"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Bisa multi-baris (gunakan Enter). Bebas disesuaikan dengan kebutuhan promosi / info kafe Anda.
+                </p>
+              </div>
+
+              {/* Formatting Footer: Align & Bold */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Perataan (Alignment)
+                  </label>
+                  <AlignSelector
+                    id="select-footer-align"
+                    value={receiptFooterAlign}
+                    onChange={setReceiptFooterAlign}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-6">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Teks Tebal (Bold)</span>
+                    <span className="text-[10px] text-slate-400">Gunakan font bold ESC/POS</span>
+                  </div>
+                  <Toggle
+                    id="toggle-footer-bold"
+                    checked={receiptFooterBold}
+                    onChange={setReceiptFooterBold}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Kolom Kanan: Live Receipt Preview (5 Kolom) */}
+          <div className="lg:col-span-5 lg:sticky lg:top-6">
+            <ReceiptPreviewCard
+              storeName={storeName}
+              logoUrl={logoUrl}
+              receiptLogoUrl={receiptLogoUrl}
+              printerWidth={printerWidth}
+              receiptShowLogo={receiptShowLogo}
+              receiptShowStoreName={receiptShowStoreName}
+              receiptHeader={receiptHeader}
+              receiptHeaderAlign={receiptHeaderAlign}
+              receiptHeaderBold={receiptHeaderBold}
+              receiptFooter={receiptFooter}
+              receiptFooterAlign={receiptFooterAlign}
+              receiptFooterBold={receiptFooterBold}
+              onTestPrint={handleTestPrint}
+              isTestPrinting={isTestPrinting}
+              btConnected={btStatus === 'connected'}
+              btDeviceName={btDeviceName}
+            />
           </div>
         </div>
       </SettingsCard>

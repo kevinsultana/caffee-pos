@@ -31,6 +31,17 @@ export async function getStoreSettings() {
               id: store.settings.id,
               storeId: store.settings.storeId,
               printerWidth: store.settings.printerWidth || 58,
+              receiptShowLogo: store.settings.receiptShowLogo ?? true,
+              receiptLogoUrl: store.settings.receiptLogoUrl || null,
+              receiptShowStoreName: store.settings.receiptShowStoreName ?? true,
+              receiptHeader: store.settings.receiptHeader || '',
+              receiptHeaderAlign: store.settings.receiptHeaderAlign || 'CENTER',
+              receiptHeaderBold: Boolean(store.settings.receiptHeaderBold),
+              receiptFooter:
+                store.settings.receiptFooter ??
+                'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+              receiptFooterAlign: store.settings.receiptFooterAlign || 'CENTER',
+              receiptFooterBold: Boolean(store.settings.receiptFooterBold),
               qrisImageUrl: store.settings.qrisImageUrl || null,
               taxEnabled: store.settings.taxEnabled,
               taxRate: Number(store.settings.taxRate),
@@ -44,6 +55,15 @@ export async function getStoreSettings() {
             }
           : {
               printerWidth: 58,
+              receiptShowLogo: true,
+              receiptLogoUrl: null,
+              receiptShowStoreName: true,
+              receiptHeader: '',
+              receiptHeaderAlign: 'CENTER',
+              receiptHeaderBold: false,
+              receiptFooter: 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+              receiptFooterAlign: 'CENTER',
+              receiptFooterBold: false,
               qrisImageUrl: null,
               taxEnabled: false,
               taxRate: 0,
@@ -210,6 +230,166 @@ export async function removeStoreLogo() {
   } catch (error) {
     console.error('[settings/removeStoreLogo]', error);
     return { error: 'Gagal menghapus logo toko.' };
+  }
+}
+
+/**
+ * Upload Foto / Logo Khusus Struk Kasir ke Supabase Storage (Bucket: store-assets)
+ *
+ * @param {FormData} formData
+ */
+export async function uploadReceiptLogo(formData) {
+  const user = await verifySession();
+  if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+
+  if (!isSupabaseConfigured) {
+    return {
+      error:
+        'Kunci API Supabase belum dikonfigurasi di file .env. Harap tambahkan SUPABASE_SERVICE_ROLE_KEY di .env.',
+    };
+  }
+
+  try {
+    const file = formData.get('image') || formData.get('file') || formData.get('logo');
+    if (!file || typeof file === 'string') {
+      return { error: 'File logo struk tidak valid atau tidak ditemukan.' };
+    }
+
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/svg+xml',
+    ];
+    if (!allowedMimeTypes.includes(file.type)) {
+      return { error: 'Format file tidak didukung. Harap gunakan file PNG, JPG, WEBP, atau SVG.' };
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return { error: 'Ukuran file terlalu besar. Maksimal 5MB.' };
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const cleanFileName = file.name ? file.name.replace(/[^a-zA-Z0-9.-]/g, '_') : 'receipt-logo.png';
+    const fileName = `receipt-logo-${Date.now()}-${cleanFileName}`;
+    const bucketName = 'store-assets';
+
+    const store = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      include: { settings: true },
+    });
+    if (!store) return { error: 'Store tidak ditemukan.' };
+
+    const currentLogo = store.settings?.receiptLogoUrl;
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(fileName, buffer, {
+        contentType: file.type,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[settings/uploadReceiptLogo] Supabase Storage error:', uploadError);
+      return { error: `Gagal mengunggah logo struk ke Supabase Storage: ${uploadError.message}` };
+    }
+
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    const publicUrl = publicData?.publicUrl || '';
+
+    if (!publicUrl) {
+      return { error: 'Gagal mendapatkan Public URL logo struk dari Supabase Storage.' };
+    }
+
+    await prisma.storeSettings.upsert({
+      where: { storeId: store.id },
+      update: { receiptLogoUrl: publicUrl },
+      create: {
+        storeId: store.id,
+        receiptLogoUrl: publicUrl,
+        printerWidth: 58,
+        taxEnabled: false,
+        taxRate: 0,
+        taxBaseIncludesServiceCharge: false,
+        serviceChargeEnabled: false,
+        serviceChargeRate: 0,
+        cashRoundingEnabled: false,
+        cashRoundingUnit: 0,
+      },
+    });
+
+    if (currentLogo && currentLogo.includes('store-assets/')) {
+      try {
+        const oldParts = currentLogo.split('store-assets/');
+        if (oldParts[1]) {
+          const oldFilePath = decodeURIComponent(oldParts[1].split('?')[0]);
+          await supabase.storage.from(bucketName).remove([oldFilePath]);
+        }
+      } catch (cleanErr) {
+        console.warn('[settings/uploadReceiptLogo] Cleanup old logo error:', cleanErr);
+      }
+    }
+
+    revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pos');
+    revalidatePath('/dashboard');
+
+    return {
+      success: true,
+      receiptLogoUrl: publicUrl,
+      message: 'Foto logo struk berhasil disimpan.',
+    };
+  } catch (error) {
+    console.error('[settings/uploadReceiptLogo]', error);
+    return { error: 'Gagal mengunggah foto logo struk ke storage.' };
+  }
+}
+
+/**
+ * Hapus Foto / Logo Khusus Struk Kasir
+ */
+export async function removeReceiptLogo() {
+  const user = await verifySession();
+  if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+
+  try {
+    const store = await prisma.store.findUnique({
+      where: { code: 'MAIN' },
+      include: { settings: true },
+    });
+
+    const receiptLogoUrl = store?.settings?.receiptLogoUrl;
+
+    if (receiptLogoUrl && receiptLogoUrl.includes('store-assets/')) {
+      try {
+        const parts = receiptLogoUrl.split('store-assets/');
+        if (parts[1]) {
+          const filePath = decodeURIComponent(parts[1].split('?')[0]);
+          await supabase.storage.from('store-assets').remove([filePath]);
+        }
+      } catch (err) {
+        console.warn('[settings/removeReceiptLogo] Gagal menghapus file storage:', err);
+      }
+    }
+
+    if (store?.settings) {
+      await prisma.storeSettings.update({
+        where: { id: store.settings.id },
+        data: { receiptLogoUrl: null },
+      });
+    }
+
+    revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pos');
+    revalidatePath('/dashboard');
+
+    return { success: true, message: 'Logo struk berhasil dihapus.' };
+  } catch (error) {
+    console.error('[settings/removeReceiptLogo]', error);
+    return { error: 'Gagal menghapus logo struk.' };
   }
 }
 
@@ -405,6 +585,15 @@ export async function updateStoreSettings(payload) {
   const {
     storeName,
     logoUrl,
+    receiptShowLogo = true,
+    receiptLogoUrl,
+    receiptShowStoreName = true,
+    receiptHeader = '',
+    receiptHeaderAlign = 'CENTER',
+    receiptHeaderBold = false,
+    receiptFooter = 'Terima kasih atas kunjungan Anda!\nSimpan struk sebagai bukti pembayaran.',
+    receiptFooterAlign = 'CENTER',
+    receiptFooterBold = false,
     printerWidth = 58,
     taxEnabled,
     taxRate,
@@ -423,6 +612,14 @@ export async function updateStoreSettings(payload) {
 
   // ── Validasi Printer Width ───────────────────────────────────────────
   const validPrinterWidth = Number(printerWidth) === 80 ? 80 : 58;
+
+  // ── Validasi Receipt Align ───────────────────────────────────────────
+  const validHeaderAlign = ['LEFT', 'CENTER', 'RIGHT'].includes(receiptHeaderAlign)
+    ? receiptHeaderAlign
+    : 'CENTER';
+  const validFooterAlign = ['LEFT', 'CENTER', 'RIGHT'].includes(receiptFooterAlign)
+    ? receiptFooterAlign
+    : 'CENTER';
 
   // ── Validasi Maksimal Shift Aktif ────────────────────────────────────
   const validMaxActiveShifts = Math.max(1, parseInt(maxActiveShifts, 10) || 1);
@@ -456,6 +653,15 @@ export async function updateStoreSettings(payload) {
       where: { storeId: store.id },
       update: {
         printerWidth: validPrinterWidth,
+        receiptShowLogo: Boolean(receiptShowLogo),
+        receiptShowStoreName: Boolean(receiptShowStoreName),
+        ...(receiptLogoUrl !== undefined ? { receiptLogoUrl } : {}),
+        receiptHeader: receiptHeader ? String(receiptHeader).trim() : null,
+        receiptHeaderAlign: validHeaderAlign,
+        receiptHeaderBold: Boolean(receiptHeaderBold),
+        receiptFooter: receiptFooter ? String(receiptFooter).trim() : null,
+        receiptFooterAlign: validFooterAlign,
+        receiptFooterBold: Boolean(receiptFooterBold),
         taxEnabled,
         taxRate,
         taxBaseIncludesServiceCharge,
@@ -468,6 +674,15 @@ export async function updateStoreSettings(payload) {
       create: {
         storeId: store.id,
         printerWidth: validPrinterWidth,
+        receiptShowLogo: Boolean(receiptShowLogo),
+        receiptShowStoreName: Boolean(receiptShowStoreName),
+        receiptLogoUrl: receiptLogoUrl || null,
+        receiptHeader: receiptHeader ? String(receiptHeader).trim() : null,
+        receiptHeaderAlign: validHeaderAlign,
+        receiptHeaderBold: Boolean(receiptHeaderBold),
+        receiptFooter: receiptFooter ? String(receiptFooter).trim() : null,
+        receiptFooterAlign: validFooterAlign,
+        receiptFooterBold: Boolean(receiptFooterBold),
         taxEnabled,
         taxRate,
         taxBaseIncludesServiceCharge,
