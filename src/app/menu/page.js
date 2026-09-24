@@ -17,6 +17,13 @@ export default function PublicMenuPage() {
   const [cart, setCart] = useState([]);
   const [cartModalOpen, setCartModalOpen] = useState(false);
 
+  // Variant Selection Modal State
+  const [variantModalOpen, setVariantModalOpen] = useState(false);
+  const [selectedProductForVariant, setSelectedProductForVariant] = useState(null);
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [variantQty, setVariantQty] = useState(1);
+  const [variantNotes, setVariantNotes] = useState('');
+
   // Form Customer Details
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -58,58 +65,107 @@ export default function PublicMenuPage() {
     return () => clearInterval(interval);
   }, [submittedOrder]);
 
+  // Variant Modal Handlers
+  function openVariantModal(prod) {
+    if (prod.availability === 'OUT_OF_STOCK') {
+      toast.error('Maaf, produk ini sedang habis.');
+      return;
+    }
+    const availVariants = (prod.variants || []).filter((v) => !v.discontinued);
+    const firstAvail = availVariants.find((v) => v.availability === 'AVAILABLE') || availVariants[0];
+
+    setSelectedProductForVariant(prod);
+    setSelectedVariantId(firstAvail?.id || '');
+    setVariantQty(1);
+    setVariantNotes('');
+    setVariantModalOpen(true);
+  }
+
+  function handleConfirmVariant() {
+    if (!selectedProductForVariant) return;
+    const variant = selectedProductForVariant.variants?.find((v) => v.id === selectedVariantId);
+    if (!variant) {
+      toast.error('Pilih salah satu varian terlebih dahulu.');
+      return;
+    }
+    if (variant.availability === 'OUT_OF_STOCK') {
+      toast.error(`Varian "${variant.name}" sedang habis.`);
+      return;
+    }
+
+    addToCart(selectedProductForVariant, variant, variantQty, variantNotes);
+    setVariantModalOpen(false);
+  }
+
   // Cart Handlers
-  function addToCart(prod) {
+  function addToCart(prod, variant = null, qty = 1, notes = '') {
     if (prod.availability === 'OUT_OF_STOCK') {
       toast.error('Maaf, produk ini sedang habis.');
       return;
     }
 
-    const existing = cart.find((i) => i.productId === prod.id);
+    // Jika produk memiliki varian dan varian belum dipilih, buka modal pemilih varian
+    if (prod.variants && prod.variants.length > 0 && !variant) {
+      openVariantModal(prod);
+      return;
+    }
+
+    const cartItemId = `${prod.id}_${variant ? variant.id : 'base'}`;
+    const unitPrice = variant ? Number(variant.price) : Number(prod.price);
+    const displayName = variant ? `${prod.name} (${variant.name})` : prod.name;
+
+    const existing = cart.find((i) => i.cartItemId === cartItemId);
     if (existing) {
       setCart(
         cart.map((i) =>
-          i.productId === prod.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.cartItemId === cartItemId
+            ? { ...i, quantity: i.quantity + qty, notes: notes || i.notes }
+            : i
         )
       );
     } else {
       setCart([
         ...cart,
         {
+          cartItemId,
           productId: prod.id,
-          name: prod.name,
-          price: prod.price,
-          quantity: 1,
-          notes: '',
+          variantId: variant ? variant.id : null,
+          name: displayName,
+          productName: prod.name,
+          variantName: variant ? variant.name : null,
+          price: unitPrice,
+          quantity: qty,
+          notes: notes || '',
         },
       ]);
     }
-    toast.success(`${prod.name} masuk keranjang!`, {
+
+    toast.success(`${displayName} masuk keranjang!`, {
       duration: 1500,
       position: 'bottom-center',
       iconTheme: { primary: '#059669', secondary: '#ffffff' },
     });
   }
 
-  function updateQty(productId, delta) {
-    const item = cart.find((i) => i.productId === productId);
+  function updateQty(cartItemId, delta) {
+    const item = cart.find((i) => i.cartItemId === cartItemId);
     if (!item) return;
 
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
-      setCart(cart.filter((i) => i.productId !== productId));
+      setCart(cart.filter((i) => i.cartItemId !== cartItemId));
     } else {
       setCart(
         cart.map((i) =>
-          i.productId === productId ? { ...i, quantity: newQty } : i
+          i.cartItemId === cartItemId ? { ...i, quantity: newQty } : i
         )
       );
     }
   }
 
-  function updateNotes(productId, notes) {
+  function updateNotes(cartItemId, notes) {
     setCart(
-      cart.map((i) => (i.productId === productId ? { ...i, notes } : i))
+      cart.map((i) => (i.cartItemId === cartItemId ? { ...i, notes } : i))
     );
   }
 
@@ -333,8 +389,15 @@ export default function PublicMenuPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {filteredProducts.map((prod) => {
-                const inCart = cart.find((i) => i.productId === prod.id);
+                const hasVariants = prod.variants && prod.variants.length > 0;
+                const itemsOfProductInCart = cart.filter((i) => i.productId === prod.id);
+                const totalInCartForProd = itemsOfProductInCart.reduce((s, i) => s + i.quantity, 0);
                 const isOutOfStock = prod.availability === 'OUT_OF_STOCK';
+
+                // Display price: if has variants, show minimum variant price
+                const displayPrice = hasVariants
+                  ? Math.min(...prod.variants.map((v) => Number(v.price)))
+                  : prod.price;
 
                 return (
                   <div
@@ -370,6 +433,15 @@ export default function PublicMenuPage() {
                           </span>
                         </div>
                       )}
+
+                      {/* Variant count pill */}
+                      {hasVariants && !isOutOfStock && (
+                        <div className="absolute top-2 right-2">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white text-[10px] font-semibold">
+                            {prod.variants.length} Varian
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Bottom Info & Action */}
@@ -384,26 +456,45 @@ export default function PublicMenuPage() {
                       </div>
 
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-emerald-600 font-bold font-mono text-xs sm:text-sm">
-                          {formatRupiah(prod.price)}
-                        </span>
+                        <div>
+                          {hasVariants && (
+                            <span className="text-[10px] text-slate-400 block -mb-0.5 font-medium">Mulai dari</span>
+                          )}
+                          <span className="text-emerald-600 font-bold font-mono text-xs sm:text-sm">
+                            {formatRupiah(displayPrice)}
+                          </span>
+                        </div>
 
-                        {/* Button: Add or Quantity Counter */}
-                        {inCart ? (
+                        {/* Button: Variant Picker or Quantity Counter */}
+                        {hasVariants ? (
+                          <button
+                            type="button"
+                            onClick={() => openVariantModal(prod)}
+                            disabled={isOutOfStock}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            <span>Pilih Varian</span>
+                            {totalInCartForProd > 0 && (
+                              <span className="w-4 h-4 rounded-full bg-white text-emerald-800 text-[10px] font-black flex items-center justify-center">
+                                {totalInCartForProd}
+                              </span>
+                            )}
+                          </button>
+                        ) : totalInCartForProd > 0 ? (
                           <div className="flex items-center gap-1.5 bg-emerald-50 rounded-lg p-0.5 border border-emerald-200">
                             <button
                               type="button"
-                              onClick={() => updateQty(prod.id, -1)}
+                              onClick={() => updateQty(`${prod.id}_base`, -1)}
                               className="w-5 h-5 flex items-center justify-center rounded text-emerald-800 hover:bg-emerald-200 font-bold text-xs"
                             >
                               -
                             </button>
                             <span className="w-4 text-center font-mono font-bold text-xs text-emerald-900">
-                              {inCart.quantity}
+                              {totalInCartForProd}
                             </span>
                             <button
                               type="button"
-                              onClick={() => updateQty(prod.id, 1)}
+                              onClick={() => updateQty(`${prod.id}_base`, 1)}
                               className="w-5 h-5 flex items-center justify-center rounded text-emerald-800 hover:bg-emerald-200 font-bold text-xs"
                             >
                               +
@@ -485,11 +576,16 @@ export default function PublicMenuPage() {
               {/* Items List with Notes */}
               <div className="flex-1 p-4 overflow-y-auto divide-y divide-slate-100 space-y-3">
                 {cart.map((item) => (
-                  <div key={item.productId} className="not-first:pt-3 space-y-2">
+                  <div key={item.cartItemId} className="not-first:pt-3 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-900 leading-snug">{item.name}</p>
-                        <p className="text-[11px] font-mono text-emerald-700 font-semibold mt-0.5">
+                        <p className="text-xs font-bold text-slate-900 leading-snug">{item.productName || item.name}</p>
+                        {item.variantName && (
+                          <span className="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200 mt-1">
+                            Varian: {item.variantName}
+                          </span>
+                        )}
+                        <p className="text-[11px] font-mono text-emerald-700 font-semibold mt-1">
                           {formatRupiah(item.price)}
                         </p>
                       </div>
@@ -498,7 +594,7 @@ export default function PublicMenuPage() {
                       <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-0.5 border border-slate-200">
                         <button
                           type="button"
-                          onClick={() => updateQty(item.productId, -1)}
+                          onClick={() => updateQty(item.cartItemId, -1)}
                           className="w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:bg-white font-bold text-xs"
                         >
                           -
@@ -508,7 +604,7 @@ export default function PublicMenuPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => updateQty(item.productId, 1)}
+                          onClick={() => updateQty(item.cartItemId, 1)}
                           className="w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:bg-white font-bold text-xs"
                         >
                           +
@@ -521,7 +617,7 @@ export default function PublicMenuPage() {
                       type="text"
                       placeholder="Catatan menu (contoh: less sugar, es sedikit)..."
                       value={item.notes}
-                      onChange={(e) => updateNotes(item.productId, e.target.value)}
+                      onChange={(e) => updateNotes(item.cartItemId, e.target.value)}
                       className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
@@ -592,6 +688,174 @@ export default function PublicMenuPage() {
                   {isPending ? 'Mengirim Pesanan...' : 'Kirim Pesanan ke Kasir'}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ─── 6. MODAL PILIH VARIAN ────────────────────────────────────────── */}
+        {variantModalOpen && selectedProductForVariant && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-100 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {selectedProductForVariant.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedProductForVariant.imageUrl}
+                      alt={selectedProductForVariant.name}
+                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      {selectedProductForVariant.categoryName || 'Menu'}
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-900 leading-snug">
+                      {selectedProductForVariant.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Pilih varian yang Anda inginkan</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVariantModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Body: List Varian, Qty & Catatan */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Pilihan Varian <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {selectedProductForVariant.variants?.map((v) => {
+                      const isSelected = selectedVariantId === v.id;
+                      const isVOutOfStock = v.availability === 'OUT_OF_STOCK';
+
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          disabled={isVOutOfStock}
+                          onClick={() => setSelectedVariantId(v.id)}
+                          className={cn(
+                            'w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer',
+                            isSelected
+                              ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 bg-white',
+                            isVOutOfStock && 'opacity-40 cursor-not-allowed bg-slate-50'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={cn(
+                                'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0',
+                                isSelected
+                                  ? 'border-emerald-600 bg-emerald-600'
+                                  : 'border-slate-300 bg-white'
+                              )}
+                            >
+                              {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                            </div>
+                            <div>
+                              <p className={cn('text-xs font-bold', isSelected ? 'text-emerald-950' : 'text-slate-800')}>
+                                {v.name}
+                              </p>
+                              {v.sku && (
+                                <p className="text-[10px] font-mono text-slate-400">SKU: {v.sku}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="font-mono font-bold text-xs text-emerald-700">
+                              {formatRupiah(v.price)}
+                            </span>
+                            {isVOutOfStock && (
+                              <span className="block text-[9px] font-bold text-rose-600 uppercase">
+                                Habis
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Jumlah / Qty */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Jumlah Pesanan
+                  </label>
+                  <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setVariantQty(Math.max(1, variantQty - 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-700 hover:bg-white font-bold text-xs transition-colors"
+                    >
+                      -
+                    </button>
+                    <span className="w-6 text-center font-mono font-bold text-xs text-slate-900">
+                      {variantQty}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVariantQty(variantQty + 1)}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-700 hover:bg-white font-bold text-xs transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Catatan Khusus */}
+                <div className="pt-2 border-t border-slate-100 space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Catatan Khusus (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Less ice, gula sedikit..."
+                    value={variantNotes}
+                    onChange={(e) => setVariantNotes(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Footer Button */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50/50 pb-[max(1rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))]">
+                {(() => {
+                  const currVar = selectedProductForVariant.variants?.find((v) => v.id === selectedVariantId);
+                  const totalPrice = currVar ? Number(currVar.price) * variantQty : 0;
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleConfirmVariant}
+                      disabled={!currVar || currVar.availability === 'OUT_OF_STOCK'}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-colors flex items-center justify-between px-4 disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>+ Tambah ke Keranjang</span>
+                      <span className="font-mono font-bold">{formatRupiah(totalPrice)}</span>
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )}

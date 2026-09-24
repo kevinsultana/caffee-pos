@@ -15,21 +15,17 @@ async function getAuthenticatedUserAndStore() {
 // 1. PRODUCT CATEGORY ACTIONS (Kategori Menu Jual)
 // ══════════════════════════════════════════════════════════════════════════════
 
-export const getCachedProductCategories = unstable_cache(
-  async (storeId) => {
-    return await prisma.productCategory.findMany({
-      where: { storeId },
-      orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: { products: true },
-        },
+export const getCachedProductCategories = async (storeId) => {
+  return await prisma.productCategory.findMany({
+    where: { storeId },
+    orderBy: { name: 'asc' },
+    include: {
+      _count: {
+        select: { products: true },
       },
-    });
-  },
-  ['product-categories'],
-  { tags: ['product-categories'], revalidate: 3600 }
-);
+    },
+  });
+};
 
 export async function getProductCategories() {
   try {

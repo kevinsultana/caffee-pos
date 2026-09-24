@@ -14,21 +14,17 @@ async function getAuthenticatedOwner() {
   return { user, storeId: user.storeId };
 }
 
-export const getCachedRoles = unstable_cache(
-  async (storeId) => {
-    return await prisma.role.findMany({
-      where: { storeId },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-      },
-    });
-  },
-  ['roles'],
-  { tags: ['roles'], revalidate: 3600 }
-);
+export const getCachedRoles = async (storeId) => {
+  return await prisma.role.findMany({
+    where: { storeId },
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+    },
+  });
+};
 
 export async function getRoles() {
   try {

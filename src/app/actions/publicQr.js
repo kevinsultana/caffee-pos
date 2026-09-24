@@ -48,6 +48,10 @@ export async function getPublicMenuData() {
         orderBy: { name: 'asc' },
         include: {
           category: true,
+          variants: {
+            where: { discontinued: false },
+            orderBy: { price: 'asc' },
+          },
         },
       }),
       prisma.productCategory.findMany({
@@ -66,6 +70,14 @@ export async function getPublicMenuData() {
       description: p.description,
       categoryId: p.categoryId,
       categoryName: p.category?.name,
+      variants: (p.variants || []).map((v) => ({
+        id: v.id,
+        name: v.name,
+        price: Number(v.price),
+        availability: v.availability,
+        discontinued: v.discontinued,
+        sku: v.sku,
+      })),
     }));
 
     return {
@@ -148,6 +160,11 @@ export async function createPublicQrOrder({
         discontinued: false,
         availability: 'AVAILABLE',
       },
+      include: {
+        variants: {
+          where: { discontinued: false },
+        },
+      },
     });
 
     const productMap = new Map(dbProducts.map((p) => [p.id, p]));
@@ -161,14 +178,32 @@ export async function createPublicQrOrder({
         return { error: 'Salah satu produk yang dipesan sudah tidak tersedia.' };
       }
 
+      const selectedVariant = it.variantId
+        ? dbProd.variants?.find((v) => v.id === it.variantId)
+        : null;
+
+      if (it.variantId && !selectedVariant) {
+        return { error: `Varian yang dipilih untuk produk "${dbProd.name}" sudah tidak tersedia.` };
+      }
+
+      if (selectedVariant && selectedVariant.availability === 'OUT_OF_STOCK') {
+        return { error: `Varian "${selectedVariant.name}" untuk produk "${dbProd.name}" sedang habis.` };
+      }
+
       const qty = Number(it.quantity) || 1;
-      const unitPrice = Number(dbProd.price);
+      const unitPrice = selectedVariant
+        ? Number(selectedVariant.price)
+        : Number(dbProd.price);
       const subtotal = unitPrice * qty;
       productSubtotal += subtotal;
 
       orderItemsData.push({
         productId: dbProd.id,
-        productNameSnapshot: dbProd.name,
+        variantId: selectedVariant ? selectedVariant.id : null,
+        productNameSnapshot: selectedVariant
+          ? `${dbProd.name} (${selectedVariant.name})`
+          : dbProd.name,
+        variantNameSnapshot: selectedVariant ? selectedVariant.name : null,
         quantity: qty,
         unitPrice,
         promotionDiscount: 0,
