@@ -15,6 +15,7 @@ import { getInventoryItems } from '@/app/actions/inventory';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import { compressImage } from '@/lib/imageCompression';
 
 export default function ProductsListPage() {
   const [products, setProducts] = useState([]);
@@ -107,29 +108,43 @@ export default function ProductsListPage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Ukuran file maksimal 5MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('Ukuran file foto maksimal 15MB sebelum dikompres.');
       return;
     }
 
     setIsUploadingImage(true);
-    const toastId = toast.loading('Mengunggah foto produk...');
+    const toastId = toast.loading('Mengompres foto produk (maks 300KB)...');
 
     try {
+      const { file: compressedFile, compressedSize, savingsPercent } = await compressImage(file, {
+        maxSizeKB: 300,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      });
+
+      toast.loading(
+        `Mengunggah foto (${(compressedSize / 1024).toFixed(0)} KB${savingsPercent > 0 ? `, hemat ${savingsPercent}%` : ''})...`,
+        { id: toastId }
+      );
+
       const formData = new FormData();
-      formData.append('image', file);
-      formData.append('file', file);
+      formData.append('image', compressedFile);
+      formData.append('file', compressedFile);
 
       const res = await uploadProductImage(formData);
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success('Foto produk berhasil diunggah!', { id: toastId });
+        toast.success(
+          `Foto produk berhasil dikompres & diunggah (${(compressedSize / 1024).toFixed(0)} KB)!`,
+          { id: toastId }
+        );
         setImageUrl(res.imageUrl);
       }
     } catch (err) {
       console.error(err);
-      toast.error('Gagal mengunggah foto produk.', { id: toastId });
+      toast.error(err.message || 'Gagal mengompres/mengunggah foto produk.', { id: toastId });
     } finally {
       setIsUploadingImage(false);
       if (fileInputRef.current) {

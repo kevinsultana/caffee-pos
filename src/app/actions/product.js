@@ -254,9 +254,11 @@ export async function uploadProductImage(formData) {
       return { error: 'Format file tidak didukung. Harap gunakan PNG, JPG, WEBP, atau SVG.' };
     }
 
-    const MAX_SIZE = 5 * 1024 * 1024;
+    const MAX_SIZE = 350 * 1024; // Batas maksimal 300KB (toleransi 350KB)
     if (file.size > MAX_SIZE) {
-      return { error: 'Ukuran file gambar maksimal 5MB.' };
+      return {
+        error: `Ukuran file gambar (${(file.size / 1024).toFixed(1)} KB) melebihi batas maksimal 300 KB. Gambar harus dikompres terlebih dahulu.`,
+      };
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -602,7 +604,7 @@ export async function getProductWithDetails(id) {
             recipes: {
               include: {
                 versions: {
-                  where: { isActive: true },
+                  orderBy: { versionNumber: 'desc' },
                   include: {
                     ingredients: {
                       include: {
@@ -627,7 +629,7 @@ export async function getProductWithDetails(id) {
           where: { variantId: null },
           include: {
             versions: {
-              where: { isActive: true },
+              orderBy: { versionNumber: 'desc' },
               include: {
                 ingredients: {
                   include: {
@@ -650,42 +652,48 @@ export async function getProductWithDetails(id) {
       return { error: 'Produk tidak ditemukan.' };
     }
 
-    // Helper untuk serialisasi resep & hitung estimasi HPP
+    // Helper untuk serialisasi resep & hitung estimasi HPP untuk seluruh versi
     const serializeRecipe = (recipeRecord) => {
       if (!recipeRecord) return null;
-      const activeVersion = recipeRecord.versions?.[0] || null;
-      if (!activeVersion) return null;
+      const allVersions = (recipeRecord.versions || []).map((ver) => {
+        let verHpp = 0;
+        const ingredients = (ver.ingredients || []).map((ing) => {
+          const qty = Number(ing.quantity);
+          const avgCost = ing.inventoryItem?.balance
+            ? Number(ing.inventoryItem.balance.averageCost)
+            : 0;
+          const subtotalHpp = qty * avgCost;
+          verHpp += subtotalHpp;
 
-      let estimatedHpp = 0;
-      const ingredients = activeVersion.ingredients.map((ing) => {
-        const qty = Number(ing.quantity);
-        const avgCost = ing.inventoryItem?.balance
-          ? Number(ing.inventoryItem.balance.averageCost)
-          : 0;
-        const subtotalHpp = qty * avgCost;
-        estimatedHpp += subtotalHpp;
+          return {
+            id: ing.id,
+            inventoryItemId: ing.inventoryItemId,
+            inventoryItemName: ing.inventoryItem?.name || '',
+            baseUnitCode: ing.inventoryItem?.baseUnit?.code || '',
+            quantity: qty,
+            averageCost: avgCost,
+            subtotalHpp,
+          };
+        });
 
         return {
-          id: ing.id,
-          inventoryItemId: ing.inventoryItemId,
-          inventoryItemName: ing.inventoryItem?.name || '',
-          baseUnitCode: ing.inventoryItem?.baseUnit?.code || '',
-          quantity: qty,
-          averageCost: avgCost,
-          subtotalHpp,
+          id: ver.id,
+          versionNumber: ver.versionNumber,
+          isActive: ver.isActive,
+          createdAt: ver.createdAt,
+          ingredients,
+          estimatedHpp: verHpp,
         };
       });
+
+      const activeVersion =
+        allVersions.find((v) => v.isActive) || allVersions[0] || null;
 
       return {
         id: recipeRecord.id,
         name: recipeRecord.name,
-        activeVersion: {
-          id: activeVersion.id,
-          versionNumber: activeVersion.versionNumber,
-          createdAt: activeVersion.createdAt,
-          ingredients,
-          estimatedHpp,
-        },
+        activeVersion,
+        versions: allVersions,
       };
     };
 
@@ -1202,6 +1210,160 @@ export async function getRecipeHistory({ productId, variantId }) {
   } catch (error) {
     console.error('[getRecipeHistory] Error:', error);
     return { error: error.message || 'Gagal memuat riwayat resep.' };
+  }
+}
+
+/**
+ * Memperbarui komposisi dan takaran bahan baku pada versi resep yang sudah ada.
+ */
+export async function updateRecipeVersion({ versionId, ingredients = [] }) {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    if (!versionId) {
+      return { error: 'ID versi resep wajib disertakan.' };
+    }
+
+    if (!ingredients || ingredients.length === 0) {
+      return { error: 'Resep harus memiliki minimal 1 bahan baku inventaris.' };
+    }
+
+    for (let i = 0; i < ingredients.length; i++) {
+      const ing = ingredients[i];
+      const q = Number(ing.quantity);
+      if (!ing.inventoryItemId || isNaN(q) || q <= 0) {
+        return { error: `Baris ke-${i + 1}: Kuantitas bahan baku harus lebih dari 0.` };
+      }
+    }
+
+    // Ambil RecipeVersion dan pastikan milik store yang berwenang
+    const targetVersion = await prisma.recipeVersion.findUnique({
+      where: { id: versionId },
+      include: {
+        recipe: {
+          include: {
+            product: true,
+            variant: { include: { product: true } },
+          },
+        },
+      },
+    });
+
+    if (!targetVersion) {
+      return { error: 'Versi resep tidak ditemukan.' };
+    }
+
+    const prod = targetVersion.recipe.product || targetVersion.recipe.variant?.product;
+    if (!prod || prod.storeId !== storeId) {
+      return { error: 'Anda tidak memiliki hak akses untuk mengubah resep ini.' };
+    }
+
+    const parentName = targetVersion.recipe.variant
+      ? `${prod.name} (${targetVersion.recipe.variant.name})`
+      : prod.name;
+
+    await prisma.$transaction(async (tx) => {
+      // Hapus bahan baku lama di versi ini
+      await tx.recipeIngredient.deleteMany({
+        where: { recipeVersionId: versionId },
+      });
+
+      // Tambahkan bahan baku yang diperbarui
+      await tx.recipeIngredient.createMany({
+        data: ingredients.map((ing) => ({
+          recipeVersionId: versionId,
+          inventoryItemId: ing.inventoryItemId,
+          quantity: Number(ing.quantity),
+        })),
+      });
+
+      // Audit Log
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: user.id,
+          action: 'UPDATE_RECIPE_VERSION',
+          module: 'INVENTORY',
+          entityType: 'RecipeVersion',
+          entityId: versionId,
+          changeSummary: `Memperbarui bahan baku resep Versi ${targetVersion.versionNumber} untuk "${parentName}" (${ingredients.length} bahan).`,
+        },
+      });
+    });
+
+    revalidatePath(`/dashboard/products/list/${prod.id}`);
+    revalidatePath('/dashboard/products/list');
+    revalidatePath('/dashboard/pos');
+
+    return { success: true, message: `Versi ${targetVersion.versionNumber} berhasil diperbarui.` };
+  } catch (error) {
+    console.error('[updateRecipeVersion] Error:', error);
+    return { error: error.message || 'Gagal memperbarui versi resep.' };
+  }
+}
+
+/**
+ * Menjadikan salah satu versi resep sebagai versi aktif yang digunakan kasir/POS.
+ */
+export async function setActiveRecipeVersion({ versionId }) {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    const targetVersion = await prisma.recipeVersion.findUnique({
+      where: { id: versionId },
+      include: {
+        recipe: {
+          include: {
+            product: true,
+            variant: { include: { product: true } },
+          },
+        },
+      },
+    });
+
+    if (!targetVersion) {
+      return { error: 'Versi resep tidak ditemukan.' };
+    }
+
+    const prod = targetVersion.recipe.product || targetVersion.recipe.variant?.product;
+    if (!prod || prod.storeId !== storeId) {
+      return { error: 'Anda tidak memiliki izin untuk mengaktifkan versi ini.' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Nonaktifkan semua versi pada resep ini
+      await tx.recipeVersion.updateMany({
+        where: { recipeId: targetVersion.recipeId },
+        data: { isActive: false },
+      });
+
+      // Aktifkan versi yang dipilih
+      await tx.recipeVersion.update({
+        where: { id: versionId },
+        data: { isActive: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: user.id,
+          action: 'SET_ACTIVE_RECIPE_VERSION',
+          module: 'INVENTORY',
+          entityType: 'RecipeVersion',
+          entityId: versionId,
+          changeSummary: `Mengaktifkan resep Versi ${targetVersion.versionNumber} untuk "${prod.name}"`,
+        },
+      });
+    });
+
+    revalidatePath(`/dashboard/products/list/${prod.id}`);
+    revalidatePath('/dashboard/products/list');
+    revalidatePath('/dashboard/pos');
+
+    return { success: true, message: `Versi ${targetVersion.versionNumber} kini aktif digunakan.` };
+  } catch (error) {
+    console.error('[setActiveRecipeVersion] Error:', error);
+    return { error: error.message || 'Gagal mengubah versi resep aktif.' };
   }
 }
 

@@ -159,6 +159,7 @@ export async function uploadStoreLogo(formData) {
 
     revalidatePath('/dashboard/settings');
     revalidatePath('/dashboard');
+    revalidatePath('/', 'layout');
 
     return {
       success: true,
@@ -203,6 +204,7 @@ export async function removeStoreLogo() {
 
     revalidatePath('/dashboard/settings');
     revalidatePath('/dashboard');
+    revalidatePath('/', 'layout');
 
     return { success: true, message: 'Logo toko berhasil dihapus.' };
   } catch (error) {
@@ -480,6 +482,7 @@ export async function updateStoreSettings(payload) {
     revalidatePath('/dashboard/settings');
     revalidatePath('/dashboard');
     revalidatePath('/dashboard/pos');
+    revalidatePath('/', 'layout');
 
     return { success: true, message: 'Pengaturan toko berhasil diperbarui.' };
   } catch (error) {

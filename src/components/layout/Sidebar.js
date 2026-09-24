@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -258,6 +259,12 @@ const NAV_GROUPS = [
 
 export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCollapse }) {
   const pathname = usePathname();
+  const [failedLogoUrl, setFailedLogoUrl] = useState(null);
+
+  // Ambil nama toko dan logo dari data store pengguna (pengaturan toko)
+  const storeName = user?.store?.name?.trim() || 'Schaw Cafe';
+  const storeLogoUrl = user?.store?.logoUrl || null;
+  const hasValidLogo = Boolean(storeLogoUrl && failedLogoUrl !== storeLogoUrl);
 
   // Ekstrak role dan permissions dengan fallback aman untuk seluruh skenario production
   const userRole = typeof user?.role === 'string' ? user.role : user?.role?.name || '';
@@ -305,14 +312,33 @@ export default function Sidebar({ isOpen, onClose, user, isCollapsed, onToggleCo
           isCollapsed ? 'justify-center p-4' : 'justify-between px-5 py-4'
         )}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 w-9 h-9 rounded-xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white shadow-sm flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 01-1.5-2.121V3.104m3 0c.25.023.5.05.75.082M19.5 14.5l-4.091-4.09A2.25 2.25 0 0115 8.818V3.104" />
-              </svg>
+            <div
+              className={cn(
+                'shrink-0 w-9 h-9 rounded-xl shadow-xs flex items-center justify-center overflow-hidden transition-all',
+                hasValidLogo
+                  ? 'bg-white border border-slate-200/90 p-0.5'
+                  : 'bg-linear-to-tr from-emerald-600 to-teal-500 text-white'
+              )}
+              title={storeName}
+            >
+              {hasValidLogo ? (
+                <img
+                  src={storeLogoUrl}
+                  alt={storeName}
+                  onError={() => setFailedLogoUrl(storeLogoUrl)}
+                  className="w-full h-full object-contain rounded-lg"
+                />
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.121m-3 0a2.25 2.25 0 01-1.5-2.121V3.104m3 0c.25.023.5.05.75.082M19.5 14.5l-4.091-4.09A2.25 2.25 0 0115 8.818V3.104" />
+                </svg>
+              )}
             </div>
             {!isCollapsed && (
               <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate">Schaw Cafe</p>
+                <p className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate" title={storeName}>
+                  {storeName}
+                </p>
                 <p className="text-[11px] font-medium text-emerald-600 mt-1">Enterprise POS</p>
               </div>
             )}
