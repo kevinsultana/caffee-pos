@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
+import { openShift } from '@/app/actions/shift';
 import { validatePromoCode } from '@/app/actions/promotion';
 import { getCustomers, createCustomer } from '@/app/actions/customer';
 import {
@@ -82,6 +83,39 @@ export default function PosScreenPage() {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustEmail, setNewCustEmail] = useState('');
   const [isCreatingCust, setIsCreatingCust] = useState(false);
+
+  // Quick Open Shift Modal State
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
+  const [quickOpeningCash, setQuickOpeningCash] = useState(0);
+  const [isOpeningShift, setIsOpeningShift] = useState(false);
+
+  async function handleQuickOpenShift(e) {
+    e.preventDefault();
+    const cash = Number(quickOpeningCash);
+    if (isNaN(cash) || cash < 0) {
+      toast.error('Modal awal laci kas harus berupa angka valid (minimal Rp 0).');
+      return;
+    }
+
+    setIsOpeningShift(true);
+    const toastId = toast.loading('Membuka shift kasir...');
+    try {
+      const res = await openShift({ openingCash: cash });
+      if (res?.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success('Shift kasir berhasil dibuka! Selamat melayani pelanggan.', { id: toastId });
+        setIsOpenShiftModalOpen(false);
+        setQuickOpeningCash(0);
+        await loadData();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.message || 'Gagal membuka shift kasir.', { id: toastId });
+    } finally {
+      setIsOpeningShift(false);
+    }
+  }
 
   function openCustomerModal(initialName = '', initialPhone = '', initialEmail = '') {
     setNewCustName(
@@ -204,6 +238,11 @@ export default function PosScreenPage() {
   // ══════════════════════════════════════════════════════════════════════════
 
   function handleProductCardClick(product) {
+    if (!activeShift) {
+      toast.error('Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu.', { id: 'shift-locked' });
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     if (product.availability === 'OUT_OF_STOCK') return;
 
     if (product.variants && product.variants.length > 0) {
@@ -214,6 +253,11 @@ export default function PosScreenPage() {
   }
 
   function addItemToCart(productId, name, price, variant = null) {
+    if (!activeShift) {
+      toast.error('Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu.', { id: 'shift-locked' });
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     const existingIndex = cart.findIndex(
       (item) => item.productId === productId && item.variantId === (variant?.id || null)
     );
@@ -413,6 +457,11 @@ export default function PosScreenPage() {
   }
 
   function openCheckout() {
+    if (!activeShift) {
+      toast.error('Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu.', { id: 'shift-locked' });
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     if (cart.length === 0) {
       toast.error('Keranjang belanja masih kosong.');
       return;
@@ -663,6 +712,11 @@ export default function PosScreenPage() {
   // ══════════════════════════════════════════════════════════════════════════
 
   function openQrOrderCheckout(order) {
+    if (!activeShift) {
+      toast.error('Shift kasir belum dibuka. Buka shift kasir terlebih dahulu untuk memproses pesanan.', { id: 'shift-locked' });
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     if (cart.length > 0 && !activeQrOrder) {
       const confirmReplace = window.confirm(
         'Keranjang kasir saat ini memiliki pesanan lain. Timpa isi keranjang dengan pesanan QR ini?'
@@ -776,31 +830,6 @@ export default function PosScreenPage() {
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
 
-      {/* ─── SHIFT CHECK WARNING ────────────────────────────────────────────── */}
-      {!activeShift && !loading && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <span className="p-2 rounded-xl bg-amber-100 text-amber-800">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-            </span>
-            <div>
-              <p className="text-xs font-bold text-amber-900">Shift Kasir Belum Dibuka</p>
-              <p className="text-xs text-amber-700 mt-0.5">
-                Buka shift kasir terlebih dahulu dengan modal awal untuk memproses pesanan dan mencatat penerimaan uang kas.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/dashboard/pos/shift"
-            className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold whitespace-nowrap shadow-xs"
-          >
-            Buka Shift Kasir &rarr;
-          </Link>
-        </div>
-      )}
-
       {/* ─── TOP HEADER & MODE TABS ─────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Mode Selector */}
@@ -867,511 +896,568 @@ export default function PosScreenPage() {
 
       {/* ─── TAB 1: KATALOG POS & KERANJANG (GRID 70% / 30%) ─────────────────── */}
       {activeTab === 'CATALOG' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* LEFT 70% (COL 8): PRODUCT CATALOG */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* Search Bar & Category Filter Carousel */}
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-3">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Cari nama menu atau SKU..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                />
-                <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                <button
-                  onClick={() => setSelectedCategory('ALL')}
-                  className={cn(
-                    'px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all',
-                    selectedCategory === 'ALL'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  )}
-                >
-                  Semua Menu ({products.length})
-                </button>
-                {categories.map((cat) => {
-                  const count = products.filter((p) => p.categoryId === cat.id).length;
-                  return (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={cn(
-                        'px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all',
-                        selectedCategory === cat.id
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                      )}
-                    >
-                      {cat.name} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Product Cards Grid */}
-            {loading ? (
-              <div className="py-20 text-center text-slate-400 text-xs">
-                Memuat katalog produk menu...
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2">
-                <p className="text-sm font-bold text-slate-700">Tidak ada menu yang cocok</p>
-                <p className="text-xs text-slate-400">Coba ubah kata kunci pencarian atau kategori filter.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                {filteredProducts.map((p) => {
-                  const isOutOfStock = p.availability === 'OUT_OF_STOCK';
-                  const hasVariants = p.variants && p.variants.length > 0;
-
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => handleProductCardClick(p)}
-                      className={cn(
-                        'p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between select-none relative group active:scale-[0.98]',
-                        isOutOfStock && 'opacity-50 pointer-events-none bg-slate-50'
-                      )}
-                    >
-                      <div>
-                        {/* Product Image Thumbnail / Placeholder */}
-                        <div className="w-full aspect-4/3 rounded-xl overflow-hidden bg-slate-100 relative mb-2.5 border border-slate-100 flex items-center justify-center">
-                          {p.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={p.imageUrl}
-                              alt={p.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-100">
-                              <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                              </svg>
-                            </div>
-                          )}
-
-                          {/* Floating Badges */}
-                          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
-                            <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-white/90 backdrop-blur-xs text-slate-700 shadow-2xs uppercase tracking-wider truncate max-w-21.25">
-                              {p.category?.name || 'Menu'}
-                            </span>
-                            {hasVariants && (
-                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-white shadow-2xs">
-                                {p.variants.length} Varian
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Product Name */}
-                        <h3 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2 leading-snug">
-                          {p.name}
-                        </h3>
-                      </div>
-
-                      {/* Bottom Price & Add CTA */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-2.5">
-                        <span className="font-mono font-bold text-xs text-emerald-700">
-                          {formatRupiah(p.price)}
-                        </span>
-                        <span className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-emerald-600 group-hover:text-white text-slate-600 flex items-center justify-center transition-colors shadow-2xs">
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                          </svg>
-                        </span>
-                      </div>
-
-                      {/* Out of Stock Overlay Badge */}
-                      {isOutOfStock && (
-                        <div className="absolute inset-0 bg-slate-900/10 backdrop-blur-2xs rounded-2xl flex items-center justify-center">
-                          <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-xs shadow-sm">
-                            Habis
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT 30% (COL 4): STICKY CART / RECEIPT PANEL */}
-          <div className="lg:col-span-4 sticky top-4 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col max-h-[calc(100vh-5rem)] overflow-hidden">
-            {/* Cart Header */}
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-                    </svg>
-                  </span>
-                  <h2 className="text-sm font-bold text-slate-900">
-                    Keranjang ({cart.reduce((s, i) => s + i.quantity, 0)})
-                  </h2>
+        <div className="relative">
+          {/* Overlay Terkunci jika shift belum dibuka */}
+          {!activeShift && !loading && (
+            <div className="absolute inset-0 z-20 bg-slate-900/40 backdrop-blur-[3px] rounded-3xl flex items-start justify-center pt-16 sm:pt-24 p-4">
+              <div className="sticky top-24 bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl text-center space-y-4 animate-in zoom-in-95">
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
                 </div>
 
-                {cart.length > 0 && (
-                  <button
-                    onClick={clearCart}
-                    className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 transition-colors"
-                  >
-                    Kosongkan
-                  </button>
-                )}
-              </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Shift Kasir Belum Dibuka</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    Halaman POS terkunci. Buka shift kasir terlebih dahulu dengan memasukkan modal awal laci kas untuk dapat memilih menu pesanan dan memproses transaksi pembayaran.
+                  </p>
+                </div>
 
-              {/* Active QR Order Indicator */}
-              {activeQrOrder && (
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 flex items-center justify-between text-xs text-amber-900 animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-mono font-bold text-[11px] shrink-0">
-                      {activeQrOrder.publicQrToken}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 text-xs truncate">
-                        Meja: {activeQrOrder.customerNameSnapshot}
-                      </p>
-                      <p className="text-[10px] text-amber-800 font-mono">
-                        #{activeQrOrder.orderNumber}
-                      </p>
-                    </div>
-                  </div>
+                <div className="pt-2 flex flex-col gap-2">
                   <button
                     type="button"
-                    onClick={detachQrOrder}
-                    className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline shrink-0 ml-2 cursor-pointer"
-                    title="Lepas tautan dan jadikan transaksi kasir biasa"
+                    onClick={() => setIsOpenShiftModalOpen(true)}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-700/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Lepas Tautan
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    Buka Shift Kasir Sekarang
                   </button>
+                  <Link
+                    href="/dashboard/pos/shift"
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    Buka Halaman Manajemen Shift &rarr;
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className={cn("grid grid-cols-1 lg:grid-cols-12 gap-5 items-start", !activeShift && !loading && "pointer-events-none select-none opacity-40")}>
+            {/* LEFT 70% (COL 8): PRODUCT CATALOG */}
+            <div className="lg:col-span-8 space-y-4">
+              {/* Search Bar & Category Filter Carousel */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari nama menu atau SKU..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  />
+                  <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  <button
+                    onClick={() => setSelectedCategory('ALL')}
+                    className={cn(
+                      'px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all',
+                      selectedCategory === 'ALL'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                    )}
+                  >
+                    Semua Menu ({products.length})
+                  </button>
+                  {categories.map((cat) => {
+                    const count = products.filter((p) => p.categoryId === cat.id).length;
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        className={cn(
+                          'px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all',
+                          selectedCategory === cat.id
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                        )}
+                      >
+                        {cat.name} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Product Cards Grid */}
+              {loading ? (
+                <div className="py-20 text-center text-slate-400 text-xs">
+                  Memuat katalog produk menu...
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                  <p className="text-sm font-bold text-slate-700">Tidak ada menu yang cocok</p>
+                  <p className="text-xs text-slate-400">Coba ubah kata kunci pencarian atau kategori filter.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                  {filteredProducts.map((p) => {
+                    const isOutOfStock = p.availability === 'OUT_OF_STOCK';
+                    const hasVariants = p.variants && p.variants.length > 0;
+
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => handleProductCardClick(p)}
+                        className={cn(
+                          'p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between select-none relative group active:scale-[0.98]',
+                          isOutOfStock && 'opacity-50 pointer-events-none bg-slate-50'
+                        )}
+                      >
+                        <div>
+                          {/* Product Image Thumbnail / Placeholder */}
+                          <div className="w-full aspect-4/3 rounded-xl overflow-hidden bg-slate-100 relative mb-2.5 border border-slate-100 flex items-center justify-center">
+                            {p.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={p.imageUrl}
+                                alt={p.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-100">
+                                <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                                </svg>
+                              </div>
+                            )}
+
+                            {/* Floating Badges */}
+                            <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                              <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-white/90 backdrop-blur-xs text-slate-700 shadow-2xs uppercase tracking-wider truncate max-w-21.25">
+                                {p.category?.name || 'Menu'}
+                              </span>
+                              {hasVariants && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-white shadow-2xs">
+                                  {p.variants.length} Varian
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Product Name */}
+                          <h3 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2 leading-snug">
+                            {p.name}
+                          </h3>
+                        </div>
+
+                        {/* Bottom Price & Add CTA */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-2.5">
+                          <span className="font-mono font-bold text-xs text-emerald-700">
+                            {formatRupiah(p.price)}
+                          </span>
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-emerald-600 group-hover:text-white text-slate-600 flex items-center justify-center transition-colors shadow-2xs">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                          </span>
+                        </div>
+
+                        {/* Out of Stock Overlay Badge */}
+                        {isOutOfStock && (
+                          <div className="absolute inset-0 bg-slate-900/10 backdrop-blur-2xs rounded-2xl flex items-center justify-center">
+                            <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-xs shadow-sm">
+                              Habis
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+            </div>
 
-              {/* Customer / Member Selection & Queue Inputs */}
-              <div className="space-y-2">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Pelanggan / Member
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => openCustomerModal()}
-                      className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            {/* RIGHT 30% (COL 4): STICKY CART / RECEIPT PANEL */}
+            <div className="lg:col-span-4 sticky top-4 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col max-h-[calc(100vh-5rem)] overflow-hidden">
+              {/* Cart Header */}
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
                       </svg>
-                      + Member Baru
+                    </span>
+                    <h2 className="text-sm font-bold text-slate-900">
+                      Keranjang ({cart.reduce((s, i) => s + i.quantity, 0)})
+                    </h2>
+                  </div>
+
+                  {cart.length > 0 && (
+                    <button
+                      onClick={clearCart}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 transition-colors"
+                    >
+                      Kosongkan
+                    </button>
+                  )}
+                </div>
+
+                {/* Active QR Order Indicator */}
+                {activeQrOrder && (
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 flex items-center justify-between text-xs text-amber-900 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-mono font-bold text-[11px] shrink-0">
+                        {activeQrOrder.publicQrToken}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 text-xs truncate">
+                          Meja: {activeQrOrder.customerNameSnapshot}
+                        </p>
+                        <p className="text-[10px] text-amber-800 font-mono">
+                          #{activeQrOrder.orderNumber}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={detachQrOrder}
+                      className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline shrink-0 ml-2 cursor-pointer"
+                      title="Lepas tautan dan jadikan transaksi kasir biasa"
+                    >
+                      Lepas Tautan
                     </button>
                   </div>
-                  <SearchableSelect
-                    isCreatable
-                    options={[
-                      { value: '', label: '👤 Guest (Bukan Member)' },
-                      ...customers.map((c) => ({
-                        value: c.id,
-                        label: `★ ${c.name} ${c.phone ? `(${c.phone})` : ''} ${c.email ? `• ${c.email}` : ''}`.trim(),
-                      })),
-                    ]}
-                    value={selectedCustomerId}
-                    onChange={(cid) => {
-                      const idVal = cid || '';
-                      setSelectedCustomerId(idVal);
-                      if (idVal) {
-                        const c = customers.find((cust) => cust.id === idVal);
-                        if (c) {
-                          setCustomerName(c.name);
-                          setCustomerPhone(c.phone || '');
+                )}
+
+                {/* Customer / Member Selection & Queue Inputs */}
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Pelanggan / Member
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openCustomerModal()}
+                        className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        + Member Baru
+                      </button>
+                    </div>
+                    <SearchableSelect
+                      isCreatable
+                      options={[
+                        { value: '', label: '👤 Guest (Bukan Member)' },
+                        ...customers.map((c) => ({
+                          value: c.id,
+                          label: `★ ${c.name} ${c.phone ? `(${c.phone})` : ''} ${c.email ? `• ${c.email}` : ''}`.trim(),
+                        })),
+                      ]}
+                      value={selectedCustomerId}
+                      onChange={(cid) => {
+                        const idVal = cid || '';
+                        setSelectedCustomerId(idVal);
+                        if (idVal) {
+                          const c = customers.find((cust) => cust.id === idVal);
+                          if (c) {
+                            setCustomerName(c.name);
+                            setCustomerPhone(c.phone || '');
+                          }
+                        } else {
+                          setCustomerName('Pelanggan');
+                          setCustomerPhone('');
                         }
-                      } else {
-                        setCustomerName('Pelanggan');
-                        setCustomerPhone('');
+                      }}
+                      onCreateOption={(inputValue) => {
+                        openCustomerModal(inputValue);
+                      }}
+                      formatCreateLabel={(inputValue) => `+ Daftarkan "${inputValue}" sebagai Member Baru`}
+                      placeholder="Cari member / ketik nama baru..."
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue ? (
+                          <div className="py-2 px-1 text-center space-y-1.5">
+                            <p className="text-slate-500 text-xs">Member &quot;{inputValue}&quot; tidak ditemukan</p>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                openCustomerModal(inputValue);
+                              }}
+                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                            >
+                              + Daftarkan &quot;{inputValue}&quot;
+                            </button>
+                          </div>
+                        ) : (
+                          'Ketik nama atau nomor HP member...'
+                        )
                       }
-                    }}
-                    onCreateOption={(inputValue) => {
-                      openCustomerModal(inputValue);
-                    }}
-                    formatCreateLabel={(inputValue) => `+ Daftarkan "${inputValue}" sebagai Member Baru`}
-                    placeholder="Cari member / ketik nama baru..."
-                    noOptionsMessage={({ inputValue }) =>
-                      inputValue ? (
-                        <div className="py-2 px-1 text-center space-y-1.5">
-                          <p className="text-slate-500 text-xs">Member &quot;{inputValue}&quot; tidak ditemukan</p>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              openCustomerModal(inputValue);
-                            }}
-                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                          >
-                            + Daftarkan &quot;{inputValue}&quot;
-                          </button>
-                        </div>
-                      ) : (
-                        'Ketik nama atau nomor HP member...'
-                      )
-                    }
-                  />
-                </div>
-
-                {/* Pilihan Dine In / Takeaway */}
-                <div>
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeChange('DINE_IN')}
-                      className={cn(
-                        'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
-                        orderType === 'DINE_IN'
-                          ? 'bg-white text-emerald-700 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      )}
-                    >
-                      <span className="text-sm">🍽️</span>
-                      <span>Dine In (A)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeChange('TAKEAWAY')}
-                      className={cn(
-                        'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
-                        orderType === 'TAKEAWAY'
-                          ? 'bg-white text-amber-700 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      )}
-                    >
-                      <span className="text-sm">🥡</span>
-                      <span>Takeaway (TA)</span>
-                    </button>
+                    />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 items-center justify-between">
-                      <span>Antrean <span className="text-rose-500 font-bold">*</span></span>
-                      <span className={cn('text-[9px] font-bold px-1 rounded', orderType === 'TAKEAWAY' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')}>
-                        {orderType === 'TAKEAWAY' ? 'TA' : 'A'}
-                      </span>
-                    </label>
-                    <div className={cn(
-                      'flex items-center rounded-xl border bg-white overflow-hidden transition-all focus-within:ring-2',
-                      !queueInput.trim()
-                        ? 'border-rose-300 focus-within:ring-rose-400'
-                        : orderType === 'TAKEAWAY'
-                          ? 'border-amber-300 focus-within:ring-amber-500'
-                          : 'border-slate-200 focus-within:ring-emerald-500'
-                    )}>
-                      <span className={cn(
-                        'px-2 py-1.5 text-xs font-black font-mono select-none border-r shrink-0',
-                        orderType === 'TAKEAWAY'
-                          ? 'bg-amber-100 text-amber-800 border-amber-200'
-                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  {/* Pilihan Dine In / Takeaway */}
+                  <div>
+                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeChange('DINE_IN')}
+                        className={cn(
+                          'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                          orderType === 'DINE_IN'
+                            ? 'bg-white text-emerald-700 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        )}
+                      >
+                        <span className="text-sm">🍽️</span>
+                        <span>Dine In (A)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeChange('TAKEAWAY')}
+                        className={cn(
+                          'py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                          orderType === 'TAKEAWAY'
+                            ? 'bg-white text-amber-700 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        )}
+                      >
+                        <span className="text-sm">🥡</span>
+                        <span>Takeaway (TA)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-1">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 items-center justify-between">
+                        <span>Antrean <span className="text-rose-500 font-bold">*</span></span>
+                        <span className={cn('text-[9px] font-bold px-1 rounded', orderType === 'TAKEAWAY' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')}>
+                          {orderType === 'TAKEAWAY' ? 'TA' : 'A'}
+                        </span>
+                      </label>
+                      <div className={cn(
+                        'flex items-center rounded-xl border bg-white overflow-hidden transition-all focus-within:ring-2',
+                        !queueInput.trim()
+                          ? 'border-rose-300 focus-within:ring-rose-400'
+                          : orderType === 'TAKEAWAY'
+                            ? 'border-amber-300 focus-within:ring-amber-500'
+                            : 'border-slate-200 focus-within:ring-emerald-500'
                       )}>
-                        {orderType === 'TAKEAWAY' ? 'TA-' : 'A-'}
-                      </span>
+                        <span className={cn(
+                          'px-2 py-1.5 text-xs font-black font-mono select-none border-r shrink-0',
+                          orderType === 'TAKEAWAY'
+                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        )}>
+                          {orderType === 'TAKEAWAY' ? 'TA-' : 'A-'}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={queueInput}
+                          onChange={(e) => {
+                            const digitsOnly = e.target.value.replace(/\D/g, '');
+                            setQueueInput(digitsOnly);
+                          }}
+                          className={cn(
+                            'w-full px-2 py-1.5 font-mono font-black text-xs text-center focus:outline-none bg-transparent',
+                            orderType === 'TAKEAWAY' ? 'text-amber-800' : 'text-emerald-800',
+                            !queueInput.trim() && 'placeholder:text-rose-300'
+                          )}
+                          placeholder="Wajib"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Nama Pelanggan
+                      </label>
                       <input
                         type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={queueInput}
-                        onChange={(e) => {
-                          const digitsOnly = e.target.value.replace(/\D/g, '');
-                          setQueueInput(digitsOnly);
-                        }}
-                        className={cn(
-                          'w-full px-2 py-1.5 font-mono font-black text-xs text-center focus:outline-none bg-transparent',
-                          orderType === 'TAKEAWAY' ? 'text-amber-800' : 'text-emerald-800',
-                          !queueInput.trim() && 'placeholder:text-rose-300'
-                        )}
-                        placeholder="Wajib"
-                        required
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        placeholder="Nama Pelanggan"
                       />
                     </div>
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Nama Pelanggan
-                    </label>
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      placeholder="Nama Pelanggan"
-                    />
-                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Scrollable Cart Items List */}
-            <div className="flex-1 p-3 overflow-y-auto divide-y divide-slate-100 space-y-2">
-              {cart.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-xs space-y-1">
-                  <p className="font-semibold">Keranjang masih kosong</p>
-                  <p className="text-[11px] text-slate-400">Pilih menu di sebelah kiri untuk menambahkan pesanan.</p>
-                </div>
-              ) : (
-                cart.map((item, index) => (
-                  <div key={index} className="pt-2.5 space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                        <p className="text-[11px] font-mono text-slate-500">{formatRupiah(item.price)}</p>
+              {/* Scrollable Cart Items List */}
+              <div className="flex-1 p-3 overflow-y-auto divide-y divide-slate-100 space-y-2">
+                {cart.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs space-y-1">
+                    <p className="font-semibold">Keranjang masih kosong</p>
+                    <p className="text-[11px] text-slate-400">Pilih menu di sebelah kiri untuk menambahkan pesanan.</p>
+                  </div>
+                ) : (
+                  cart.map((item, index) => (
+                    <div key={index} className="pt-2.5 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                          <p className="text-[11px] font-mono text-slate-500">{formatRupiah(item.price)}</p>
+                        </div>
+
+                        {/* Stepper Buttons */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(index, -1)}
+                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center transition-colors"
+                          >
+                            -
+                          </button>
+                          <span className="w-7 text-center font-mono font-bold text-xs text-slate-900">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(index, 1)}
+                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Subtotal */}
+                        <div className="w-20 text-right font-mono font-bold text-xs text-slate-900 shrink-0">
+                          {formatRupiah(item.price * item.quantity)}
+                        </div>
                       </div>
 
-                      {/* Stepper Buttons */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, -1)}
-                          className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center transition-colors"
-                        >
-                          -
-                        </button>
-                        <span className="w-7 text-center font-mono font-bold text-xs text-slate-900">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, 1)}
-                          className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Subtotal */}
-                      <div className="w-20 text-right font-mono font-bold text-xs text-slate-900 shrink-0">
-                        {formatRupiah(item.price * item.quantity)}
-                      </div>
+                      {/* Notes Input */}
+                      <input
+                        type="text"
+                        placeholder="Catatan: misal no ice, less sugar..."
+                        value={item.notes}
+                        onChange={(e) => updateNotes(index, e.target.value)}
+                        className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
                     </div>
+                  ))
+                )}
+              </div>
 
-                    {/* Notes Input */}
+              {/* Promo Code Input Bar */}
+              <div className="p-3 bg-slate-50/70 border-t border-slate-100">
+                {appliedPromo ? (
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold font-mono">🏷️ {appliedPromo.code}</span>
+                      <span>(-{formatRupiah(appliedPromo.discountAmount)})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removePromo}
+                      className="text-rose-600 hover:text-rose-800 font-bold px-1"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleApplyPromo} className="flex gap-1.5">
                     <input
                       type="text"
-                      placeholder="Catatan: misal no ice, less sugar..."
-                      value={item.notes}
-                      onChange={(e) => updateNotes(index, e.target.value)}
-                      className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      placeholder="KODE PROMO"
+                      value={inputPromoCode}
+                      onChange={(e) => setInputPromoCode(e.target.value.toUpperCase())}
+                      disabled={isValidatingPromo}
+                      className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
                     />
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Promo Code Input Bar */}
-            <div className="p-3 bg-slate-50/70 border-t border-slate-100">
-              {appliedPromo ? (
-                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold font-mono">🏷️ {appliedPromo.code}</span>
-                    <span>(-{formatRupiah(appliedPromo.discountAmount)})</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={removePromo}
-                    className="text-rose-600 hover:text-rose-800 font-bold px-1"
-                  >
-                    &times;
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleApplyPromo} className="flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="KODE PROMO"
-                    value={inputPromoCode}
-                    onChange={(e) => setInputPromoCode(e.target.value.toUpperCase())}
-                    disabled={isValidatingPromo}
-                    className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isValidatingPromo || !inputPromoCode.trim()}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
-                  >
-                    {isValidatingPromo ? '...' : 'Gunakan'}
-                  </button>
-                </form>
-              )}
-            </div>
-
-            {/* Totals & Breakdown */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-1.5">
-              <div className="flex justify-between text-xs text-slate-600 font-mono">
-                <span className="font-sans">Subtotal Menu:</span>
-                <span>{formatRupiah(subtotal)}</span>
+                    <button
+                      type="submit"
+                      disabled={isValidatingPromo || !inputPromoCode.trim()}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      {isValidatingPromo ? '...' : 'Gunakan'}
+                    </button>
+                  </form>
+                )}
               </div>
 
-              {promotionDiscount > 0 && (
-                <div className="flex justify-between text-xs text-emerald-600 font-mono font-bold">
-                  <span className="font-sans">Diskon Promo:</span>
-                  <span>-{formatRupiah(promotionDiscount)}</span>
+              {/* Totals & Breakdown */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-1.5">
+                <div className="flex justify-between text-xs text-slate-600 font-mono">
+                  <span className="font-sans">Subtotal Menu:</span>
+                  <span>{formatRupiah(subtotal)}</span>
                 </div>
-              )}
 
-              {serviceChargeAmount > 0 && (
-                <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-                  <span className="font-sans">Service Charge ({scRate}%):</span>
-                  <span>{formatRupiah(serviceChargeAmount)}</span>
+                {promotionDiscount > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-600 font-mono font-bold">
+                    <span className="font-sans">Diskon Promo:</span>
+                    <span>-{formatRupiah(promotionDiscount)}</span>
+                  </div>
+                )}
+
+                {serviceChargeAmount > 0 && (
+                  <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+                    <span className="font-sans">Service Charge ({scRate}%):</span>
+                    <span>{formatRupiah(serviceChargeAmount)}</span>
+                  </div>
+                )}
+
+                {taxAmount > 0 && (
+                  <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+                    <span className="font-sans">Pajak PPN ({taxRate}%):</span>
+                    <span>{formatRupiah(taxAmount)}</span>
+                  </div>
+                )}
+
+                {/* Grand Total */}
+                <div className="pt-2 border-t border-slate-200 flex items-baseline justify-between">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Grand Total:
+                  </span>
+                  <span className="text-2xl font-extrabold font-mono text-emerald-700">
+                    {formatRupiah(effectiveTotal)}
+                  </span>
                 </div>
-              )}
-
-              {taxAmount > 0 && (
-                <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-                  <span className="font-sans">Pajak PPN ({taxRate}%):</span>
-                  <span>{formatRupiah(taxAmount)}</span>
-                </div>
-              )}
-
-              {/* Grand Total */}
-              <div className="pt-2 border-t border-slate-200 flex items-baseline justify-between">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Grand Total:
-                </span>
-                <span className="text-2xl font-extrabold font-mono text-emerald-700">
-                  {formatRupiah(effectiveTotal)}
-                </span>
               </div>
-            </div>
 
-            {/* Checkout Action Button */}
-            <div className="p-3 bg-white border-t border-slate-100">
-              <button
-                type="button"
-                onClick={openCheckout}
-                disabled={cart.length === 0 || isPending}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-700/20 transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-              >
-                <span>Bayar Sekarang</span>
-                <span>&bull;</span>
-                <span className="font-mono">{formatRupiah(effectiveTotal)}</span>
-              </button>
+              {/* Checkout Action Button */}
+              <div className="p-3 bg-white border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={openCheckout}
+                  disabled={cart.length === 0 || isPending || !activeShift}
+                  className={cn(
+                    "w-full py-3.5 font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2",
+                    !activeShift
+                      ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                      : "bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white shadow-md shadow-emerald-700/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                  )}
+                >
+                  {!activeShift ? (
+                    <span className="flex items-center gap-1.5 text-xs text-slate-500 font-bold">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                      Shift Kasir Belum Dibuka
+                    </span>
+                  ) : (
+                    <>
+                      <span>Bayar Sekarang</span>
+                      <span>&bull;</span>
+                      <span className="font-mono">{formatRupiah(effectiveTotal)}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1986,6 +2072,89 @@ export default function PosScreenPage() {
         }}
         continueButtonText="Lanjutkan Konfirmasi & Cetak Struk"
       />
+
+      {/* ─── MODAL BUKA SHIFT KASIR (QUICK OPEN SHIFT) ───────────────────── */}
+      {isOpenShiftModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold">
+                  🔓
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Buka Shift Kasir Baru</h3>
+                  <p className="text-[11px] text-slate-500">Mulai sesi kasir untuk melayani pesanan</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpenShiftModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickOpenShift} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Modal Awal Laci Kasir (Cash Drawer)
+                </label>
+                <CurrencyInput
+                  value={quickOpeningCash}
+                  onChange={(val) => setQuickOpeningCash(val)}
+                  placeholder="Rp 0"
+                  className="w-full text-base font-bold font-mono py-2.5 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  autoFocus
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Masukkan uang fisik kembalian awal di laci kasir (boleh Rp 0 jika tanpa modal).
+                </p>
+
+                {/* Quick amount chips */}
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {[0, 50000, 100000, 200000, 500000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setQuickOpeningCash(amt)}
+                      className={cn(
+                        "px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer",
+                        quickOpeningCash === amt
+                          ? "bg-emerald-50 border-emerald-400 text-emerald-700"
+                          : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600"
+                      )}
+                    >
+                      {amt === 0 ? 'Rp 0' : formatRupiah(amt)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenShiftModalOpen(false)}
+                  disabled={isOpeningShift}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isOpeningShift}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isOpeningShift ? 'Membuka Shift...' : 'Buka Shift Sekarang'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
