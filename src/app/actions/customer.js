@@ -33,7 +33,16 @@ export async function getCustomers({ query = '' } = {}) {
       include: {
         orders: {
           where: { status: 'PAID' },
-          select: { grandTotal: true },
+          select: {
+            grandTotal: true,
+            promotionDiscount: true,
+            promotions: {
+              select: {
+                promotionNameSnapshot: true,
+                promotionCodeSnapshot: true,
+              },
+            },
+          },
         },
         _count: {
           select: { orders: true },
@@ -43,6 +52,14 @@ export async function getCustomers({ query = '' } = {}) {
 
     const serialized = customers.map((c) => {
       const totalSpent = c.orders.reduce((sum, o) => sum + Number(o.grandTotal || 0), 0);
+      const totalPromoDiscount = c.orders.reduce(
+        (sum, o) => sum + Number(o.promotionDiscount || 0),
+        0
+      );
+      const promoOrdersCount = c.orders.filter(
+        (o) => Number(o.promotionDiscount || 0) > 0 || (o.promotions && o.promotions.length > 0)
+      ).length;
+
       return {
         id: c.id,
         name: c.name,
@@ -51,6 +68,9 @@ export async function getCustomers({ query = '' } = {}) {
         orderCount: c.orders.length,
         allOrderCount: c._count.orders,
         totalSpent,
+        totalPromoDiscount,
+        promoOrdersCount,
+        hasUsedPromo: promoOrdersCount > 0,
         createdAt: c.createdAt,
       };
     });
@@ -63,7 +83,7 @@ export async function getCustomers({ query = '' } = {}) {
 }
 
 /**
- * Mengambil detail riwayat transaksi dan barang yang pernah dibeli oleh pelanggan.
+ * Mengambil detail riwayat transaksi dan barang yang pernah dibeli oleh pelanggan beserta penggunaan promo.
  */
 export async function getCustomerPurchaseHistory(customerId) {
   try {
@@ -91,6 +111,9 @@ export async function getCustomerPurchaseHistory(customerId) {
             paidAt: true,
           },
         },
+        promotions: {
+          orderBy: { sequenceNo: 'asc' },
+        },
         items: {
           select: {
             id: true,
@@ -99,6 +122,7 @@ export async function getCustomerPurchaseHistory(customerId) {
             quantity: true,
             unitPrice: true,
             subtotal: true,
+            promotionDiscount: true,
             notes: true,
           },
         },
@@ -108,13 +132,38 @@ export async function getCustomerPurchaseHistory(customerId) {
     const productStatsMap = new Map();
     let totalSpent = 0;
     let paidOrdersCount = 0;
+    let totalPromoSavings = 0;
+    let ordersWithPromoCount = 0;
 
     const serializedOrders = orders.map((o) => {
       const isPaid = o.status === 'PAID';
       const grandTotalNum = Number(o.grandTotal || 0);
+      const promoDiscountNum = Number(o.promotionDiscount || 0);
+      const productSubtotalNum = Number(o.productSubtotal || 0);
+
+      const serializedPromotions = (o.promotions || []).map((p) => ({
+        id: p.id,
+        promotionId: p.promotionId,
+        sequenceNo: p.sequenceNo,
+        name: p.promotionNameSnapshot,
+        code: p.promotionCodeSnapshot,
+        discountType: p.discountTypeSnapshot,
+        discountScope: p.discountScopeSnapshot,
+        value: Number(p.valueSnapshot || 0),
+        maxDiscount: p.maxDiscountSnapshot ? Number(p.maxDiscountSnapshot) : null,
+        discountAmount: Number(p.discountAmount || 0),
+        createdAt: p.createdAt ? p.createdAt.toISOString() : null,
+      }));
+
+      const hasPromo = promoDiscountNum > 0 || serializedPromotions.length > 0;
+
       if (isPaid) {
         totalSpent += grandTotalNum;
         paidOrdersCount += 1;
+        if (hasPromo) {
+          totalPromoSavings += promoDiscountNum;
+          ordersWithPromoCount += 1;
+        }
       }
 
       const serializedItems = o.items.map((item) => {
@@ -144,6 +193,7 @@ export async function getCustomerPurchaseHistory(customerId) {
           quantity: itemQty,
           unitPrice: Number(item.unitPrice || 0),
           subtotal: itemSubtotal,
+          promotionDiscount: Number(item.promotionDiscount || 0),
           notes: item.notes,
         };
       });
@@ -151,12 +201,22 @@ export async function getCustomerPurchaseHistory(customerId) {
       return {
         id: o.id,
         orderNumber: o.orderNumber,
+        queueNumber: o.queueNumber || null,
+        orderType: o.orderType || null,
         source: o.source,
         status: o.status,
+        productSubtotal: productSubtotalNum,
+        promotionDiscount: promoDiscountNum,
         grandTotal: grandTotalNum,
+        taxAmount: Number(o.taxAmount || 0),
+        serviceChargeAmount: Number(o.serviceChargeAmount || 0),
+        roundingAmount: Number(o.roundingAmount || 0),
+        cashPayable: Number(o.cashPayable || 0),
         paidAt: o.paidAt ? o.paidAt.toISOString() : null,
         createdAt: o.createdAt.toISOString(),
         paymentMethod: o.payment?.method || null,
+        promotions: serializedPromotions,
+        hasPromo,
         items: serializedItems,
       };
     });
@@ -178,6 +238,8 @@ export async function getCustomerPurchaseHistory(customerId) {
           orderCount: orders.length,
           paidOrdersCount,
           totalItemsPurchased: favoriteProducts.reduce((sum, p) => sum + p.totalQty, 0),
+          totalPromoSavings,
+          ordersWithPromoCount,
         },
         favoriteProducts,
         orders: serializedOrders,

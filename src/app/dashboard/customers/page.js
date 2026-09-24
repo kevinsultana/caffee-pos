@@ -32,6 +32,7 @@ export default function CustomersManagementPage() {
   const [historyData, setHistoryData] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyTab, setHistoryTab] = useState('products'); // 'products' | 'orders'
+  const [orderPromoFilter, setOrderPromoFilter] = useState('ALL'); // 'ALL' | 'PROMO_ONLY' | 'NO_PROMO'
 
   const loadCustomers = async (q = searchQuery) => {
     setLoading(true);
@@ -69,6 +70,7 @@ export default function CustomersManagementPage() {
     setHistoryModalOpen(true);
     setLoadingHistory(true);
     setHistoryTab('products');
+    setOrderPromoFilter('ALL');
     setHistoryData(null);
 
     const res = await getCustomerPurchaseHistory(c.id);
@@ -241,17 +243,28 @@ export default function CustomersManagementPage() {
                         <div className="font-bold text-slate-900 font-mono text-xs">
                           {formatRupiah(c.totalSpent || 0)}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
                             <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                             </svg>
                             {c.orderCount || 0} Transaksi
                           </span>
+
+                          {c.promoOrdersCount > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200"
+                              title={`Pernah ${c.promoOrdersCount}x transaksi gunakan promo (Total hemat: ${formatRupiah(c.totalPromoDiscount || 0)})`}
+                            >
+                              <span>🎟️</span>
+                              <span>{c.promoOrdersCount}x Promo</span>
+                            </span>
+                          )}
+
                           <button
                             onClick={() => openHistoryModal(c)}
                             className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold hover:underline flex items-center gap-0.5"
-                            title="Lihat barang apa saja yang pernah dibeli"
+                            title="Lihat barang apa saja yang pernah dibeli dan promo yang digunakan"
                           >
                             Detail &rarr;
                           </button>
@@ -417,10 +430,10 @@ export default function CustomersManagementPage() {
               ) : historyData ? (
                 <>
                   {/* Summary Metric Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100 flex flex-col">
                       <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                        Total Akumulasi Belanja
+                        Total Belanja
                       </span>
                       <span className="text-lg font-extrabold text-emerald-950 font-mono mt-1">
                         {formatRupiah(historyData.summary?.totalSpent || 0)}
@@ -444,13 +457,26 @@ export default function CustomersManagementPage() {
 
                     <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-100 flex flex-col">
                       <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
-                        Total Porsi / Produk Dibeli
+                        Total Menu Dibeli
                       </span>
                       <span className="text-lg font-extrabold text-amber-950 font-mono mt-1">
                         {historyData.summary?.totalItemsPurchased || 0} Item
                       </span>
                       <span className="text-[10px] text-amber-600 mt-0.5">
                         {historyData.favoriteProducts?.length || 0} varian menu berbeda
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-violet-50/60 border border-violet-100 flex flex-col">
+                      <span className="text-[11px] font-bold text-violet-800 uppercase tracking-wider flex items-center gap-1">
+                        <span>🎟️</span>
+                        <span>Total Hemat Promo</span>
+                      </span>
+                      <span className="text-lg font-extrabold text-violet-950 font-mono mt-1">
+                        {formatRupiah(historyData.summary?.totalPromoSavings || 0)}
+                      </span>
+                      <span className="text-[10px] text-violet-600 mt-0.5">
+                        {historyData.summary?.ordersWithPromoCount || 0}x transaksi gunakan promo
                       </span>
                     </div>
                   </div>
@@ -469,7 +495,7 @@ export default function CustomersManagementPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
                       Produk Pernah Dibeli
-                      <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600">
+                      <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
                         {historyData.favoriteProducts?.length || 0}
                       </span>
                     </button>
@@ -485,10 +511,15 @@ export default function CustomersManagementPage() {
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      Riwayat Transaksi Pesanan
-                      <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600">
+                      Riwayat Transaksi &amp; Promo
+                      <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
                         {historyData.orders?.length || 0}
                       </span>
+                      {(historyData.summary?.ordersWithPromoCount || 0) > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">
+                          {historyData.summary.ordersWithPromoCount} Pakai Promo
+                        </span>
+                      )}
                     </button>
                   </div>
 
@@ -549,24 +580,108 @@ export default function CustomersManagementPage() {
                   {/* Tab 2: Riwayat Pesanan Berdasarkan Struk / Order */}
                   {historyTab === 'orders' && (
                     <div className="space-y-3">
+                      {/* Filter Bar */}
+                      {historyData.orders && historyData.orders.length > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setOrderPromoFilter('ALL')}
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                orderPromoFilter === 'ALL'
+                                  ? 'bg-slate-800 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              Semua Transaksi ({historyData.orders.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderPromoFilter('PROMO_ONLY')}
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                                orderPromoFilter === 'PROMO_ONLY'
+                                  ? 'bg-violet-600 text-white shadow-2xs'
+                                  : 'bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200'
+                              }`}
+                            >
+                              <span>🎟️ Pakai Promo</span>
+                              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${orderPromoFilter === 'PROMO_ONLY' ? 'bg-white/20 text-white' : 'bg-violet-200 text-violet-800'}`}>
+                                {historyData.orders.filter((o) => o.hasPromo).length}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderPromoFilter('NO_PROMO')}
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                orderPromoFilter === 'NO_PROMO'
+                                  ? 'bg-slate-800 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              Tanpa Promo ({historyData.orders.filter((o) => !o.hasPromo).length})
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {(!historyData.orders || historyData.orders.length === 0) ? (
                         <div className="py-12 text-center text-slate-400 text-xs">
                           Belum ada transaksi yang tercatat untuk member ini.
                         </div>
-                      ) : (
-                        historyData.orders.map((order) => (
+                      ) : (() => {
+                        const filteredOrders = historyData.orders.filter((o) => {
+                          if (orderPromoFilter === 'PROMO_ONLY') return o.hasPromo;
+                          if (orderPromoFilter === 'NO_PROMO') return !o.hasPromo;
+                          return true;
+                        });
+
+                        if (filteredOrders.length === 0) {
+                          return (
+                            <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                              {orderPromoFilter === 'PROMO_ONLY'
+                                ? 'Member ini belum pernah menggunakan voucher/promo pada transaksinya.'
+                                : 'Tidak ada transaksi pada filter ini.'}
+                            </div>
+                          );
+                        }
+
+                        return filteredOrders.map((order) => (
                           <div
                             key={order.id}
-                            className="p-4 rounded-2xl border border-slate-200 hover:border-slate-300 bg-white transition-all space-y-3 shadow-2xs"
+                            className={`p-4 rounded-2xl border transition-all space-y-3 shadow-2xs ${
+                              order.hasPromo
+                                ? 'border-violet-200 bg-white ring-1 ring-violet-500/10'
+                                : 'border-slate-200 hover:border-slate-300 bg-white'
+                            }`}
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                              <div>
-                                <span className="font-mono font-bold text-slate-900 text-xs mr-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-bold text-slate-900 text-xs">
                                   #{order.orderNumber}
                                 </span>
+                                {order.queueNumber && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 font-mono">
+                                    Antrean {order.queueNumber}
+                                  </span>
+                                )}
                                 <span className="text-[11px] text-slate-500">
                                   {formatDateTime(order.createdAt)}
                                 </span>
+                                {order.hasPromo ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                                    <span>🎟️</span>
+                                    <span>Promo Digunakan</span>
+                                    {order.promotionDiscount > 0 && (
+                                      <span className="text-violet-700 font-mono">
+                                        (-{formatRupiah(order.promotionDiscount)})
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-400">
+                                    (Tanpa Promo)
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
@@ -589,14 +704,65 @@ export default function CustomersManagementPage() {
                               </div>
                             </div>
 
+                            {/* Detail Penggunaan Promo */}
+                            {order.hasPromo && (
+                              <div className="p-3 rounded-xl bg-violet-50/70 border border-violet-200/80 space-y-2">
+                                <div className="flex items-center justify-between text-xs font-bold text-violet-900 border-b border-violet-200/50 pb-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm">🎁</span>
+                                    <span>Detail Promo yang Diterapkan:</span>
+                                  </div>
+                                  <span className="text-xs font-mono font-extrabold text-violet-700">
+                                    Total Hemat {formatRupiah(order.promotionDiscount)}
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {order.promotions && order.promotions.length > 0 ? (
+                                    order.promotions.map((p, pIdx) => (
+                                      <div
+                                        key={p.id || pIdx}
+                                        className="flex flex-wrap items-center justify-between gap-1 text-[11px]"
+                                      >
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-bold text-violet-950">
+                                            {p.name}
+                                          </span>
+                                          {p.code && (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-white text-violet-700 border border-violet-200 shadow-2xs">
+                                              KODE: {p.code}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-violet-600">
+                                            ({p.discountType === 'PERCENTAGE' ? `Diskon ${p.value}%` : `Potongan ${formatRupiah(p.value)}`})
+                                          </span>
+                                        </div>
+                                        <span className="font-mono font-bold text-violet-800">
+                                          -{formatRupiah(p.discountAmount || order.promotionDiscount)}
+                                        </span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="text-violet-900 font-semibold">
+                                        Diskon Promo Transaksi
+                                      </span>
+                                      <span className="font-mono font-bold text-violet-800">
+                                        -{formatRupiah(order.promotionDiscount)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Item list in this order */}
                             <div className="space-y-1.5 pt-1">
                               {order.items.map((item) => (
                                 <div
                                   key={item.id}
-                                  className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-50/70"
+                                  className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-slate-50/70 border border-slate-100"
                                 >
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-mono font-bold text-slate-700 w-6">
                                       {item.quantity}x
                                     </span>
@@ -613,6 +779,11 @@ export default function CustomersManagementPage() {
                                         &ldquo;{item.notes}&rdquo;
                                       </span>
                                     )}
+                                    {item.promotionDiscount > 0 && (
+                                      <span className="text-[10px] text-violet-700 bg-violet-100 font-semibold px-1.5 py-0.5 rounded">
+                                        Diskon Menu: -{formatRupiah(item.promotionDiscount)}
+                                      </span>
+                                    )}
                                   </div>
                                   <span className="font-mono text-slate-700 font-medium">
                                     {formatRupiah(item.subtotal)}
@@ -620,9 +791,24 @@ export default function CustomersManagementPage() {
                                 </div>
                               ))}
                             </div>
+
+                            {/* Financial breakdown summary */}
+                            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span>Subtotal: <strong className="text-slate-800 font-mono">{formatRupiah(order.productSubtotal || order.items.reduce((s, it) => s + it.subtotal, 0))}</strong></span>
+                                {order.promotionDiscount > 0 && (
+                                  <span className="text-violet-700 font-semibold">
+                                    Diskon Promo: <strong className="font-mono">-{formatRupiah(order.promotionDiscount)}</strong>
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span>Total Bayar: <strong className="text-emerald-700 font-bold font-mono text-xs">{formatRupiah(order.grandTotal)}</strong></span>
+                              </div>
+                            </div>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </div>
                   )}
                 </>
