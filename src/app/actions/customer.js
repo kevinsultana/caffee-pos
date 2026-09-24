@@ -31,25 +31,161 @@ export async function getCustomers({ query = '' } = {}) {
       where: whereClause,
       orderBy: { name: 'asc' },
       include: {
+        orders: {
+          where: { status: 'PAID' },
+          select: { grandTotal: true },
+        },
         _count: {
           select: { orders: true },
         },
       },
     });
 
-    const serialized = customers.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      email: c.email,
-      orderCount: c._count.orders,
-      createdAt: c.createdAt,
-    }));
+    const serialized = customers.map((c) => {
+      const totalSpent = c.orders.reduce((sum, o) => sum + Number(o.grandTotal || 0), 0);
+      return {
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        orderCount: c.orders.length,
+        allOrderCount: c._count.orders,
+        totalSpent,
+        createdAt: c.createdAt,
+      };
+    });
 
     return { data: serialized };
   } catch (error) {
     console.error('[getCustomers] Error:', error);
     return { error: error.message || 'Gagal memuat daftar pelanggan.' };
+  }
+}
+
+/**
+ * Mengambil detail riwayat transaksi dan barang yang pernah dibeli oleh pelanggan.
+ */
+export async function getCustomerPurchaseHistory(customerId) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, storeId },
+    });
+
+    if (!customer) {
+      return { error: 'Pelanggan tidak ditemukan.' };
+    }
+
+    const orders = await prisma.order.findMany({
+      where: {
+        customerId,
+        storeId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        payment: {
+          select: {
+            method: true,
+            status: true,
+            paidAt: true,
+          },
+        },
+        items: {
+          select: {
+            id: true,
+            productNameSnapshot: true,
+            variantNameSnapshot: true,
+            quantity: true,
+            unitPrice: true,
+            subtotal: true,
+            notes: true,
+          },
+        },
+      },
+    });
+
+    const productStatsMap = new Map();
+    let totalSpent = 0;
+    let paidOrdersCount = 0;
+
+    const serializedOrders = orders.map((o) => {
+      const isPaid = o.status === 'PAID';
+      const grandTotalNum = Number(o.grandTotal || 0);
+      if (isPaid) {
+        totalSpent += grandTotalNum;
+        paidOrdersCount += 1;
+      }
+
+      const serializedItems = o.items.map((item) => {
+        const itemQty = Number(item.quantity || 0);
+        const itemSubtotal = Number(item.subtotal || 0);
+
+        if (isPaid) {
+          const key = `${item.productNameSnapshot}__${item.variantNameSnapshot || ''}`;
+          if (!productStatsMap.has(key)) {
+            productStatsMap.set(key, {
+              key,
+              productName: item.productNameSnapshot,
+              variantName: item.variantNameSnapshot,
+              totalQty: 0,
+              totalSpent: 0,
+            });
+          }
+          const stat = productStatsMap.get(key);
+          stat.totalQty += itemQty;
+          stat.totalSpent += itemSubtotal;
+        }
+
+        return {
+          id: item.id,
+          productName: item.productNameSnapshot,
+          variantName: item.variantNameSnapshot,
+          quantity: itemQty,
+          unitPrice: Number(item.unitPrice || 0),
+          subtotal: itemSubtotal,
+          notes: item.notes,
+        };
+      });
+
+      return {
+        id: o.id,
+        orderNumber: o.orderNumber,
+        source: o.source,
+        status: o.status,
+        grandTotal: grandTotalNum,
+        paidAt: o.paidAt ? o.paidAt.toISOString() : null,
+        createdAt: o.createdAt.toISOString(),
+        paymentMethod: o.payment?.method || null,
+        items: serializedItems,
+      };
+    });
+
+    const favoriteProducts = Array.from(productStatsMap.values()).sort(
+      (a, b) => b.totalQty - a.totalQty
+    );
+
+    return {
+      data: {
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+        },
+        summary: {
+          totalSpent,
+          orderCount: orders.length,
+          paidOrdersCount,
+          totalItemsPurchased: favoriteProducts.reduce((sum, p) => sum + p.totalQty, 0),
+        },
+        favoriteProducts,
+        orders: serializedOrders,
+      },
+    };
+  } catch (error) {
+    console.error('[getCustomerPurchaseHistory] Error:', error);
+    return { error: error.message || 'Gagal memuat riwayat transaksi pelanggan.' };
   }
 }
 
