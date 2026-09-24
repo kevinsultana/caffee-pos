@@ -72,13 +72,15 @@ export default function EditPurchasePage({ params }) {
           p.items.map((it) => {
             const qty = Number(it.quantity) || 1;
             const factor = it.baseQuantity && qty > 0 ? Number(it.baseQuantity) / qty : 1;
+            const subtotalVal = Number(it.subtotal) || 0;
             return {
               inventoryItemId: it.inventoryItemId,
               purchaseUnitId: it.purchaseUnitId,
               conversionFactor: factor,
               quantity: qty,
               unitPrice: Number(it.unitPrice) || 0,
-              subtotal: Number(it.subtotal) || 0,
+              totalPrice: subtotalVal,   // pre-fill totalPrice dari data existing
+              subtotal: subtotalVal,
             };
           })
         );
@@ -174,9 +176,12 @@ export default function EditPurchasePage({ params }) {
       }
     }
 
+    // ── Logika baru: user input totalPrice, harga satuan dihitung otomatis ──
     const qty = Number(row.quantity) || 0;
-    const price = Number(row.unitPrice) || 0;
-    row.subtotal = Math.round(qty * price * 100) / 100;
+    const total = Number(row.totalPrice) || 0;
+
+    row.unitPrice = qty > 0 ? Math.round((total / qty) * 100) / 100 : 0;
+    row.subtotal = Math.round(total * 100) / 100;
 
     newItems[index] = row;
     setItems(newItems);
@@ -191,6 +196,7 @@ export default function EditPurchasePage({ params }) {
         conversionFactor: 1,
         quantity: 1,
         unitPrice: 0,
+        totalPrice: 0,
         subtotal: 0,
       },
     ]);
@@ -364,20 +370,11 @@ export default function EditPurchasePage({ params }) {
 
         {/* ─── ITEMS LIST CARD ─────────────────────────────────────────────── */}
         <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Daftar Bahan Baku Dibeli *</h2>
-              <p className="text-xs text-slate-500">
-                Ubah kuantitas, harga, atau tambahkan bahan baku baru pada draft ini.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={addItemRow}
-              className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              + Tambah Baris Bahan
-            </button>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Daftar Bahan Baku Dibeli *</h2>
+            <p className="text-xs text-slate-500">
+              Ubah kuantitas, harga, atau tambahkan bahan baku baru pada draft ini.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -439,27 +436,27 @@ export default function EditPurchasePage({ params }) {
                   />
                 </div>
 
-                {/* Price per Unit */}
+                {/* Harga Total (INPUT — user mengetik total harga baris ini) */}
                 <div className="w-full md:w-36">
                   <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
-                    Harga Satuan (Rp)
+                    Harga Total (Rp)
                   </label>
                   <CurrencyInput
                     placeholder="0"
-                    value={row.unitPrice}
-                    onChange={(val) => handleItemChange(idx, 'unitPrice', val)}
+                    value={row.totalPrice}
+                    onChange={(val) => handleItemChange(idx, 'totalPrice', val)}
                     disabled={isPending}
                     required
                   />
                 </div>
 
-                {/* Subtotal */}
+                {/* Harga Satuan (AUTO — dihitung: Harga Total ÷ Kuantitas) */}
                 <div className="w-full md:w-32 text-right font-mono">
                   <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1 text-right">
-                    Subtotal
+                    Harga Satuan
                   </label>
-                  <p className="text-xs font-bold text-emerald-700 py-2">
-                    {formatRupiah(row.subtotal)}
+                  <p className="text-xs font-bold text-emerald-700 py-2" title="Dihitung otomatis: Harga Total ÷ Kuantitas">
+                    {formatRupiah(row.unitPrice)}
                   </p>
                 </div>
 
@@ -478,6 +475,18 @@ export default function EditPurchasePage({ params }) {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* ── Tombol Tambah Baris — di antara tabel dan total ── */}
+          <div className="flex justify-start pt-1">
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 hover:border-emerald-400 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+            >
+              <span className="w-5 h-5 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 text-emerald-700 flex items-center justify-center font-bold text-sm transition-colors">+</span>
+              Tambah Baris Bahan
+            </button>
           </div>
 
           {/* Grand Total Footer */}
