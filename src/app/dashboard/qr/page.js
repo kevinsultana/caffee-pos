@@ -433,11 +433,6 @@ export default function QrGeneratorPage() {
               <p className="text-[10px] text-slate-400 font-medium">Scan untuk Pesan Menu & Pembayaran</p>
             </div>
 
-            {/* Table Badge */}
-            <div className="px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold font-mono">
-              MEJA #{tableNumber || '01'}
-            </div>
-
             {/* QR Code Container */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl shadow-inner">
               {/* eslint-disable-next-line @next/next/no-img-element */}

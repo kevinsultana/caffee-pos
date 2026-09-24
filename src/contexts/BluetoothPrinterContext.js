@@ -493,14 +493,6 @@ export function buildQrCardBytes({
   parts.push(enc('PESAN MENU DARI MEJA\n'));
   parts.push(enc(sep + '\n\n'));
 
-  // 4. Meja Info (Big Bold: Double width + double height)
-  parts.push(new Uint8Array([ESC, 0x45, 0x01])); // bold ON
-  parts.push(new Uint8Array([ESC, 0x21, 0x30])); // double width + double height (0x20 | 0x10)
-  parts.push(enc(`MEJA #${tableNumber || '01'}\n`));
-  parts.push(new Uint8Array([ESC, 0x21, 0x00])); // normal
-  parts.push(new Uint8Array([ESC, 0x45, 0x00])); // bold OFF
-  parts.push(enc(thinSep + '\n\n'));
-
   // 5. ESC/POS Standard 2D QR Code
   const qrString = String(menuUrl || 'http://localhost:3000/menu');
   const qrData = enc(qrString);
