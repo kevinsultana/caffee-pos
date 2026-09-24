@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { getUsers, createUser, updateUser, deleteUser } from '@/app/actions/user';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 
@@ -200,7 +200,6 @@ export default function UsersManagementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <Toaster position="top-right" />
 
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

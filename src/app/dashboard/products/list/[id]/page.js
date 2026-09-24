@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import {
   getProductWithDetails,
   updateProduct,
@@ -457,7 +457,6 @@ export default function ProductDetailPage() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <Toaster position="top-right" />
 
       {/* Breadcrumb & Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

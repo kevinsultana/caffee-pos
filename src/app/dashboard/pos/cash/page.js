@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { getCurrentShift, addCashMovement } from '@/app/actions/shift';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
@@ -126,7 +126,6 @@ export default function PosCashMovementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <Toaster position="top-right" />
 
       {/* ─── HEADER ───────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

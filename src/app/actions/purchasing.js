@@ -242,6 +242,94 @@ export async function createPurchase({ supplierId, purchasedAt, items }) {
   }
 }
 
+export async function updatePurchase({ id, supplierId, purchasedAt, items }) {
+  try {
+    const { user, storeId } = await getAuthenticatedUserAndStore();
+
+    if (!supplierId) {
+      return { error: 'Supplier wajib dipilih.' };
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return { error: 'Daftar barang pembelian tidak boleh kosong.' };
+    }
+
+    const existingPurchase = await prisma.purchase.findFirst({
+      where: { id, storeId },
+    });
+
+    if (!existingPurchase) {
+      return { error: 'Data pembelian tidak ditemukan.' };
+    }
+
+    if (existingPurchase.status !== 'DRAFT') {
+      return { error: 'Hanya pembelian berstatus DRAFT yang dapat diedit.' };
+    }
+
+    let calculatedTotal = 0;
+    const processedItems = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const invId = it.inventoryItemId;
+      const unitId = it.purchaseUnitId;
+      const qty = Number(it.quantity);
+      const price = Number(it.unitPrice);
+      const factor = Number(it.conversionFactor) || 1;
+
+      if (!invId || !unitId || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
+        return { error: `Baris ke-${i + 1}: Kuantitas dan harga beli harus berupa angka positif.` };
+      }
+
+      const subtotal = Math.round(qty * price * 100) / 100;
+      const baseQuantity = qty * factor;
+      const baseUnitCost = baseQuantity > 0 ? subtotal / baseQuantity : price;
+
+      calculatedTotal += subtotal;
+
+      processedItems.push({
+        inventoryItemId: invId,
+        purchaseUnitId: unitId,
+        quantity: qty,
+        unitPrice: price,
+        baseQuantity,
+        baseUnitCost,
+        subtotal,
+      });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: id },
+      });
+
+      return await tx.purchase.update({
+        where: { id },
+        data: {
+          supplierId,
+          purchasedAt: purchasedAt ? new Date(purchasedAt) : existingPurchase.purchasedAt,
+          totalAmount: calculatedTotal,
+          items: {
+            create: processedItems,
+          },
+        },
+        include: {
+          items: true,
+          supplier: true,
+        },
+      });
+    });
+
+    revalidatePath('/dashboard/inventory/purchases');
+    revalidatePath(`/dashboard/inventory/purchases/${id}`);
+    revalidatePath('/dashboard/inventory/suppliers');
+    return { success: true, data: serializePurchase(updated) };
+  } catch (error) {
+    console.error('[updatePurchase] Error:', error);
+    return { error: error.message || 'Gagal memperbarui draft pembelian.' };
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 3. CONFIRM PURCHASE & WAC CALCULATION (CRITICAL ATOMIC TRANSACTION)
 // ══════════════════════════════════════════════════════════════════════════════

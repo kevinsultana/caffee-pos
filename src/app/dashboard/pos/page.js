@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
 import { validatePromoCode } from '@/app/actions/promotion';
 import { getCustomers, createCustomer } from '@/app/actions/customer';
@@ -768,7 +768,6 @@ export default function PosScreenPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      <Toaster position="top-right" />
 
       {/* ─── SHIFT CHECK WARNING ────────────────────────────────────────────── */}
       {!activeShift && !loading && (

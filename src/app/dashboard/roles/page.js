@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { getRoles, createRole, updateRole, deleteRole } from '@/app/actions/role';
 import { MENU_PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
@@ -194,7 +194,6 @@ export default function RolesManagementPage() {
 
   return (
     <div className="space-y-6">
-      <Toaster position="top-right" />
 
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
