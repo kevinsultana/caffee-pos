@@ -76,13 +76,17 @@ export default function PurchasesListPage() {
   const [datePreset, setDatePreset] = useState('ALL');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
+  const [userRole, setUserRole] = useState(null);
   const [isPending, startTransition] = useTransition();
 
   async function loadData() {
     setLoading(true);
     const res = await getPurchases();
     if (res.error) toast.error(res.error);
-    else setPurchases(res.data || []);
+    else {
+      setPurchases(res.data || []);
+      if (res.userRole) setUserRole(res.userRole);
+    }
     setLoading(false);
   }
 
@@ -254,6 +258,53 @@ export default function PurchasesListPage() {
         toast.error(res.error, { id: toastId });
       } else {
         toast.success('Draft pembelian berhasil dihapus.', { id: toastId });
+        loadData();
+      }
+    });
+  }
+
+  async function handleDeleteConfirmed(purchase) {
+    const Swal = (await import('sweetalert2')).default;
+
+    const confirm = await Swal.fire({
+      title: 'Hapus PO Terkonfirmasi? (Khusus Owner)',
+      html: `
+        <div class="text-left text-xs text-slate-700 space-y-2.5 font-sans">
+          <p>Anda akan menghapus PO <b>#${purchase.purchaseNumber}</b> senilai <b>${formatRupiah(purchase.totalAmount)}</b>.</p>
+          <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1">
+            <p class="font-bold text-rose-700">⚠️ PERINGATAN ROLLBACK INVENTARIS:</p>
+            <ul class="list-disc pl-4 space-y-1 text-rose-800 text-[11px]">
+              <li>Saldo stok fisik bahan baku pada PO ini akan <b>dikurangi kembali (rollback)</b>.</li>
+              <li>Data pada <b>tabel mutasi stok (Stock Movement)</b> untuk PO ini akan <b>dihapus permanen</b>.</li>
+              <li>Jika barang sudah terpakai/terjual di kasir, stok gudang dapat menjadi minus.</li>
+            </ul>
+          </div>
+          <p class="text-[11px] text-slate-500">Tindakan ini hanya dapat dilakukan oleh Owner dan tidak dapat dibatalkan.</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Hapus & Rollback Stok',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    startTransition(async () => {
+      const toastId = toast.loading('Menghapus PO dan me-rollback stok mutasi...');
+      const res = await deletePurchase(purchase.id);
+
+      if (res.error) {
+        toast.error(res.error, { id: toastId, duration: 4500 });
+      } else {
+        toast.success(`PO #${purchase.purchaseNumber} & mutasi stok berhasil dihapus! Stok telah di-rollback.`, {
+          id: toastId,
+          duration: 4500,
+        });
         loadData();
       }
     });
@@ -536,23 +587,34 @@ export default function PurchasesListPage() {
                           Detail
                         </Link>
 
-                        {isDraft && (
+                        {isDraft ? (
                           <>
                             <button
                               onClick={() => handleConfirm(p)}
                               disabled={isPending}
-                              className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all shadow-2xs"
+                              className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all shadow-2xs cursor-pointer"
                             >
                               Konfirmasi
                             </button>
                             <button
                               onClick={() => handleDeleteDraft(p)}
                               disabled={isPending}
-                              className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                             >
                               Hapus
                             </button>
                           </>
+                        ) : (
+                          userRole === 'OWNER' && (
+                            <button
+                              onClick={() => handleDeleteConfirmed(p)}
+                              disabled={isPending}
+                              className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus PO Confirmed & Rollback Stok (Khusus Owner)"
+                            >
+                              Hapus PO
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>

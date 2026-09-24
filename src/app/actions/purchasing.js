@@ -63,7 +63,7 @@ function serializePurchase(p) {
 
 export async function getPurchases() {
   try {
-    const { storeId } = await getAuthenticatedUserAndStore();
+    const { user, storeId } = await getAuthenticatedUserAndStore();
 
     const purchases = await prisma.purchase.findMany({
       where: { storeId },
@@ -93,7 +93,7 @@ export async function getPurchases() {
       })),
     }));
 
-    return { data: serialized };
+    return { data: serialized, userRole: user.role?.name || null };
   } catch (error) {
     console.error('[getPurchases] Error:', error);
     return { error: error.message || 'Gagal memuat daftar pembelian.' };
@@ -102,7 +102,7 @@ export async function getPurchases() {
 
 export async function getPurchaseById(id) {
   try {
-    const { storeId } = await getAuthenticatedUserAndStore();
+    const { user, storeId } = await getAuthenticatedUserAndStore();
 
     const purchase = await prisma.purchase.findFirst({
       where: { id, storeId },
@@ -155,6 +155,7 @@ export async function getPurchaseById(id) {
             : null,
         })),
       },
+      userRole: user.role?.name || null,
     };
   } catch (error) {
     console.error('[getPurchaseById] Error:', error);
@@ -458,25 +459,100 @@ export async function confirmPurchase(id) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 4. DELETE PURCHASE (DRAFT ONLY)
+// 4. DELETE PURCHASE (DRAFT & CONFIRMED FOR OWNER)
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function deletePurchase(id) {
   try {
-    const { storeId } = await getAuthenticatedUserAndStore();
+    const { user, storeId } = await getAuthenticatedUserAndStore();
 
     const purchase = await prisma.purchase.findFirst({
       where: { id, storeId },
+      include: {
+        items: {
+          include: {
+            inventoryItem: {
+              include: {
+                balance: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!purchase) return { error: 'Pembelian tidak ditemukan.' };
 
     if (purchase.status === 'CONFIRMED') {
-      return {
-        error: 'Pembelian berstatus CONFIRMED tidak dapat dihapus karena stok dan HPP telah terposting.',
-      };
+      // Validasi ketat peran: hanya OWNER yang boleh menghapus PO CONFIRMED
+      if (user.role?.name !== 'OWNER') {
+        return {
+          error: 'Pembelian berstatus CONFIRMED hanya dapat dihapus oleh pengguna dengan peran OWNER.',
+        };
+      }
+
+      // Transaksi atomik: Rollback stok di inventoryBalance, hapus riwayat di stockMovement, lalu hapus PO
+      await prisma.$transaction(async (tx) => {
+        // 1. Rollback saldo inventaris untuk setiap barang dalam PO
+        for (const item of purchase.items) {
+          const invId = item.inventoryItemId;
+          const currentBalance = item.inventoryItem?.balance;
+          if (currentBalance) {
+            const currentQty = Number(currentBalance.quantity || 0);
+            const currentAvgCost = Number(currentBalance.averageCost || 0);
+            const incomingQty = Number(item.baseQuantity || 0);
+            const incomingTotal = Number(item.subtotal || 0);
+
+            // Kurangi kembali stok sejumlah barang yang dibeli (stok boleh minus jika sudah terlanjur terjual)
+            const rollbackQty = currentQty - incomingQty;
+            let newAvgCost = currentAvgCost;
+
+            if (rollbackQty > 0) {
+              const remainingValue = currentQty * currentAvgCost - incomingTotal;
+              if (remainingValue > 0) {
+                newAvgCost = remainingValue / rollbackQty;
+              } else {
+                newAvgCost = currentAvgCost;
+              }
+            } else {
+              newAvgCost = currentAvgCost;
+            }
+
+            const newStockValue = rollbackQty * newAvgCost;
+
+            await tx.inventoryBalance.update({
+              where: { inventoryItemId: invId },
+              data: {
+                quantity: rollbackQty,
+                averageCost: newAvgCost,
+                stockValue: newStockValue,
+              },
+            });
+          }
+        }
+
+        // 2. Hapus riwayat mutasi stok terkait PO ini dari tabel stockMovement
+        await tx.stockMovement.deleteMany({
+          where: {
+            storeId,
+            referenceType: 'PURCHASE',
+            referenceId: purchase.id,
+          },
+        });
+
+        // 3. Hapus data baris pembelian & data faktur pembelian
+        await tx.purchaseItem.deleteMany({ where: { purchaseId: id } });
+        await tx.purchase.delete({ where: { id } });
+      });
+
+      revalidatePath('/dashboard/inventory/purchases');
+      revalidatePath('/dashboard/inventory/items');
+      revalidatePath('/dashboard/inventory/movements');
+      revalidatePath('/dashboard/inventory/suppliers');
+      return { success: true };
     }
 
+    // Normal draft deletion
     await prisma.purchaseItem.deleteMany({ where: { purchaseId: id } });
     await prisma.purchase.delete({ where: { id } });
 
@@ -485,7 +561,7 @@ export async function deletePurchase(id) {
     return { success: true };
   } catch (error) {
     console.error('[deletePurchase] Error:', error);
-    return { error: error.message || 'Gagal menghapus draft pembelian.' };
+    return { error: error.message || 'Gagal menghapus pembelian.' };
   }
 }
 

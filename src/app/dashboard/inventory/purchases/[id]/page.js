@@ -12,6 +12,7 @@ export default function PurchaseDetailPage({ params }) {
   const router = useRouter();
   const [purchase, setPurchase] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
   const [isPending, startTransition] = useTransition();
 
   async function loadData() {
@@ -21,6 +22,7 @@ export default function PurchaseDetailPage({ params }) {
       toast.error(res.error);
     } else {
       setPurchase(res.data);
+      if (res.userRole) setUserRole(res.userRole);
     }
     setLoading(false);
   }
@@ -104,6 +106,50 @@ export default function PurchaseDetailPage({ params }) {
     });
   }
 
+  async function handleDeleteConfirmed() {
+    const Swal = (await import('sweetalert2')).default;
+
+    const confirm = await Swal.fire({
+      title: 'Hapus PO Terkonfirmasi? (Khusus Owner)',
+      html: `
+        <div class="text-left text-xs text-slate-700 space-y-2.5 font-sans">
+          <p>Anda akan menghapus PO <b>#${purchase.purchaseNumber}</b> senilai <b>${formatRupiah(purchase.totalAmount)}</b>.</p>
+          <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1">
+            <p class="font-bold text-rose-700">⚠️ PERINGATAN ROLLBACK INVENTARIS:</p>
+            <ul class="list-disc pl-4 space-y-1 text-rose-800 text-[11px]">
+              <li>Saldo stok fisik bahan baku pada PO ini akan <b>dikurangi kembali (rollback)</b>.</li>
+              <li>Data pada <b>tabel mutasi stok (Stock Movement)</b> untuk PO ini akan <b>dihapus permanen</b>.</li>
+              <li>Jika barang sudah terpakai/terjual di kasir, stok gudang dapat menjadi minus.</li>
+            </ul>
+          </div>
+          <p class="text-[11px] text-slate-500">Tindakan ini hanya dapat dilakukan oleh Owner dan tidak dapat dibatalkan.</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Hapus & Rollback Stok',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      background: '#ffffff',
+      color: '#0f172a',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    startTransition(async () => {
+      const toastId = toast.loading('Menghapus PO dan me-rollback stok mutasi...');
+      const res = await deletePurchase(purchase.id);
+
+      if (res.error) {
+        toast.error(res.error, { id: toastId, duration: 4500 });
+      } else {
+        toast.success('PO dan mutasi stok berhasil dihapus! Stok telah di-rollback.', { id: toastId, duration: 4000 });
+        router.push('/dashboard/inventory/purchases');
+      }
+    });
+  }
+
   if (loading || !purchase) {
     return (
       <div className="p-12 text-center text-slate-400 text-xs">
@@ -163,10 +209,22 @@ export default function PurchaseDetailPage({ params }) {
               </button>
             </>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              CONFIRMED (Stok & WAC Diposting)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                CONFIRMED (Stok & WAC Diposting)
+              </span>
+              {userRole === 'OWNER' && (
+                <button
+                  onClick={handleDeleteConfirmed}
+                  disabled={isPending}
+                  className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 hover:border-rose-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  title="Hapus PO Confirmed & Rollback Stok (Khusus Owner)"
+                >
+                  Hapus PO (Owner)
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
