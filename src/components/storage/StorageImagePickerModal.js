@@ -162,7 +162,7 @@ export default function StorageImagePickerModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 overflow-hidden">
-        
+
         {/* Modal Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-3">
@@ -270,7 +270,7 @@ export default function StorageImagePickerModal({
         </div>
 
         {/* Gallery Content */}
-        <div className="flex-1 p-5 overflow-y-auto min-h-[300px]">
+        <div className="flex-1 p-5 overflow-y-auto min-h-75">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-2">
               <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />

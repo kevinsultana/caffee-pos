@@ -5,7 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
 import { openShift } from '@/app/actions/shift';
-import { validatePromoCode } from '@/app/actions/promotion';
+import { validatePromoCode, getActivePosPromotions } from '@/app/actions/promotion';
 import { getCustomers, createCustomer } from '@/app/actions/customer';
 import {
   getPublicPendingOrders,
@@ -17,6 +17,7 @@ import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
 import BluetoothModal from '@/components/bluetooth/BluetoothModal';
+import PromoModal from '@/components/pos/PromoModal';
 
 export default function PosScreenPage() {
   const [loading, setLoading] = useState(true);
@@ -66,6 +67,8 @@ export default function PosScreenPage() {
     : '';
 
   // Promo Code State
+  const [promotionsList, setPromotionsList] = useState([]);
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
   const [inputPromoCode, setInputPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
@@ -184,12 +187,22 @@ export default function PosScreenPage() {
     }
   }
 
+  async function refreshPromotions() {
+    try {
+      const res = await getActivePosPromotions();
+      if (res.data) setPromotionsList(res.data);
+    } catch (err) {
+      console.warn('[refreshPromotions]', err);
+    }
+  }
+
   async function loadData() {
     setLoading(true);
-    const [initRes, custRes, pendingRes] = await Promise.all([
+    const [initRes, custRes, pendingRes, promoRes] = await Promise.all([
       getPosInitData(),
       getCustomers(),
       getPublicPendingOrders(),
+      getActivePosPromotions(),
     ]);
 
     if (initRes.error) {
@@ -216,6 +229,10 @@ export default function PosScreenPage() {
 
     if (pendingRes?.data) {
       setPendingOrders(pendingRes.data);
+    }
+
+    if (promoRes?.data) {
+      setPromotionsList(promoRes.data);
     }
 
     setLoading(false);
@@ -320,34 +337,61 @@ export default function PosScreenPage() {
   // PROMO CODE APPLICATION
   // ══════════════════════════════════════════════════════════════════════════
 
-  async function handleApplyPromo(e) {
-    e.preventDefault();
-    if (!inputPromoCode.trim()) {
-      toast.error('Masukkan kode promo terlebih dahulu.');
-      return;
-    }
-
-    if (cart.length === 0) {
-      toast.error('Keranjang masih kosong.');
-      return;
-    }
-
+  async function handleSelectPromoFromModal(promo) {
+    if (!promo?.code) return;
     setIsValidatingPromo(true);
-    const res = await validatePromoCode({
-      code: inputPromoCode.trim(),
-      cartItems: cart,
-    });
+    const toastId = toast.loading(`Menerapkan promo "${promo.code}"...`);
+    try {
+      const res = await validatePromoCode({
+        code: promo.code,
+        cartItems: cart,
+      });
 
-    if (res.error) {
-      toast.error(res.error, { duration: 4000 });
-      setAppliedPromo(null);
-    } else {
-      setAppliedPromo(res.data);
-      toast.success(
-        `Kode promo "${res.data.code}" aktif! Hemat ${formatRupiah(res.data.discountAmount)}`
-      );
+      if (res.error) {
+        toast.error(res.error, { id: toastId, duration: 4000 });
+        setAppliedPromo(null);
+      } else {
+        setAppliedPromo(res.data);
+        setIsPromoModalOpen(false);
+        toast.success(
+          `Kode promo "${res.data.code}" aktif! Hemat ${formatRupiah(res.data.discountAmount)}`,
+          { id: toastId }
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menerapkan promo.', { id: toastId });
+    } finally {
+      setIsValidatingPromo(false);
     }
-    setIsValidatingPromo(false);
+  }
+
+  async function handleManualCodeSubmit(code) {
+    if (!code) return;
+    setIsValidatingPromo(true);
+    const toastId = toast.loading(`Mengecek kode promo "${code}"...`);
+    try {
+      const res = await validatePromoCode({
+        code,
+        cartItems: cart,
+      });
+
+      if (res.error) {
+        toast.error(res.error, { id: toastId, duration: 4000 });
+      } else {
+        setAppliedPromo(res.data);
+        setIsPromoModalOpen(false);
+        toast.success(
+          `Kode promo "${res.data.code}" berhasil diterapkan!`,
+          { id: toastId }
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menerapkan kode promo.', { id: toastId });
+    } finally {
+      setIsValidatingPromo(false);
+    }
   }
 
   function removePromo() {
@@ -356,16 +400,97 @@ export default function PosScreenPage() {
     toast('Kode promo dihapus.', { icon: 'ℹ️' });
   }
 
+  // Otomatis sinkronisasi & validasi ulang promo saat item di keranjang berubah
+  useEffect(() => {
+    if (!appliedPromo) return;
+
+    if (cart.length === 0) {
+      setAppliedPromo(null);
+      return;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await validatePromoCode({
+          code: appliedPromo.code,
+          cartItems: cart,
+        });
+
+        if (!isMounted) return;
+
+        if (res.error) {
+          toast.error(`Promo "${appliedPromo.code}" tidak lagi memenuhi syarat: ${res.error}`, {
+            id: 'promo-ineligible',
+            duration: 4000,
+          });
+          setAppliedPromo(null);
+        } else if (res.data) {
+          setAppliedPromo((prev) => (prev ? { ...prev, ...res.data } : null));
+        }
+      } catch (err) {
+        console.warn('[auto recalculate promo error]', err);
+      }
+    }, 250);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [cart, appliedPromo?.code]);
+
   // ══════════════════════════════════════════════════════════════════════════
   // FINANCIAL CALCULATIONS (STORE SETTINGS COMPLIANT)
   // ══════════════════════════════════════════════════════════════════════════
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const subtotal = useMemo(() => {
+    return cart.reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
+      0
+    );
+  }, [cart]);
 
-  const promotionDiscount = appliedPromo ? Number(appliedPromo.discountAmount) : 0;
+  // Hitung diskon promo secara reaktif langsung di sisi klien
+  const promotionDiscount = useMemo(() => {
+    if (!appliedPromo || cart.length === 0) return 0;
+
+    // 1. Evaluasi item yang memenuhi syarat (scope PRODUCT vs ORDER)
+    let eligibleSubtotal = subtotal;
+    if (appliedPromo.scope === 'PRODUCT' && appliedPromo.targetProductId) {
+      eligibleSubtotal = cart
+        .filter((it) => it.productId === appliedPromo.targetProductId)
+        .reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+
+      // Jika produk target tidak ada di keranjang, diskon bernilai 0
+      if (eligibleSubtotal === 0) return 0;
+    }
+
+    // 2. Evaluasi minimum pembelian
+    if (appliedPromo.minimumPurchase && subtotal < Number(appliedPromo.minimumPurchase)) {
+      return 0;
+    }
+
+    // 3. Hitung besaran diskon berdasarkan tipe (PERCENTAGE / FIXED_AMOUNT)
+    let discount = 0;
+    const actionVal = Number(appliedPromo.discountValue) || 0;
+
+    if (appliedPromo.discountType === 'PERCENTAGE') {
+      discount = eligibleSubtotal * (actionVal / 100);
+    } else {
+      // FIXED_AMOUNT
+      discount = Math.min(eligibleSubtotal, actionVal);
+    }
+
+    // 4. Batasi dengan batas diskon maksimal (maxDiscount cap) jika ada
+    if (appliedPromo.maxDiscount !== null && appliedPromo.maxDiscount !== undefined) {
+      const maxCap = Number(appliedPromo.maxDiscount);
+      if (maxCap > 0 && discount > maxCap) {
+        discount = maxCap;
+      }
+    }
+
+    return Math.round(discount * 100) / 100;
+  }, [cart, subtotal, appliedPromo]);
   const taxableSubtotal = Math.max(0, subtotal - promotionDiscount);
 
   const scRate = settings?.serviceChargeEnabled ? Number(settings.serviceChargeRate) : 0;
@@ -1353,40 +1478,57 @@ export default function PosScreenPage() {
                 )}
               </div>
 
-              {/* Promo Code Input Bar */}
+              {/* Promo Code Trigger (Modal Popup) */}
               <div className="p-3 bg-slate-50/70 border-t border-slate-100">
                 {appliedPromo ? (
-                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold font-mono">🏷️ {appliedPromo.code}</span>
-                      <span>(-{formatRupiah(appliedPromo.discountAmount)})</span>
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800 shadow-2xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base">🏷️</span>
+                      <div className="min-w-0">
+                        <p className="font-bold font-mono text-emerald-950 truncate">{appliedPromo.code}</p>
+                        <p className={promotionDiscount > 0 ? "text-[11px] font-bold text-emerald-700 font-mono" : "text-amber-700 text-[11px]"}>
+                          {promotionDiscount > 0 ? `Hemat ${formatRupiah(promotionDiscount)}` : '(Syarat belum cukup)'}
+                        </p>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={removePromo}
-                      className="text-rose-600 hover:text-rose-800 font-bold px-1"
-                    >
-                      &times;
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          refreshPromotions();
+                          setIsPromoModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-300 transition-colors cursor-pointer"
+                      >
+                        Ganti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removePromo}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Hapus promo dari keranjang"
+                      >
+                        &times;
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <form onSubmit={handleApplyPromo} className="flex gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="KODE PROMO"
-                      value={inputPromoCode}
-                      onChange={(e) => setInputPromoCode(e.target.value.toUpperCase())}
-                      disabled={isValidatingPromo}
-                      className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isValidatingPromo || !inputPromoCode.trim()}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
-                    >
-                      {isValidatingPromo ? '...' : 'Gunakan'}
-                    </button>
-                  </form>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      refreshPromotions();
+                      setIsPromoModalOpen(true);
+                    }}
+                    className="w-full py-2.5 px-3 bg-white hover:bg-emerald-50 border border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl text-xs font-bold text-emerald-700 transition-all flex items-center justify-between shadow-2xs group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base group-hover:scale-110 transition-transform">🏷️</span>
+                      <span>Pilih Promo Diskon</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-100/60 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                      Lihat Promo {promotionsList.length > 0 ? `(${promotionsList.length})` : ''} &rarr;
+                    </span>
+                  </button>
                 )}
               </div>
 
@@ -1660,7 +1802,7 @@ export default function PosScreenPage() {
                   <>
                     <span>&bull;</span>
                     <span className="text-emerald-600 font-mono font-bold">
-                      {appliedPromo.code} (-{formatRupiah(appliedPromo.discountAmount)})
+                      {appliedPromo.code} (-{formatRupiah(promotionDiscount)})
                     </span>
                   </>
                 )}
@@ -2155,6 +2297,20 @@ export default function PosScreenPage() {
           </div>
         </div>
       )}
+
+      {/* ─── MODAL DAFTAR PROMO & VOUCHER DISKON ─────────────────────────── */}
+      <PromoModal
+        isOpen={isPromoModalOpen}
+        onClose={() => setIsPromoModalOpen(false)}
+        promotions={promotionsList}
+        cart={cart}
+        subtotal={subtotal}
+        appliedPromo={appliedPromo}
+        onSelectPromo={handleSelectPromoFromModal}
+        onRemovePromo={removePromo}
+        onManualCodeSubmit={handleManualCodeSubmit}
+        isValidating={isValidatingPromo}
+      />
     </div>
   );
 }

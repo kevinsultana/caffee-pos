@@ -495,6 +495,8 @@ export async function validatePromoCode({ code, cartItems }) {
         discountType: action.type,
         discountValue: actionValue,
         maxDiscount,
+        minimumPurchase: minPurchaseCondition?.minimumPurchase ? Number(minPurchaseCondition.minimumPurchase) : null,
+        targetProductId: targetProdId || null,
         discountAmount: calculatedDiscount,
       },
     };
@@ -503,3 +505,72 @@ export async function validatePromoCode({ code, cartItems }) {
     return { error: error.message || 'Gagal memvalidasi kode promo.' };
   }
 }
+
+/**
+ * 6. AMBIL SELURUH DAFTAR PROMOSI AKTIF (UNTUK MODAL POS POPUP)
+ */
+export async function getActivePosPromotions() {
+  try {
+    const user = await verifySession();
+    if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+    const storeId = user.storeId;
+    const now = new Date();
+
+    const promotions = await prisma.promotion.findMany({
+      where: {
+        storeId,
+        status: 'ACTIVE',
+        startAt: { lte: now },
+        OR: [{ endAt: null }, { endAt: { gte: now } }],
+      },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        conditionGroup: {
+          include: {
+            conditions: {
+              include: {
+                product: { select: { id: true, name: true, price: true } },
+              },
+            },
+          },
+        },
+        discountAction: true,
+      },
+    });
+
+    const serialized = promotions.map((p) => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      description: p.description,
+      priority: p.priority,
+      usageLimit: p.usageLimit,
+      usageCount: p.usageCount,
+      startAt: p.startAt,
+      endAt: p.endAt,
+      conditionGroup: p.conditionGroup
+        ? {
+            ...p.conditionGroup,
+            conditions: p.conditionGroup.conditions.map((c) => ({
+              ...c,
+              minimumPurchase: c.minimumPurchase ? Number(c.minimumPurchase) : null,
+              minimumQuantity: c.minimumQuantity ? Number(c.minimumQuantity) : null,
+            })),
+          }
+        : null,
+      discountAction: p.discountAction
+        ? {
+            ...p.discountAction,
+            value: Number(p.discountAction.value),
+            maxDiscount: p.discountAction.maxDiscount ? Number(p.discountAction.maxDiscount) : null,
+          }
+        : null,
+    }));
+
+    return { data: serialized };
+  } catch (error) {
+    console.error('[getActivePosPromotions] Error:', error);
+    return { error: error.message || 'Gagal memuat daftar promosi aktif.' };
+  }
+}
+

@@ -266,7 +266,7 @@ export default function QrGeneratorPage() {
                     {logoUrl ? 'Gambar Terpasang' : 'Inisial Nama Toko'}
                   </p>
                   <p
-                    className="text-[11px] text-slate-400 font-mono truncate max-w-[170px] sm:max-w-[210px] block"
+                    className="text-[11px] text-slate-400 font-mono truncate max-w-42.5 sm:max-w-52.5 block"
                     title={logoUrl ? decodeURIComponent(logoUrl.split('/').pop()?.split('?')[0] || '') : ''}
                   >
                     {logoUrl ? decodeURIComponent(logoUrl.split('/').pop()?.split('?')[0] || '') : 'Tidak ada gambar'}
