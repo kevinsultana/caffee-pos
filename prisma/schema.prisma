@@ -920,9 +920,13 @@ model CashMovement {
 
   type CashMovementType
 
+  category String? // BAHAN_BAKU_DARURAT | KEPERLUAN_TOKO | SETOR_OWNER | LAINNYA
+
   amount Decimal @db.Decimal(18, 2)
 
   reason String
+
+  receiptUrl String?
 
   createdAt DateTime @default(now())
 
@@ -935,6 +939,7 @@ model CashMovement {
   @@index([storeId, createdAt])
   @@index([shiftId, createdAt])
   @@index([shiftId, type])         // Aggregate CASH_IN vs CASH_OUT per shift
+  @@index([shiftId, category])
   @@index([userId])
 }
 

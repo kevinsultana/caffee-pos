@@ -4,16 +4,23 @@ import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getCurrentShift, addCashMovement } from '@/app/actions/shift';
+import { uploadSupabaseStorageFile } from '@/app/actions/storage';
 import { formatRupiah, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import { CASH_OUT_CATEGORIES } from '@/components/pos/CashOutModal';
+import { useRef } from 'react';
 
 export default function PosCashMovementPage() {
   const [shiftData, setShiftData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [type, setType] = useState('CASH_OUT'); // 'CASH_IN' | 'CASH_OUT'
+  const [category, setCategory] = useState('BAHAN_BAKU_DARURAT');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const fileInputRef = useRef(null);
 
   const loadShift = async () => {
     setLoading(true);
@@ -30,6 +37,42 @@ export default function PosCashMovementPage() {
     loadShift();
   }, []);
 
+  const handleReceiptUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar (JPG, PNG, WEBP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran foto nota maksimal 5MB.');
+      return;
+    }
+
+    setIsUploadingReceipt(true);
+    const toastId = toast.loading('Mengunggah foto nota...');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'store-assets');
+
+      const res = await uploadSupabaseStorageFile(formData);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        setReceiptUrl(res.file.publicUrl);
+        toast.success('Foto nota berhasil dilampirkan!', { id: toastId });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunggah foto nota.', { id: toastId });
+    } finally {
+      setIsUploadingReceipt(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -41,6 +84,19 @@ export default function PosCashMovementPage() {
 
     if (!reason.trim()) {
       toast.error('Alasan / keterangan arus kas wajib diisi.');
+      return;
+    }
+
+    if (type === 'CASH_OUT' && !category) {
+      toast.error('Kategori pengeluaran kas keluar wajib dipilih.');
+      return;
+    }
+
+    const currentDrawerCash = shiftData ? Number(shiftData.expectedCash || 0) : 0;
+    if (type === 'CASH_OUT' && numAmount > currentDrawerCash) {
+      toast.error(
+        `Nominal kas keluar (${formatRupiah(numAmount)}) melebihi estimasi saldo kas di laci (${formatRupiah(Math.max(0, currentDrawerCash))}).`
+      );
       return;
     }
 
@@ -68,9 +124,12 @@ export default function PosCashMovementPage() {
       startTransition(async () => {
         const toastId = toast.loading('Mencatat arus kas...');
         const res = await addCashMovement({
+          shiftId: shiftData?.id,
           type,
           amount: numAmount,
+          category: type === 'CASH_OUT' ? category : null,
           reason: reason.trim(),
+          receiptUrl: receiptUrl || null,
         });
 
         if (res?.error) {
@@ -84,6 +143,7 @@ export default function PosCashMovementPage() {
         );
         setAmount('');
         setReason('');
+        setReceiptUrl('');
         loadShift();
       });
     }
@@ -193,6 +253,39 @@ export default function PosCashMovementPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Pilihan Kategori (Khusus CASH_OUT) */}
+            {type === 'CASH_OUT' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Kategori Pengeluaran *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {CASH_OUT_CATEGORIES.map((cat) => {
+                    const isSelected = category === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setCategory(cat.id)}
+                        className={cn(
+                          'p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2',
+                          isSelected
+                            ? 'border-rose-500 bg-rose-50 text-rose-900 ring-1 ring-rose-500'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        )}
+                      >
+                        <span className="text-base shrink-0">{cat.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold leading-tight">{cat.label}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{cat.subLabel}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Nominal Input */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -236,10 +329,10 @@ export default function PosCashMovementPage() {
                 Keterangan / Alasan *
               </label>
               <textarea
-                rows={3}
+                rows={2}
                 placeholder={
                   type === 'CASH_OUT'
-                    ? 'Contoh: Beli es batu kristal 2 bal, beli gas elpiji 3kg, beli plastik take-away...'
+                    ? 'Contoh: Beli es batu kristal 2 bal di warung sebelah, beli lakban...'
                     : 'Contoh: Tambah uang kembalian dari brankas, setoran modal...'
                 }
                 value={reason}
@@ -250,11 +343,49 @@ export default function PosCashMovementPage() {
               />
             </div>
 
+            {/* Lampiran Foto Nota (Opsional) */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Lampiran Foto Nota (Opsional)
+              </label>
+              {receiptUrl ? (
+                <div className="flex items-center gap-3 p-2 rounded-xl border border-emerald-200 bg-emerald-50/60">
+                  <img src={receiptUrl} alt="Nota" className="w-10 h-10 rounded-lg object-cover border" />
+                  <span className="text-xs text-emerald-800 font-semibold truncate flex-1">Foto nota terlampir</span>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptUrl('')}
+                    className="p-1 rounded-lg text-rose-500 hover:bg-rose-100 text-xs"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleReceiptUpload}
+                    disabled={isUploadingReceipt || isPending}
+                    className="hidden"
+                    id="cash-receipt-file"
+                  />
+                  <label
+                    htmlFor="cash-receipt-file"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer"
+                  >
+                    {isUploadingReceipt ? 'Mengunggah...' : '📷 Upload Foto Nota / Struk'}
+                  </label>
+                </div>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={isPending}
               className={cn(
-                'w-full py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50',
+                'w-full py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50 cursor-pointer',
                 type === 'CASH_OUT'
                   ? 'bg-rose-600 hover:bg-rose-700'
                   : 'bg-emerald-600 hover:bg-emerald-700'
@@ -284,7 +415,7 @@ export default function PosCashMovementPage() {
 
               <button
                 onClick={loadShift}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs"
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs cursor-pointer"
                 title="Refresh"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -298,7 +429,7 @@ export default function PosCashMovementPage() {
                 <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                   <tr>
                     <th className="py-3 px-4">Waktu</th>
-                    <th className="py-3 px-4">Tipe</th>
+                    <th className="py-3 px-4">Tipe & Kategori</th>
                     <th className="py-3 px-4 text-right">Nominal</th>
                     <th className="py-3 px-4">Keterangan / Alasan</th>
                   </tr>
@@ -313,6 +444,7 @@ export default function PosCashMovementPage() {
                   ) : (
                     shiftData.cashMovements?.map((m) => {
                       const isOut = m.type === 'CASH_OUT';
+                      const catObj = CASH_OUT_CATEGORIES.find((c) => c.id === m.category);
                       return (
                         <tr key={m.id} className="hover:bg-slate-50/80 transition-colors font-sans">
                           <td className="py-3 px-4 text-slate-500 font-mono text-xs">
@@ -322,16 +454,24 @@ export default function PosCashMovementPage() {
                             })}
                           </td>
                           <td className="py-3 px-4">
-                            <span
-                              className={cn(
-                                'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border',
-                                isOut
-                                  ? 'bg-rose-100 text-rose-800 border-rose-200'
-                                  : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={cn(
+                                  'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                                  isOut
+                                    ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                )}
+                              >
+                                {isOut ? 'CASH OUT' : 'CASH IN'}
+                              </span>
+                              {isOut && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  <span>{catObj?.icon || '📝'}</span>
+                                  <span>{catObj?.label || m.category || 'Lain-lain'}</span>
+                                </span>
                               )}
-                            >
-                              {isOut ? 'CASH OUT' : 'CASH IN'}
-                            </span>
+                            </div>
                           </td>
                           <td
                             className={cn(
@@ -342,7 +482,19 @@ export default function PosCashMovementPage() {
                             {isOut ? '-' : '+'}{formatRupiah(m.amount)}
                           </td>
                           <td className="py-3 px-4 text-slate-700 text-xs">
-                            {m.reason}
+                            <div>
+                              <p className="font-medium text-slate-800">{m.reason}</p>
+                              {m.receiptUrl && (
+                                <a
+                                  href={m.receiptUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-emerald-600 underline font-semibold mt-0.5 inline-block"
+                                >
+                                  📎 Lihat Nota Belanja
+                                </a>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

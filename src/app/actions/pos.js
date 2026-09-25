@@ -1269,3 +1269,11 @@ export async function getAllTransactions({
     };
   }
 }
+
+/**
+ * Server Action khusus Cash Out dari modul POS
+ */
+export async function recordCashOut(params) {
+  const { recordCashOut: action } = await import('@/app/actions/shift');
+  return action(params);
+}

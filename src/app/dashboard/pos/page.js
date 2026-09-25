@@ -18,6 +18,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
 import BluetoothModal from '@/components/bluetooth/BluetoothModal';
 import PromoModal from '@/components/pos/PromoModal';
+import CashOutModal from '@/components/pos/CashOutModal';
 
 export default function PosScreenPage() {
   const [loading, setLoading] = useState(true);
@@ -79,6 +80,7 @@ export default function PosScreenPage() {
   const [cashReceived, setCashReceived] = useState(0);
   const [zoomQrisUrl, setZoomQrisUrl] = useState(null);
   const [isBtModalOpen, setIsBtModalOpen] = useState(false);
+  const [isCashOutModalOpen, setIsCashOutModalOpen] = useState(false);
 
   // Quick Create Customer Modal State
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -1036,6 +1038,22 @@ export default function PosScreenPage() {
             <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
               {effectiveStore.printerWidth}mm
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!activeShift) {
+                toast.error('Buka shift kasir terlebih dahulu untuk mencatat kas keluar.');
+                return;
+              }
+              setIsCashOutModalOpen(true);
+            }}
+            className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Catat pengeluaran kas fisik kasir (Cash Out)"
+          >
+            <span>💸</span>
+            <span>Kas Keluar</span>
           </button>
 
           <Link
@@ -2346,6 +2364,15 @@ export default function PosScreenPage() {
         onRemovePromo={removePromo}
         onManualCodeSubmit={handleManualCodeSubmit}
         isValidating={isValidatingPromo}
+      />
+
+      {/* ─── MODAL CASH OUT DI LAYAR POS ───────────────────────────────────── */}
+      <CashOutModal
+        isOpen={isCashOutModalOpen}
+        onClose={() => setIsCashOutModalOpen(false)}
+        onSuccess={loadData}
+        shift={activeShift}
+        initialType="CASH_OUT"
       />
     </div>
   );

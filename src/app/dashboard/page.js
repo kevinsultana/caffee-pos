@@ -93,6 +93,21 @@ export default function DashboardPage() {
                   Diskon: -{formatRupiah(metrics.totalDiscount)}
                 </span>
               </div>
+              {/* Cash Flow Breakdown (Gross Cash, Cash Out Operasional, Net Kas Masuk) */}
+              <div className="pt-2 border-t border-slate-100 space-y-1 font-mono text-[11px]">
+                <div className="flex justify-between text-slate-500 text-[10px] font-sans">
+                  <span>Penjualan Kas Kotor:</span>
+                  <span className="font-mono font-semibold text-slate-800">{formatRupiah(metrics.grossCashSales || metrics.cashSales || 0)}</span>
+                </div>
+                <div className="flex justify-between text-rose-600 text-[10px] font-sans">
+                  <span>Cash Out Operasional:</span>
+                  <span className="font-mono font-semibold">-{formatRupiah(metrics.totalCashOutOperational || 0)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-800 text-[10px] font-sans font-bold pt-1 border-t border-dashed border-slate-200">
+                  <span className="text-emerald-700">Net Kas Masuk:</span>
+                  <span className="font-mono text-emerald-800">{formatRupiah(metrics.netCashIn || 0)}</span>
+                </div>
+              </div>
             </div>
 
             {/* Gross Profit */}
@@ -246,17 +261,35 @@ export default function DashboardPage() {
               </h2>
               <div className="space-y-3">
                 {/* Cash */}
-                <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">Tunai (CASH)</p>
-                      <p className="text-[10px] text-slate-500">Masuk ke laci kasir kasir</p>
+                <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">Tunai (CASH)</p>
+                        <p className="text-[10px] text-slate-500">Masuk ke laci kasir</p>
+                      </div>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-700 text-sm">
+                      {formatRupiah(metrics.cashSales)}
+                    </span>
+                  </div>
+
+                  {/* Rincian Net Kas Masuk */}
+                  <div className="pt-2 border-t border-emerald-100/80 text-[11px] font-mono space-y-1">
+                    <div className="flex justify-between text-slate-600 text-[10px] font-sans">
+                      <span>Penjualan Kas Kotor:</span>
+                      <span className="font-mono">{formatRupiah(metrics.grossCashSales || metrics.cashSales || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-600 text-[10px] font-sans">
+                      <span>Cash Out Operasional:</span>
+                      <span className="font-mono font-semibold">-{formatRupiah(metrics.totalCashOutOperational || 0)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-emerald-800 pt-1 border-t border-dashed border-emerald-200 text-[10px] font-sans">
+                      <span className="text-emerald-700">Net Kas Masuk:</span>
+                      <span className="font-mono text-emerald-800">{formatRupiah(metrics.netCashIn || 0)}</span>
                     </div>
                   </div>
-                  <span className="font-mono font-bold text-emerald-700 text-sm">
-                    {formatRupiah(metrics.cashSales)}
-                  </span>
                 </div>
 
                 {/* QRIS */}

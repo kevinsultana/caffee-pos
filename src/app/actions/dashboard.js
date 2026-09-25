@@ -74,6 +74,7 @@ const _getCachedMetrics = unstable_cache(
       recentOrdersData,
       inventoryItems,
       todayShifts,
+      cashMovementsData,
     ] = await Promise.all([
       prisma.order.aggregate({
         where: orderWherePaid,
@@ -136,6 +137,17 @@ const _getCachedMetrics = unstable_cache(
             where: { status: 'PAID' },
             select: { method: true, amount: true },
           },
+        },
+      }),
+      prisma.cashMovement.findMany({
+        where: {
+          storeId,
+          type: 'CASH_OUT',
+          createdAt: { gte: start, lte: end },
+        },
+        select: {
+          amount: true,
+          category: true,
         },
       }),
     ]);
@@ -208,6 +220,18 @@ const _getCachedMetrics = unstable_cache(
     const todayShiftCount = todayShifts.length;
     const todayActiveShiftCount = todayShifts.filter((s) => s.status === 'OPEN').length;
 
+    // Agregasi Cash Out periode & Net Cash
+    const totalCashOutOperational = (cashMovementsData || [])
+      .filter((m) => m.category !== 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0);
+
+    const totalCashOutSetorOwner = (cashMovementsData || [])
+      .filter((m) => m.category === 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0);
+
+    const totalCashOutPeriod = totalCashOutOperational + totalCashOutSetorOwner;
+    const netCashIn = Math.max(0, cashSales - totalCashOutOperational);
+
     return {
       period,
       grossSales,
@@ -222,7 +246,12 @@ const _getCachedMetrics = unstable_cache(
       orderCount,
       aov,
       cashSales,
+      grossCashSales: cashSales,
       qrisSales,
+      totalCashOutOperational,
+      totalCashOutSetorOwner,
+      totalCashOutPeriod,
+      netCashIn,
       topProducts,
       stockAlerts,
       recentOrders,

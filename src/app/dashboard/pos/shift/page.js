@@ -12,6 +12,7 @@ import {
 } from '@/app/actions/shift';
 import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
+import CashOutModal, { CASH_OUT_CATEGORIES } from '@/components/pos/CashOutModal';
 
 export default function ShiftManagementPage() {
   const router = useRouter();
@@ -463,58 +464,123 @@ export default function ShiftManagementPage() {
           {/* Two Columns: Recent Movements & Close Shift Form */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: Cash Movements List */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">
-                  Arus Kas Masuk / Keluar Shift Ini
-                </h3>
-                <button
-                  onClick={() => setMovementModalOpen(true)}
-                  className="text-xs text-emerald-700 hover:underline font-semibold"
-                >
-                  + Tambah Mutasi
-                </button>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Arus Kas Masuk &amp; Kas Keluar Shift Ini
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Riwayat uang kas fisik yang masuk atau keluar selama shift berjalan
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMovementType('CASH_OUT');
+                      setMovementModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>💸</span>
+                    <span>+ Kas Keluar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMovementType('CASH_IN');
+                      setMovementModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>📥</span>
+                    <span>+ Kas Masuk</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2">
+              {/* Subtotal Cash Out Breakdown */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-mono">
+                <div>
+                  <span className="block text-[10px] font-sans font-bold text-slate-400 uppercase tracking-wider">
+                    Cash Out Operasional
+                  </span>
+                  <span className="text-xs font-bold text-rose-600 font-mono mt-0.5 block">
+                    {formatRupiah(shift.cashOutOperasional || 0)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-sans">Bahan baku / toko</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-sans font-bold text-slate-400 uppercase tracking-wider">
+                    Cash Out Setor Owner
+                  </span>
+                  <span className="text-xs font-bold text-amber-600 font-mono mt-0.5 block">
+                    {formatRupiah(shift.cashOutSetorOwner || 0)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-sans">Tarik tunai tengah shift</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {shift.cashMovements?.length === 0 ? (
                   <p className="py-8 text-center text-xs text-slate-400">
                     Belum ada arus kas manual pada shift ini.
                   </p>
                 ) : (
-                  shift.cashMovements?.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              'px-2 py-0.5 rounded-full text-[10px] font-bold border',
-                              m.type === 'CASH_IN'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-rose-100 text-rose-800 border-rose-200'
-                            )}
-                          >
-                            {m.type === 'CASH_IN' ? 'KAS MASUK' : 'KAS KELUAR'}
-                          </span>
-                          <span className="text-slate-500 font-mono text-[10px]">
-                            {new Date(m.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-slate-700 font-medium mt-1">{m.reason}</p>
-                      </div>
-                      <p
-                        className={cn(
-                          'font-mono font-bold text-xs',
-                          m.type === 'CASH_IN' ? 'text-emerald-700' : 'text-rose-600'
-                        )}
+                  shift.cashMovements?.map((m) => {
+                    const catObj = CASH_OUT_CATEGORIES.find((c) => c.id === m.category);
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-3 bg-white border border-slate-200/80 rounded-2xl flex items-start justify-between text-xs hover:border-slate-300 transition-colors shadow-2xs gap-3"
                       >
-                        {m.type === 'CASH_IN' ? '+' : '-'}{formatRupiah(m.amount)}
-                      </p>
-                    </div>
-                  ))
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                                m.type === 'CASH_IN'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                              )}
+                            >
+                              {m.type === 'CASH_IN' ? 'KAS MASUK' : 'KAS KELUAR'}
+                            </span>
+                            {m.type === 'CASH_OUT' && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                <span>{catObj?.icon || '📝'}</span>
+                                <span>{catObj?.label || m.category || 'Lain-lain'}</span>
+                              </span>
+                            )}
+                            <span className="text-slate-400 font-mono text-[10px]">
+                              {new Date(m.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-slate-800 font-medium mt-1 leading-snug">{m.reason}</p>
+                          {m.receiptUrl && (
+                            <a
+                              href={m.receiptUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold underline mt-1"
+                            >
+                              <span>📎</span>
+                              <span>Lihat Foto Nota</span>
+                            </a>
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            'font-mono font-bold text-xs shrink-0',
+                            m.type === 'CASH_IN' ? 'text-emerald-700' : 'text-rose-600'
+                          )}
+                        >
+                          {m.type === 'CASH_IN' ? '+' : '-'}{formatRupiah(m.amount)}
+                        </p>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -554,9 +620,15 @@ export default function ShiftManagementPage() {
                     <span className="font-bold text-emerald-700 font-mono">+{formatRupiah(shift.cashIn)}</span>
                   </div>
                   <div className="flex justify-between py-0.5 text-slate-600">
-                    <span className="font-sans">Kas Keluar (Cash Out):</span>
-                    <span className="font-bold text-rose-600 font-mono">-{formatRupiah(shift.cashOut)}</span>
+                    <span className="font-sans">Kas Keluar Operasional:</span>
+                    <span className="font-bold text-rose-600 font-mono">-{formatRupiah(shift.cashOutOperasional || 0)}</span>
                   </div>
+                  {Number(shift.cashOutSetorOwner) > 0 && (
+                    <div className="flex justify-between py-0.5 text-slate-600">
+                      <span className="font-sans">Kas Keluar Setor Owner:</span>
+                      <span className="font-bold text-amber-600 font-mono">-{formatRupiah(shift.cashOutSetorOwner)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-1.5 border-t border-slate-200 text-slate-800 font-bold">
                     <span className="font-sans">Total Kas Seharusnya:</span>
                     <span className="text-slate-900 font-mono">{formatRupiah(shift.expectedCash)}</span>
@@ -668,106 +740,14 @@ export default function ShiftManagementPage() {
         </div>
       )}
 
-      {/* ─── MODAL ADD CASH MOVEMENT ─────────────────────────────────────────── */}
-      {movementModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">
-                Catat Arus Kas Manual
-              </h3>
-              <button
-                onClick={() => setMovementModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveMovement} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Jenis Pergerakan Kas
-                </label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setMovementType('CASH_IN')}
-                    className={cn(
-                      'py-1.5 rounded-lg text-xs font-bold transition-all',
-                      movementType === 'CASH_IN'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    )}
-                  >
-                    + Kas Masuk (In)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMovementType('CASH_OUT')}
-                    className={cn(
-                      'py-1.5 rounded-lg text-xs font-bold transition-all',
-                      movementType === 'CASH_OUT'
-                        ? 'bg-rose-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    )}
-                  >
-                    - Kas Keluar (Out)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Nominal (Rp) *
-                </label>
-                <CurrencyInput
-                  placeholder="0"
-                  value={movementAmount}
-                  onChange={(val) => setMovementAmount(val)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Keterangan / Alasan *
-                </label>
-                <textarea
-                  rows="2"
-                  placeholder="Contoh: Beli es batu kristal 2 bal, beli gas elpiji..."
-                  value={movementReason}
-                  onChange={(e) => setMovementReason(e.target.value)}
-                  disabled={isPending}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setMovementModalOpen(false)}
-                  disabled={isPending}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 shadow-xs"
-                >
-                  {isPending ? 'Menyimpan...' : 'Simpan Mutasi'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ─── CASH OUT / CASH IN MODAL ───────────────────────────────────────── */}
+      <CashOutModal
+        isOpen={movementModalOpen}
+        onClose={() => setMovementModalOpen(false)}
+        onSuccess={loadShiftData}
+        shift={shift}
+        initialType={movementType}
+      />
     </div>
   );
 }

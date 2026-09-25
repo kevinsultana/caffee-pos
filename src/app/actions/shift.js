@@ -98,6 +98,15 @@ export async function getCurrentShift() {
       .filter((m) => m.type === 'CASH_OUT')
       .reduce((sum, m) => sum + Number(m.amount), 0);
 
+    // Subtotal Cash Out Operasional (non-setor) vs Setor Owner
+    const cashOutOperasional = shift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT' && m.category !== 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    const cashOutSetorOwner = shift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT' && m.category === 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
     // Expected Cash = Modal Awal + Penjualan Tunai + Kas Masuk - Kas Keluar
     const expectedCash = openingCash + cashSales + cashIn - cashOut;
 
@@ -113,6 +122,8 @@ export async function getCurrentShift() {
         totalSales: cashSales + qrisSales,
         cashIn,
         cashOut,
+        cashOutOperasional,
+        cashOutSetorOwner,
         expectedCash,
         transactionCount: shift.payments.length,
         payments: shift.payments.map((p) => ({
@@ -122,8 +133,13 @@ export async function getCurrentShift() {
           changeAmount: p.changeAmount ? Number(p.changeAmount) : null,
         })),
         cashMovements: shift.cashMovements.map((m) => ({
-          ...m,
+          id: m.id,
+          type: m.type,
+          category: m.category || null,
           amount: Number(m.amount),
+          reason: m.reason,
+          receiptUrl: m.receiptUrl || null,
+          createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : null,
         })),
       },
     };
@@ -345,13 +361,41 @@ export async function closeShift({ shiftId, actualCash, notes } = {}) {
 /**
  * Catat Kas Masuk (CASH_IN) atau Kas Keluar (CASH_OUT) operasional di shift saat ini.
  */
-export async function addCashMovement({ type, amount, reason }) {
+export async function addCashMovement({ shiftId, type = 'CASH_OUT', amount, category, reason, notes, receiptUrl }) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
-    const shiftRes = await getCurrentShift();
-    if (!shiftRes.data) {
-      return { error: 'Tidak ada shift aktif.' };
+    let targetShift = null;
+    if (shiftId) {
+      targetShift = await prisma.shift.findFirst({
+        where: { id: shiftId, storeId },
+        include: {
+          payments: {
+            where: { status: 'PAID' },
+            select: { method: true, amount: true },
+          },
+          cashMovements: true,
+        },
+      });
+    } else {
+      targetShift = await prisma.shift.findFirst({
+        where: { storeId, status: 'OPEN', userId: user.id },
+        include: {
+          payments: {
+            where: { status: 'PAID' },
+            select: { method: true, amount: true },
+          },
+          cashMovements: true,
+        },
+      });
+    }
+
+    if (!targetShift) {
+      return { error: 'Tidak ada shift kasir yang sedang aktif.' };
+    }
+
+    if (targetShift.status !== 'OPEN') {
+      return { error: 'Shift kasir ini sudah ditutup dan tidak dapat mencatat mutasi kas.' };
     }
 
     const numAmount = Number(amount);
@@ -359,19 +403,47 @@ export async function addCashMovement({ type, amount, reason }) {
       return { error: 'Jumlah uang kas harus berupa angka positif.' };
     }
 
-    if (!reason?.trim()) {
-      return { error: 'Keterangan/alasan pergerakan kas wajib diisi.' };
+    const cleanReason = (reason || notes || '').trim();
+    if (cleanReason.length < 3) {
+      return { error: 'Keterangan/alasan pengeluaran kas wajib diisi minimal 3 karakter.' };
+    }
+
+    if (type === 'CASH_OUT') {
+      if (!category?.trim()) {
+        return { error: 'Kategori pengeluaran kas keluar wajib dipilih.' };
+      }
+
+      // Hitung estimasi kas fisik di laci saat ini
+      const openingCash = Number(targetShift.openingCash || 0);
+      const totalCashSales = targetShift.payments
+        .filter((p) => p.method === 'CASH')
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      const totalCashIn = targetShift.cashMovements
+        .filter((m) => m.type === 'CASH_IN')
+        .reduce((sum, m) => sum + Number(m.amount), 0);
+      const totalCashOut = targetShift.cashMovements
+        .filter((m) => m.type === 'CASH_OUT')
+        .reduce((sum, m) => sum + Number(m.amount), 0);
+
+      const currentDrawerCash = openingCash + totalCashSales + totalCashIn - totalCashOut;
+      if (numAmount > currentDrawerCash) {
+        return {
+          error: `Nominal kas keluar (${formatRupiah(numAmount)}) melebihi saldo kas fisik yang ada di laci (${formatRupiah(Math.max(0, currentDrawerCash))}).`,
+        };
+      }
     }
 
     const movement = await prisma.$transaction(async (tx) => {
       const m = await tx.cashMovement.create({
         data: {
           storeId,
-          shiftId: shiftRes.data.id,
+          shiftId: targetShift.id,
           userId: user.id,
           type,
+          category: type === 'CASH_OUT' ? (category?.trim() || 'LAINNYA') : null,
           amount: numAmount,
-          reason: reason.trim(),
+          reason: cleanReason,
+          receiptUrl: receiptUrl?.trim() || null,
         },
       });
 
@@ -383,7 +455,13 @@ export async function addCashMovement({ type, amount, reason }) {
           module: 'POS',
           entityType: 'CashMovement',
           entityId: m.id,
-          changeSummary: `Kasir ${user.name} mencatat ${type === 'CASH_IN' ? 'Kas Masuk (+)' : 'Kas Keluar (-)'} sebesar ${formatRupiah(numAmount)} [Alasan: ${reason.trim()}]`,
+          changeSummary: `Kasir ${user.name} mencatat ${
+            type === 'CASH_IN'
+              ? 'Kas Masuk (+)'
+              : `Kas Keluar (-) [Kategori: ${category || 'LAINNYA'}]`
+          } sebesar ${formatRupiah(numAmount)} [Alasan: ${cleanReason}]${
+            receiptUrl ? ' (Nota dilampirkan)' : ''
+          }`,
         },
       });
 
@@ -392,15 +470,19 @@ export async function addCashMovement({ type, amount, reason }) {
 
     revalidatePath('/dashboard/pos/shift');
     revalidatePath('/dashboard/pos/cash');
+    revalidatePath('/dashboard/pos/manage-shifts');
     revalidatePath('/dashboard/pos');
+    revalidatePath('/dashboard');
 
     return {
       success: true,
       data: {
         id: movement.id,
         type: movement.type,
+        category: movement.category,
         amount: Number(movement.amount),
         reason: movement.reason,
+        receiptUrl: movement.receiptUrl,
         createdAt: movement.createdAt,
       },
     };
@@ -408,6 +490,13 @@ export async function addCashMovement({ type, amount, reason }) {
     console.error('[addCashMovement] Error:', error);
     return { error: error.message || 'Gagal mencatat mutasi kas.' };
   }
+}
+
+/**
+ * Server Action khusus Cash Out kasir
+ */
+export async function recordCashOut(params) {
+  return addCashMovement({ ...params, type: 'CASH_OUT' });
 }
 
 /**
@@ -622,6 +711,14 @@ export async function getShiftDetail(shiftId) {
       .filter((m) => m.type === 'CASH_OUT')
       .reduce((sum, m) => sum + Number(m.amount), 0);
 
+    const cashOutOperasional = shift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT' && m.category !== 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    const cashOutSetorOwner = shift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT' && m.category === 'SETOR_OWNER')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
     const expectedCash =
       shift.expectedCash != null
         ? Number(shift.expectedCash)
@@ -646,6 +743,8 @@ export async function getShiftDetail(shiftId) {
         totalSales: cashSales + qrisSales,
         cashIn,
         cashOut,
+        cashOutOperasional,
+        cashOutSetorOwner,
         expectedCash,
         actualCash,
         difference,
@@ -673,8 +772,10 @@ export async function getShiftDetail(shiftId) {
         cashMovements: shift.cashMovements.map((m) => ({
           id: m.id,
           type: m.type,
+          category: m.category || null,
           amount: Number(m.amount),
           reason: m.reason,
+          receiptUrl: m.receiptUrl || null,
           createdAt: m.createdAt.toISOString(),
         })),
       },
