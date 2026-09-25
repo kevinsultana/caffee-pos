@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { revalidatePath } from 'next/cache';
 import { getCachedProductCategories } from '@/app/actions/product';
+import { normalizePhone } from '@/lib/utils';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -571,7 +572,7 @@ export async function processPosCheckout({
             queueNumber: queueNumber.trim(),
             status: 'PAID',
             customerNameSnapshot: customerName.trim() || 'Pelanggan',
-            customerPhoneSnapshot: customerPhone?.trim() || null,
+            customerPhoneSnapshot: normalizePhone(customerPhone),
             productSubtotal,
             promotionDiscount: totalPromoDiscount,
             taxableSubtotal,
@@ -597,7 +598,7 @@ export async function processPosCheckout({
             source: 'POS',
             status: 'PAID',
             customerNameSnapshot: customerName.trim() || 'Pelanggan',
-            customerPhoneSnapshot: customerPhone?.trim() || null,
+            customerPhoneSnapshot: normalizePhone(customerPhone),
             productSubtotal,
             promotionDiscount: totalPromoDiscount,
             taxableSubtotal,

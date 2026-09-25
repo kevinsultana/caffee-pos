@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
+import { normalizePhone } from '@/lib/utils';
 
 function generateOrderNumber() {
   const date = new Date();
@@ -243,7 +244,7 @@ export async function createPublicQrOrder({
         publicQrToken,
         expiresAt,
         customerNameSnapshot: customerName.trim(),
-        customerPhoneSnapshot: customerPhone.trim() || null,
+        customerPhoneSnapshot: normalizePhone(customerPhone),
         productSubtotal,
         promotionDiscount,
         taxableSubtotal,

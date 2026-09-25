@@ -6,13 +6,13 @@ import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
 import { openShift } from '@/app/actions/shift';
 import { validatePromoCode, getActivePosPromotions } from '@/app/actions/promotion';
-import { getCustomers, createCustomer } from '@/app/actions/customer';
+import { getCustomers, createCustomer, findCustomerByPhone } from '@/app/actions/customer';
 import {
   getPublicPendingOrders,
   cancelPublicQrOrder,
 } from '@/app/actions/publicQr';
 import ThermalReceipt from '@/components/pos/ThermalReceipt';
-import { formatRupiah, formatDateTime, cn } from '@/lib/utils';
+import { formatRupiah, formatDateTime, cn, normalizePhone } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
@@ -38,6 +38,7 @@ export default function PosScreenPage() {
   const [storeInfo, setStoreInfo] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [unregisteredQrPhone, setUnregisteredQrPhone] = useState(null);
 
   // Thermal Printing State
   const [printOrder, setPrintOrder] = useState(null);
@@ -147,14 +148,31 @@ export default function PosScreenPage() {
       });
 
       if (res.error) {
-        toast.error(res.error);
+        toast.error(res.error, { position: 'top-center' });
+        if (res.alreadyExists && res.data) {
+          setCustomers((prev) => {
+            if (prev.some((c) => c.id === res.data.id)) return prev;
+            return [res.data, ...prev];
+          });
+          setSelectedCustomerId(res.data.id);
+          setCustomerName(res.data.name);
+          setCustomerPhone(res.data.phone || '');
+          setUnregisteredQrPhone(null);
+          setCustomerModalOpen(false);
+          toast.success(`Member "${res.data.name}" teridentifikasi dan dipilih.`, {
+            position: 'top-center',
+          });
+        }
       } else {
         const created = res.data;
-        toast.success(`Member "${created.name}" berhasil didaftarkan!`);
-        setCustomers((prev) => [created, ...prev]);
+        toast.success(`Member baru berhasil didaftarkan!`, {
+          position: 'top-center',
+        });
+        setCustomers((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
         setSelectedCustomerId(created.id);
         setCustomerName(created.name);
         setCustomerPhone(created.phone || '');
+        setUnregisteredQrPhone(null);
         setCustomerModalOpen(false);
         setNewCustName('');
         setNewCustPhone('');
@@ -330,6 +348,7 @@ export default function PosScreenPage() {
     setInputPromoCode('');
     setActiveQrOrder(null);
     setSelectedCustomerId('');
+    setUnregisteredQrPhone(null);
     setCustomerName('Pelanggan');
     setCustomerPhone('');
     setQueueInput('');
@@ -853,7 +872,7 @@ export default function PosScreenPage() {
   // PUBLIC QR ORDER INTEGRATION (OPSI 1: LANGSUNG KE KERANJANG KASIR)
   // ══════════════════════════════════════════════════════════════════════════
 
-  function openQrOrderCheckout(order) {
+  async function openQrOrderCheckout(order) {
     if (!activeShift) {
       toast.error('Shift kasir belum dibuka. Buka shift kasir terlebih dahulu untuk memproses pesanan.', { id: 'shift-locked' });
       setIsOpenShiftModalOpen(true);
@@ -884,10 +903,12 @@ export default function PosScreenPage() {
     setCart(mappedItems);
 
     // 2. Set nama & nomor HP pelanggan dari snapshot QR
-    const cName = order.customerNameSnapshot?.trim() || 'Pelanggan';
-    const cPhone = order.customerPhoneSnapshot?.trim() || '';
-    setCustomerName(cName);
-    setCustomerPhone(cPhone);
+    const rawName = order.customerNameSnapshot?.trim() || 'Pelanggan';
+    const rawPhone = order.customerPhoneSnapshot?.trim() || '';
+    const normPhone = normalizePhone(rawPhone);
+
+    setCustomerName(rawName);
+    setCustomerPhone(normPhone || rawPhone);
 
     if (order.queueNumber) {
       const digitsOnly = order.queueNumber.replace(/\D/g, '');
@@ -899,26 +920,50 @@ export default function PosScreenPage() {
       }
     }
 
-    // 3. Cek otomatis apakah pelanggan ini sudah terdaftar sebagai member
-    const matched = customers.find((c) => {
-      if (cPhone && c.phone && c.phone.trim() === cPhone) return true;
-      if (cName && cName.toLowerCase() !== 'pelanggan' && c.name.toLowerCase() === cName.toLowerCase()) return true;
-      return false;
-    });
+    // 3. Pengecekan Pelanggan ke Database Customer
+    if (normPhone) {
+      // Cari di local list dulu
+      let matched = customers.find((c) => normalizePhone(c.phone) === normPhone);
 
-    if (matched) {
-      setSelectedCustomerId(matched.id);
-      setCustomerName(matched.name);
-      setCustomerPhone(matched.phone || '');
-      toast.success(
-        `Pesanan QR #${order.publicQrToken} dimuat! Member "${matched.name}" teridentifikasi.`,
-        { duration: 3500 }
-      );
+      // Jika belum ditemukan di local list, cek ke server database
+      if (!matched) {
+        try {
+          const checkRes = await findCustomerByPhone(normPhone);
+          if (checkRes?.data) {
+            matched = checkRes.data;
+            setCustomers((prev) => [matched, ...prev.filter((c) => c.id !== matched.id)]);
+          }
+        } catch (err) {
+          console.error('[openQrOrderCheckout] findCustomerByPhone error:', err);
+        }
+      }
+
+      if (matched) {
+        // Kondisi 1: Nomor HP SUDAH Terdaftar
+        setSelectedCustomerId(matched.id);
+        setCustomerName(matched.name);
+        setCustomerPhone(matched.phone || normPhone);
+        setUnregisteredQrPhone(null);
+        toast.success(
+          `Pesanan QR #${order.publicQrToken} dimuat! Member "${matched.name}" teridentifikasi.`,
+          { duration: 3500, position: 'top-center' }
+        );
+      } else {
+        // Kondisi 2: Nomor HP BELUM Terdaftar (Customer Baru)
+        setSelectedCustomerId('');
+        setUnregisteredQrPhone(normPhone);
+        toast(
+          `Pesanan QR #${order.publicQrToken} dimuat. Nomor HP ${normPhone} belum terdaftar sebagai member.`,
+          { icon: '💡', duration: 4000, position: 'top-center' }
+        );
+      }
     } else {
+      // Kondisi 3: Pelanggan TIDAK Mengisi Nomor HP
       setSelectedCustomerId('');
+      setUnregisteredQrPhone(null);
       toast.success(
         `Pesanan QR #${order.publicQrToken} dimuat ke keranjang kasir.`,
-        { duration: 3000 }
+        { duration: 3000, position: 'top-center' }
       );
     }
 
@@ -1318,9 +1363,19 @@ export default function PosScreenPage() {
                 <div className="space-y-2">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Pelanggan / Member
-                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          Pelanggan / Member
+                        </label>
+                        {selectedCustomerId && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <svg className="w-2.5 h-2.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                            Member Terverifikasi
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => openCustomerModal()}
@@ -1350,10 +1405,16 @@ export default function PosScreenPage() {
                           if (c) {
                             setCustomerName(c.name);
                             setCustomerPhone(c.phone || '');
+                            setUnregisteredQrPhone(null);
                           }
                         } else {
-                          setCustomerName('Pelanggan');
-                          setCustomerPhone('');
+                          const fallbackName = activeQrOrder?.customerNameSnapshot || 'Pelanggan';
+                          const fallbackPhone = activeQrOrder?.customerPhoneSnapshot || '';
+                          setCustomerName(fallbackName);
+                          setCustomerPhone(fallbackPhone);
+                          if (fallbackPhone) {
+                            setUnregisteredQrPhone(normalizePhone(fallbackPhone));
+                          }
                         }
                       }}
                       onCreateOption={(inputValue) => {
@@ -1381,6 +1442,32 @@ export default function PosScreenPage() {
                         )
                       }
                     />
+
+                    {/* Banner Rekomendasi Pendaftaran Member (Kondisi 2: Nomor HP belum terdaftar) */}
+                    {unregisteredQrPhone && !selectedCustomerId && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 shadow-xs animate-in fade-in duration-200">
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm mt-0.5 leading-none">💡</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] leading-snug font-medium text-amber-900">
+                              Nomor HP <span className="font-mono font-bold text-amber-950">{unregisteredQrPhone}</span> belum terdaftar sebagai member. Tawarkan pendaftaran member kepada pelanggan.
+                            </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', unregisteredQrPhone)}
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                + Daftarkan sebagai Member
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Pilihan Dine In / Takeaway */}
@@ -1459,15 +1546,27 @@ export default function PosScreenPage() {
                       </div>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Nama Pelanggan
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          Nama Pelanggan
+                        </label>
+                        {customerPhone && (
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {customerPhone}
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        readOnly={Boolean(selectedCustomerId)}
+                        className={cn(
+                          'w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500',
+                          selectedCustomerId && 'bg-slate-50 text-slate-700 cursor-not-allowed border-slate-200/80 font-semibold'
+                        )}
                         placeholder="Nama Pelanggan"
+                        title={selectedCustomerId ? 'Nama terkunci sesuai data profil member' : 'Nama Pelanggan'}
                       />
                     </div>
                   </div>

@@ -96,3 +96,22 @@ export function generateOrderNumber() {
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   return `ORD-${timestamp}-${random}`;
 }
+
+/**
+ * Menyeragamkan nomor telepon ke format standar (contoh: 08xxxxxxxxxx).
+ * Membersihkan karakter non-angka, mengubah awalan +62 atau 62 menjadi 0, dan menambahkan 0 jika diawali 8.
+ * @param {string|null} phone
+ * @returns {string|null}
+ */
+export function normalizePhone(phone) {
+  if (!phone) return null;
+  let digits = String(phone).trim().replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('62')) {
+    digits = '0' + digits.slice(2);
+  } else if (!digits.startsWith('0')) {
+    digits = '0' + digits;
+  }
+  return digits;
+}
+

@@ -730,7 +730,7 @@ model Customer {
   storeId String @db.Uuid
 
   name  String
-  phone String?
+  phone String? @unique
   email String?
 
   createdAt DateTime @default(now())

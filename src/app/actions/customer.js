@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
 import { revalidatePath } from 'next/cache';
+import { normalizePhone } from '@/lib/utils';
 
 async function getAuthenticatedUserAndStore() {
   const user = await verifySession();
@@ -20,11 +21,16 @@ export async function getCustomers({ query = '' } = {}) {
     const whereClause = { storeId };
     if (query && query.trim().length > 0) {
       const q = query.trim();
-      whereClause.OR = [
+      const normPhone = normalizePhone(q);
+      const orConditions = [
         { name: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
       ];
+      if (normPhone && normPhone !== q) {
+        orConditions.push({ phone: { contains: normPhone, mode: 'insensitive' } });
+      }
+      whereClause.OR = orConditions;
     }
 
     const customers = await prisma.customer.findMany({
@@ -252,6 +258,29 @@ export async function getCustomerPurchaseHistory(customerId) {
 }
 
 /**
+ * Mencari data member/pelanggan berdasarkan nomor telepon.
+ */
+export async function findCustomerByPhone(phone) {
+  try {
+    const { storeId } = await getAuthenticatedUserAndStore();
+    const cleanPhone = normalizePhone(phone);
+    if (!cleanPhone) return { data: null };
+
+    const customer = await prisma.customer.findFirst({
+      where: {
+        storeId,
+        phone: cleanPhone,
+      },
+    });
+
+    return { data: customer };
+  } catch (error) {
+    console.error('[findCustomerByPhone] Error:', error);
+    return { error: error.message || 'Gagal mencari data member.' };
+  }
+}
+
+/**
  * Menambahkan pelanggan baru.
  */
 export async function createCustomer({ name, phone, email }) {
@@ -263,8 +292,21 @@ export async function createCustomer({ name, phone, email }) {
     }
 
     const cleanName = name.trim();
-    const cleanPhone = phone?.trim() || null;
+    const cleanPhone = normalizePhone(phone);
     const cleanEmail = email?.trim() || null;
+
+    if (cleanPhone) {
+      const existing = await prisma.customer.findFirst({
+        where: { storeId, phone: cleanPhone },
+      });
+      if (existing) {
+        return {
+          error: `Nomor telepon ${cleanPhone} sudah terdaftar atas nama member "${existing.name}".`,
+          data: existing,
+          alreadyExists: true,
+        };
+      }
+    }
 
     const customer = await prisma.$transaction(async (tx) => {
       const c = await tx.customer.create({
@@ -297,6 +339,9 @@ export async function createCustomer({ name, phone, email }) {
     return { success: true, data: customer };
   } catch (error) {
     console.error('[createCustomer] Error:', error);
+    if (error.code === 'P2002') {
+      return { error: 'Nomor telepon sudah terdaftar pada sistem member.' };
+    }
     return { error: error.message || 'Gagal menambahkan pelanggan.' };
   }
 }
@@ -318,8 +363,23 @@ export async function updateCustomer({ id, name, phone, email }) {
     if (!target) return { error: 'Pelanggan tidak ditemukan.' };
 
     const cleanName = name.trim();
-    const cleanPhone = phone?.trim() || null;
+    const cleanPhone = normalizePhone(phone);
     const cleanEmail = email?.trim() || null;
+
+    if (cleanPhone) {
+      const existing = await prisma.customer.findFirst({
+        where: {
+          storeId,
+          phone: cleanPhone,
+          NOT: { id },
+        },
+      });
+      if (existing) {
+        return {
+          error: `Nomor telepon ${cleanPhone} sudah digunakan oleh member "${existing.name}".`,
+        };
+      }
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const c = await tx.customer.update({
@@ -352,6 +412,9 @@ export async function updateCustomer({ id, name, phone, email }) {
     return { success: true, data: updated };
   } catch (error) {
     console.error('[updateCustomer] Error:', error);
+    if (error.code === 'P2002') {
+      return { error: 'Nomor telepon sudah terdaftar pada sistem member.' };
+    }
     return { error: error.message || 'Gagal memperbarui data pelanggan.' };
   }
 }
