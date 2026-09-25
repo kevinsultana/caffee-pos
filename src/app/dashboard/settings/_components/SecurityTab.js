@@ -3,6 +3,45 @@
 import { useState, useTransition } from 'react';
 import toast from 'react-hot-toast';
 import { SettingsCard } from './SharedComponents';
+import { changeOwnPassword } from '@/app/actions/auth';
+
+function PasswordInput({ id, label, value, onChange, show, onToggle, placeholder, disabled }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="w-full px-3.5 pr-10 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+          tabIndex={-1}
+        >
+          {show ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function SecurityTab() {
   const [isPending, startTransition] = useTransition();
@@ -33,50 +72,41 @@ export default function SecurityTab() {
       return;
     }
 
+    if (currentPassword === newPassword) {
+      toast.error('Password baru tidak boleh sama dengan password saat ini.');
+      return;
+    }
+
     startTransition(async () => {
-      // TODO: Implementasi update password via server action
-      toast.success('Fitur ubah password akan segera tersedia!');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      const toastId = toast.loading('Memperbarui password akun Anda...');
+      const res = await changeOwnPassword({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      if (res?.error) {
+        toast.error(res.error, { id: toastId });
+        return;
+      }
+
+      toast.dismiss(toastId);
+
+      const Swal = (await import('sweetalert2')).default;
+      await Swal.fire({
+        icon: 'success',
+        title: 'Password Berhasil Diubah!',
+        text: 'Demi keamanan, sesi akun Anda telah diakhiri. Silakan login kembali menggunakan password baru Anda.',
+        confirmButtonText: 'Login Kembali Sekarang',
+        confirmButtonColor: '#059669',
+        background: '#ffffff',
+        color: '#0f172a',
+        allowOutsideClick: false,
+      });
+
+      window.location.href = '/login';
     });
   };
-
-  const PasswordInput = ({ id, label, value, onChange, show, onToggle, placeholder }) => (
-    <div>
-      <label htmlFor={id} className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={id}
-          type={show ? 'text' : 'password'}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          disabled={isPending}
-          className="w-full px-3.5 pr-10 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
-          tabIndex={-1}
-        >
-          {show ? (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          )}
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -94,6 +124,7 @@ export default function SecurityTab() {
             show={showCurrentPw}
             onToggle={() => setShowCurrentPw(!showCurrentPw)}
             placeholder="Masukkan password saat ini"
+            disabled={isPending}
           />
           <PasswordInput
             id="input-new-password"
@@ -103,6 +134,7 @@ export default function SecurityTab() {
             show={showNewPw}
             onToggle={() => setShowNewPw(!showNewPw)}
             placeholder="Masukkan password baru"
+            disabled={isPending}
           />
           <PasswordInput
             id="input-confirm-password"
@@ -112,6 +144,7 @@ export default function SecurityTab() {
             show={showConfirmPw}
             onToggle={() => setShowConfirmPw(!showConfirmPw)}
             placeholder="Ulangi password baru"
+            disabled={isPending}
           />
 
           {/* Password Strength Indicator */}

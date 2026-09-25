@@ -3,11 +3,10 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
-import { changeFirstTimePassword, logout } from '@/app/actions/auth';
+import { forceSetNewPassword, logout } from '@/app/actions/auth';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -16,7 +15,7 @@ export default function ChangePasswordPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword.trim() || !confirmPassword.trim()) {
       toast.error('Semua kolom password wajib diisi.');
       return;
     }
@@ -31,15 +30,9 @@ export default function ChangePasswordPage() {
       return;
     }
 
-    if (currentPassword === newPassword) {
-      toast.error('Password baru tidak boleh sama dengan password lama/sementara.');
-      return;
-    }
-
     startTransition(async () => {
-      const toastId = toast.loading('Memperbarui password...');
-      const result = await changeFirstTimePassword({
-        currentPassword,
+      const toastId = toast.loading('Menetapkan password baru...');
+      const result = await forceSetNewPassword({
         newPassword,
         confirmPassword,
       });
@@ -49,18 +42,24 @@ export default function ChangePasswordPage() {
         return;
       }
 
+      toast.dismiss(toastId);
+
+      const targetUrl = result?.redirectUrl || '/dashboard';
+
       const Swal = (await import('sweetalert2')).default;
       await Swal.fire({
         icon: 'success',
-        title: 'Password Berhasil Diperbarui!',
-        text: 'Akun Anda sekarang aman. Silakan masuk ke Dashboard.',
+        title: 'Password Berhasil Ditetapkan!',
+        text: 'Akun Anda telah aktif. Masuk ke Dashboard...',
         confirmButtonText: 'Lanjutkan ke Dashboard',
         confirmButtonColor: '#059669',
         background: '#ffffff',
         color: '#0f172a',
+        timer: 1500,
+        timerProgressBar: true,
       });
 
-      router.push(result?.redirectUrl || '/dashboard');
+      window.location.href = targetUrl;
     });
   };
 
@@ -99,9 +98,7 @@ export default function ChangePasswordPage() {
       </div>
 
       <div className="relative w-full max-w-md">
-
-        <div className="bg-white w-full p-8 space-y-6 rounded-2xl shadow-sm border border-slate-200">
-
+        <div className="bg-white w-full p-8 space-y-6 rounded-3xl shadow-sm border border-slate-200">
           {/* Header Branding */}
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 mb-4">
@@ -112,48 +109,57 @@ export default function ChangePasswordPage() {
             <h1 className="text-2xl font-bold text-center text-slate-900 tracking-tight">
               Wajib Ganti Password
             </h1>
-            <p className="text-sm text-center text-slate-500 mt-2 max-w-xs mx-auto">
-              Akun Anda baru dibuat atau baru saja di-reset oleh Owner. Anda harus membuat password pribadi baru untuk melanjutkan.
+            <p className="text-xs text-center text-slate-500 mt-2 max-w-xs mx-auto leading-relaxed">
+              Akun Anda menggunakan password sementara dari Owner/Admin. Silakan buat password pribadi baru Anda untuk mengamankan akses sistem.
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Current / Temporary Password */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Password Sementara Saat Ini *
-              </label>
-              <input
-                type={showPass ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={isPending}
-                className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Masukkan password awal dari Owner"
-                required
-              />
-            </div>
-
             {/* New Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                 Password Baru Pribadi *
               </label>
-              <input
-                type={showPass ? 'text' : 'password'}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={isPending}
-                className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Minimal 6 karakter"
-                required
-              />
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={isPending}
+                  className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Minimal 6 karakter"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              {/* Password Strength Bar */}
+              {newPassword.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Kekuatan:</span>
+                    <span className={`font-bold ${newPassword.length >= 10 ? 'text-emerald-600' : newPassword.length >= 6 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {newPassword.length >= 10 ? 'Kuat' : newPassword.length >= 6 ? 'Sedang' : 'Lemah'}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${newPassword.length >= 10
+                          ? 'w-full bg-emerald-500'
+                          : newPassword.length >= 6
+                            ? 'w-2/3 bg-amber-500'
+                            : 'w-1/3 bg-rose-500'
+                        }`}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Confirm New Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                 Konfirmasi Password Baru *
               </label>
               <input
@@ -161,14 +167,15 @@ export default function ChangePasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={isPending}
-                className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Ulangi password baru"
+                className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Ketik ulang password baru Anda"
                 required
+                minLength={6}
               />
             </div>
 
             {/* Toggle show password */}
-            <div className="flex items-center text-sm text-slate-500 pt-1">
+            <div className="flex items-center text-xs text-slate-500 pt-1">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -185,7 +192,7 @@ export default function ChangePasswordPage() {
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-xs text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPending ? 'Menyimpan Password Baru...' : 'Simpan & Masuk ke Dashboard'}
               </button>

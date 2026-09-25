@@ -11,17 +11,26 @@ const PROTECTED_PREFIXES = ['/dashboard'];
 const rateLimitStore = new Map();
 
 const RATE_LIMIT_RULES = {
-  '/login':  { max: 5,   windowMs: 60_000 }, // Maksimal 5 percobaan per menit per IP
-  '/menu':   { max: 60,  windowMs: 60_000 }, // 60 req/menit per IP (public QR)
+  '/login':  { max: 30,  windowMs: 60_000 }, // Maksimal 30 percobaan per menit per IP
+  '/menu':   { max: 120, windowMs: 60_000 }, // 120 req/menit per IP (public QR)
 };
 
 /**
  * Cek apakah request dari IP tertentu melebihi batas rate limit.
  * Mengembalikan true jika harus di-block, false jika boleh lanjut.
  */
-function isRateLimited(ip, pathname) {
-  // Cari rule yang cocok (prefix match)
-  const matchedPath = Object.keys(RATE_LIMIT_RULES).find((p) => pathname.startsWith(p));
+function isRateLimited(ip, pathname, method = 'GET') {
+  // JANGAN rate limit halaman change-password atau request GET pembacaan halaman
+  if (pathname.startsWith('/login/change-password')) return false;
+  if (method === 'GET') return false;
+
+  let matchedPath = null;
+  if (pathname === '/login') {
+    matchedPath = '/login';
+  } else if (pathname.startsWith('/menu')) {
+    matchedPath = '/menu';
+  }
+
   if (!matchedPath) return false;
 
   const rule = RATE_LIMIT_RULES[matchedPath];
@@ -64,15 +73,22 @@ function parseSessionCookie(cookieValue) {
   if (!cookieValue) return null;
   try {
     const decoded = decodeURIComponent(cookieValue);
+    let parsed = null;
     if (decoded.startsWith('{')) {
-      return JSON.parse(decoded);
+      parsed = JSON.parse(decoded);
+    } else if (cookieValue.startsWith('{')) {
+      parsed = JSON.parse(cookieValue);
+    } else {
+      return { token: cookieValue, requiresPasswordChange: false, mustChangePassword: false };
     }
-    if (cookieValue.startsWith('{')) {
-      return JSON.parse(cookieValue);
-    }
-    return { token: cookieValue, requiresPasswordChange: false };
+    const mustChange = Boolean(parsed.mustChangePassword ?? parsed.requiresPasswordChange);
+    return {
+      ...parsed,
+      requiresPasswordChange: mustChange,
+      mustChangePassword: mustChange,
+    };
   } catch {
-    return { token: cookieValue, requiresPasswordChange: false };
+    return { token: cookieValue, requiresPasswordChange: false, mustChangePassword: false };
   }
 }
 
@@ -108,7 +124,7 @@ export function middleware(request) {
     request.headers.get('x-real-ip') ||
     '127.0.0.1';
 
-  if (isRateLimited(clientIp, pathname)) {
+  if (isRateLimited(clientIp, pathname, request.method)) {
     return addSecurityHeaders(
       NextResponse.json(
         { error: 'Terlalu banyak percobaan, coba lagi nanti.' },

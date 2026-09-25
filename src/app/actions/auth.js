@@ -156,6 +156,7 @@ export async function login(username, password) {
     const sessionPayload = JSON.stringify({
       token: rawToken,
       requiresPasswordChange: Boolean(user.mustChangePassword),
+      mustChangePassword: Boolean(user.mustChangePassword),
       role: user.role?.name,
       permissions: effectivePermissions,
     });
@@ -185,50 +186,64 @@ export async function login(username, password) {
 }
 
 /**
- * Server Action Ganti Password Wajib Pertama Kali
- * Dipanggil saat user memiliki mustChangePassword === true
+ * Server Action: Wajib Set Password Baru Saat Login Pertama Kali
+ * Sesuai spesifikasi, memvalidasi user, hash password baru,
+ * mengupdate mustChangePassword = false, memperbarui session token,
+ * dan mengarahkan user langsung ke /dashboard.
+ *
+ * @param {string|{ newPassword: string, confirmPassword?: string }} newPasswordInput
  */
-export async function changeFirstTimePassword({ currentPassword, newPassword, confirmPassword }) {
+export async function forceSetNewPassword(newPasswordInput) {
   try {
     const user = await verifySession();
-    if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+    if (!user) {
+      return { error: 'Sesi tidak valid atau telah berakhir. Silakan login kembali.' };
+    }
 
-    if (!currentPassword || !newPassword) {
-      return { error: 'Password saat ini dan password baru wajib diisi.' };
+    const newPassword =
+      typeof newPasswordInput === 'object' && newPasswordInput !== null
+        ? newPasswordInput.newPassword
+        : newPasswordInput;
+
+    const confirmPassword =
+      typeof newPasswordInput === 'object' && newPasswordInput !== null
+        ? newPasswordInput.confirmPassword
+        : undefined;
+
+    if (!newPassword || typeof newPassword !== 'string' || !newPassword.trim()) {
+      return { error: 'Password baru wajib diisi.' };
     }
 
     if (newPassword.length < 6) {
       return { error: 'Password baru minimal 6 karakter.' };
     }
 
-    if (newPassword !== confirmPassword) {
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
       return { error: 'Konfirmasi password baru tidak cocok.' };
     }
 
-    if (currentPassword === newPassword) {
-      return { error: 'Password baru tidak boleh sama dengan password sementara sebelumnya.' };
-    }
-
-    // Ambil full record user untuk cek hash password lama
+    // Ambil user record dari DB
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
     });
-
-    if (!dbUser) return { error: 'User tidak ditemukan.' };
-
-    const isCurrentValid = await bcrypt.compare(currentPassword, dbUser.passwordHash);
-    if (!isCurrentValid) {
-      return { error: 'Password sementara saat ini salah.' };
+    if (!dbUser) {
+      return { error: 'Pengguna tidak ditemukan.' };
     }
 
-    const newHash = await bcrypt.hash(newPassword, 10);
+    // Pastikan tidak menggunakan password lama yang sama
+    const isSameAsOld = await bcrypt.compare(newPassword, dbUser.passwordHash);
+    if (isSameAsOld) {
+      return { error: 'Password baru tidak boleh sama dengan password sebelumnya.' };
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
         data: {
-          passwordHash: newHash,
-          mustChangePassword: false, // Flag dinonaktifkan
+          passwordHash,
+          mustChangePassword: false, // Matikan flag
         },
       });
 
@@ -240,19 +255,20 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
           module: 'AUTH',
           entityType: 'User',
           entityId: user.id,
-          changeSummary: `Pengguna ${user.name} (${user.username}) berhasil menyelesaikan penggantian password wajib pertama kali.`,
+          changeSummary: `Pengguna ${user.name} (@${user.username}) berhasil memperbarui password wajib pertama kali dan langsung diarahkan ke dashboard.`,
         },
       });
     });
 
-    // ── Perbarui session cookie: hilangkan flag requiresPasswordChange ──────
+    // Perbarui session cookie untuk menonaktifkan requiresPasswordChange & mustChangePassword
     const cookieStore = await cookies();
     const rawCookie = cookieStore.get(SESSION_COOKIE)?.value;
     const sessionData = parseSessionCookie(rawCookie);
     if (sessionData?.token) {
       const updatedPayload = JSON.stringify({
-        token: sessionData.token,
+        ...sessionData,
         requiresPasswordChange: false,
+        mustChangePassword: false,
       });
       const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
       cookieStore.set(SESSION_COOKIE, updatedPayload, {
@@ -264,12 +280,130 @@ export async function changeFirstTimePassword({ currentPassword, newPassword, co
       });
     }
 
-    const targetRedirectRoute = getDefaultRouteForUser(user.role?.name, user.permissions);
+    const targetRedirectRoute = getDefaultRouteForUser(user.role?.name, user.permissions) || '/dashboard';
     revalidatePath('/dashboard');
-    return { success: true, redirectUrl: targetRedirectRoute };
+    return {
+      success: true,
+      redirectUrl: targetRedirectRoute,
+      message: 'Password berhasil diperbarui! Mengarahkan ke Dashboard...',
+    };
   } catch (error) {
-    console.error('[changeFirstTimePassword] Error:', error);
+    console.error('[forceSetNewPassword] Error:', error);
     return { error: error.message || 'Gagal mengubah password.' };
+  }
+}
+
+/**
+ * Backward compatibility untuk alur changeFirstTimePassword
+ */
+export async function changeFirstTimePassword({ currentPassword, newPassword, confirmPassword }) {
+  if (currentPassword && newPassword) {
+    const user = await verifySession();
+    if (!user) return { error: 'Sesi tidak valid. Silakan login kembali.' };
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!dbUser) return { error: 'User tidak ditemukan.' };
+    const isCurrentValid = await bcrypt.compare(currentPassword, dbUser.passwordHash);
+    if (!isCurrentValid) return { error: 'Password sementara saat ini salah.' };
+  }
+  return await forceSetNewPassword({ newPassword, confirmPassword });
+}
+
+/**
+ * Server Action: Ganti Password Mandiri untuk User yang Sedang Login
+ * - Mengambil user ID dari session aktif
+ * - Verifikasi currentPassword cocok dengan hash DB
+ * - Validasi kekuatan password baru (minimal 6-8 karakter)
+ * - Hash password baru & simpan dengan mustChangePassword = false
+ * - Cabut sesi aktif dan hapus session cookie (force re-login)
+ * - Catat AuditLog
+ */
+export async function changeOwnPassword({ currentPassword, newPassword, confirmPassword }) {
+  try {
+    const user = await verifySession();
+    if (!user) {
+      return { error: 'Sesi tidak valid atau telah berakhir. Silakan login kembali.' };
+    }
+
+    if (!currentPassword?.trim() || !newPassword?.trim()) {
+      return { error: 'Password saat ini dan password baru wajib diisi.' };
+    }
+
+    if (newPassword.length < 8) {
+      return { error: 'Password baru minimal 8 karakter.' };
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return { error: 'Konfirmasi password baru tidak cocok.' };
+    }
+
+    if (currentPassword === newPassword) {
+      return { error: 'Password baru tidak boleh sama dengan password saat ini.' };
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+    });
+    if (!dbUser) {
+      return { error: 'Data pengguna tidak ditemukan.' };
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, dbUser.passwordHash);
+    if (!isCurrentValid) {
+      return { error: 'Password saat ini salah.' };
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          mustChangePassword: false,
+        },
+      });
+
+      // Cabut seluruh sesi aktif akun ini agar wajib login ulang dengan password baru
+      await tx.userSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId: user.storeId,
+          userId: user.id,
+          action: 'CHANGE_OWN_PASSWORD',
+          module: 'AUTH',
+          entityType: 'User',
+          entityId: user.id,
+          changeSummary: `Pengguna ${user.name} (@${user.username}) berhasil memperbarui password akunnya secara mandiri. Seluruh sesi ditutup untuk re-login.`,
+        },
+      });
+    });
+
+    // Hapus session cookie secara tuntas agar ter-logout seketika
+    const cookieStore = await cookies();
+    cookieStore.delete({ name: SESSION_COOKIE, path: '/' });
+    cookieStore.set(SESSION_COOKIE, '', {
+      path: '/',
+      expires: new Date(0),
+      maxAge: 0,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    revalidatePath('/dashboard');
+    return {
+      success: true,
+      requireRelogin: true,
+      redirectUrl: '/login',
+      message: 'Password Anda berhasil diperbarui! Silakan login kembali menggunakan password baru Anda.',
+    };
+  } catch (error) {
+    console.error('[changeOwnPassword] Error:', error);
+    return { error: error.message || 'Gagal memperbarui password.' };
   }
 }
 

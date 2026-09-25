@@ -2,8 +2,20 @@
 
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/app/actions/auth';
+import { hasPermission } from '@/lib/permissions';
 import bcrypt from 'bcryptjs';
 import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
+
+async function getAuthenticatedUserAdmin() {
+  const user = await verifySession();
+  if (!user) throw new Error('Sesi tidak valid. Silakan login kembali.');
+  const isOwner = user.role?.name === 'OWNER' || user.role?.name === 'ADMIN';
+  const hasUserPerm = hasPermission(user, 'MENU_USERS') || hasPermission(user, 'MANAGE_USERS');
+  if (!isOwner && !hasUserPerm) {
+    throw new Error('Akses ditolak. Fitur ini hanya untuk Owner / Admin Pengelola Karyawan.');
+  }
+  return { user, storeId: user.storeId };
+}
 
 async function getAuthenticatedOwner() {
   const user = await verifySession();
@@ -14,7 +26,7 @@ async function getAuthenticatedOwner() {
   return { user, storeId: user.storeId };
 }
 
-export const getCachedRoles = async (storeId) => {
+export async function getCachedRoles(storeId) {
   return await prisma.role.findMany({
     where: { storeId },
     orderBy: { name: 'asc' },
@@ -194,9 +206,10 @@ export async function updateUser({
   roleId,
   status,
   resetPassword,
+  password,
 }) {
   try {
-    const { user: currentOwner, storeId } = await getAuthenticatedOwner();
+    const { user: currentAdmin, storeId } = await getAuthenticatedUserAdmin();
 
     const targetUser = await prisma.user.findFirst({
       where: { id, storeId },
@@ -206,7 +219,7 @@ export async function updateUser({
 
     // Proteksi: Sistem harus selalu mempertahankan minimal satu Owner ACTIVE
     if (targetUser.role?.name === 'OWNER') {
-      if (status !== 'ACTIVE') {
+      if (status && status !== 'ACTIVE') {
         const otherOwners = await prisma.user.count({
           where: {
             storeId,
@@ -234,11 +247,12 @@ export async function updateUser({
     let passwordHash = undefined;
     let mustChangePassword = undefined;
 
-    if (resetPassword && resetPassword.trim().length > 0) {
-      if (resetPassword.length < 6) {
+    const newPassToSet = resetPassword || password;
+    if (newPassToSet && newPassToSet.trim().length > 0) {
+      if (newPassToSet.length < 6) {
         return { error: 'Password baru minimal 6 karakter.' };
       }
-      passwordHash = await bcrypt.hash(resetPassword, 10);
+      passwordHash = await bcrypt.hash(newPassToSet.trim(), 10);
       mustChangePassword = true; // Set wajib ganti password setelah di-reset
     }
 
@@ -409,3 +423,115 @@ export async function deleteUser(id) {
     return { error: error.message || 'Gagal menghapus data karyawan.' };
   }
 }
+
+/**
+ * Server Action: Reset Password Karyawan oleh Admin / Role Kelola User
+ * - Hanya role dengan izin kelola user (MANAGE_USERS / Admin / OWNER) yang dapat melakukan aksi ini.
+ * - Generate temporary password yang aman atau gunakan password yang dimasukkan admin.
+ * - Hash password menggunakan bcrypt.
+ * - Update database: set password baru dan mustChangePassword = true.
+ * - Catat aktivitas ke AuditLog.
+ * - Kembalikan temporary password ke admin agar dapat diberikan ke staf terkait.
+ *
+ * @param {string} userId - ID karyawan yang akan di-reset password-nya
+ * @param {string} [customPassword] - (Opsional) Password sementara yang diinput manual
+ */
+export async function adminResetPassword(userId, customPassword) {
+  try {
+    const { user: currentAdmin, storeId } = await getAuthenticatedUserAdmin();
+
+    if (!userId) {
+      return { error: 'ID user tidak valid.' };
+    }
+
+    const targetUser = await prisma.user.findFirst({
+      where: { id: userId, storeId },
+      include: { role: true },
+    });
+
+    if (!targetUser) {
+      return { error: 'Karyawan tidak ditemukan.' };
+    }
+
+    // Proteksi: Karyawan berstatus RESIGNED tidak dapat direset password
+    if (targetUser.status === 'RESIGNED') {
+      return { error: 'Tidak dapat mereset password karyawan berstatus RESIGNED.' };
+    }
+
+    // Proteksi: Non-owner tidak boleh mereset akun Owner
+    if (targetUser.role?.name === 'OWNER' && currentAdmin.role?.name !== 'OWNER') {
+      return { error: 'Akses ditolak. Hanya sesama Owner yang dapat mereset password akun Owner.' };
+    }
+
+    let temporaryPassword = '';
+    if (customPassword && typeof customPassword === 'string' && customPassword.trim().length > 0) {
+      if (customPassword.trim().length < 6) {
+        return { error: 'Password baru minimal 6 karakter.' };
+      }
+      temporaryPassword = customPassword.trim();
+    } else {
+      // Generate temporary password otomatis yang aman dan mudah dibaca
+      const prefix = 'Schaw';
+      const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const randomNum = Math.floor(100 + Math.random() * 900);
+      temporaryPassword = `${prefix}@${randomPart}${randomNum}`;
+    }
+
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    await prisma.$transaction(async (tx) => {
+      // Update password hash dan aktifkan flag mustChangePassword
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash,
+          mustChangePassword: true,
+        },
+      });
+
+      // Cabut seluruh sesi aktif yang sedang digunakan target user
+      await tx.userSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      // Catat ke AuditLog
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId: currentAdmin.id,
+          action: 'RESET_PASSWORD',
+          module: 'USER_MANAGEMENT',
+          entityType: 'User',
+          entityId: userId,
+          changeSummary: `Admin ${currentAdmin.name} (@${currentAdmin.username}) mereset password akun: ${targetUser.name} (@${targetUser.username}). Wajib ganti password diaktifkan.`,
+          beforeData: {
+            username: targetUser.username,
+            name: targetUser.name,
+            mustChangePassword: targetUser.mustChangePassword,
+          },
+          afterData: {
+            username: targetUser.username,
+            name: targetUser.name,
+            mustChangePassword: true,
+          },
+        },
+      });
+    });
+
+    revalidatePath('/dashboard/users');
+    revalidatePath('/dashboard/audit');
+
+    return {
+      success: true,
+      temporaryPassword,
+      username: targetUser.username,
+      name: targetUser.name,
+    };
+  } catch (error) {
+    console.error('[adminResetPassword] Error:', error);
+    return { error: error.message || 'Gagal mereset password karyawan.' };
+  }
+}
+
+
