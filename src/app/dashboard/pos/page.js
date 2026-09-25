@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition, useMemo } from 'react';
+import { useState, useEffect, useTransition, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getPosInitData, processPosCheckout } from '@/app/actions/pos';
@@ -39,6 +39,7 @@ export default function PosScreenPage() {
   const [activeShift, setActiveShift] = useState(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [unregisteredQrPhone, setUnregisteredQrPhone] = useState(null);
+  const [isQrOrderWithoutPhone, setIsQrOrderWithoutPhone] = useState(false);
 
   // Thermal Printing State
   const [printOrder, setPrintOrder] = useState(null);
@@ -89,6 +90,9 @@ export default function PosScreenPage() {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustEmail, setNewCustEmail] = useState('');
   const [isCreatingCust, setIsCreatingCust] = useState(false);
+  const [custModalFocusField, setCustModalFocusField] = useState('name'); // 'name' | 'phone'
+  const newCustNameInputRef = useRef(null);
+  const newCustPhoneInputRef = useRef(null);
 
   // Quick Open Shift Modal State
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
@@ -123,14 +127,31 @@ export default function PosScreenPage() {
     }
   }
 
-  function openCustomerModal(initialName = '', initialPhone = '', initialEmail = '') {
+  function openCustomerModal(initialName = '', initialPhone = '', initialEmail = '', focusField = 'name') {
     setNewCustName(
       initialName || (customerName && customerName !== 'Pelanggan' ? customerName : '')
     );
     setNewCustPhone(initialPhone || customerPhone || '');
     setNewCustEmail(initialEmail || '');
+    setCustModalFocusField(focusField);
     setCustomerModalOpen(true);
   }
+
+  // Auto fokus ke input field yang sesuai saat modal customer dibuka
+  useEffect(() => {
+    if (customerModalOpen) {
+      const timer = setTimeout(() => {
+        if (custModalFocusField === 'phone') {
+          newCustPhoneInputRef.current?.focus();
+          newCustPhoneInputRef.current?.select?.();
+        } else {
+          newCustNameInputRef.current?.focus();
+          newCustNameInputRef.current?.select?.();
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [customerModalOpen, custModalFocusField]);
 
   async function handleCreateCustomerSubmit(e) {
     e.preventDefault();
@@ -158,14 +179,15 @@ export default function PosScreenPage() {
           setCustomerName(res.data.name);
           setCustomerPhone(res.data.phone || '');
           setUnregisteredQrPhone(null);
+          setIsQrOrderWithoutPhone(false);
           setCustomerModalOpen(false);
-          toast.success(`Member "${res.data.name}" teridentifikasi dan dipilih.`, {
+          toast.success(`Member "${res.data.name}" teridentifikasi dan dihubungkan!`, {
             position: 'top-center',
           });
         }
       } else {
         const created = res.data;
-        toast.success(`Member baru berhasil didaftarkan!`, {
+        toast.success(`Member baru "${created.name}" berhasil didaftarkan dan dihubungkan!`, {
           position: 'top-center',
         });
         setCustomers((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
@@ -173,6 +195,7 @@ export default function PosScreenPage() {
         setCustomerName(created.name);
         setCustomerPhone(created.phone || '');
         setUnregisteredQrPhone(null);
+        setIsQrOrderWithoutPhone(false);
         setCustomerModalOpen(false);
         setNewCustName('');
         setNewCustPhone('');
@@ -349,6 +372,7 @@ export default function PosScreenPage() {
     setActiveQrOrder(null);
     setSelectedCustomerId('');
     setUnregisteredQrPhone(null);
+    setIsQrOrderWithoutPhone(false);
     setCustomerName('Pelanggan');
     setCustomerPhone('');
     setQueueInput('');
@@ -922,6 +946,7 @@ export default function PosScreenPage() {
 
     // 3. Pengecekan Pelanggan ke Database Customer
     if (normPhone) {
+      setIsQrOrderWithoutPhone(false);
       // Cari di local list dulu
       let matched = customers.find((c) => normalizePhone(c.phone) === normPhone);
 
@@ -959,10 +984,12 @@ export default function PosScreenPage() {
       }
     } else {
       // Kondisi 3: Pelanggan TIDAK Mengisi Nomor HP
+      setIsQrOrderWithoutPhone(true);
       setSelectedCustomerId('');
       setUnregisteredQrPhone(null);
+      setCustomerPhone('');
       toast.success(
-        `Pesanan QR #${order.publicQrToken} dimuat ke keranjang kasir.`,
+        `Pesanan QR #${order.publicQrToken} dimuat ke keranjang kasir (Tanpa Nomor HP).`,
         { duration: 3000, position: 'top-center' }
       );
     }
@@ -980,6 +1007,7 @@ export default function PosScreenPage() {
 
   function detachQrOrder() {
     setActiveQrOrder(null);
+    setIsQrOrderWithoutPhone(false);
     toast('Tautan pesanan QR dilepas. Keranjang beralih ke pesanan kasir biasa.', { icon: 'ℹ️' });
   }
 
@@ -1406,6 +1434,10 @@ export default function PosScreenPage() {
                             setCustomerName(c.name);
                             setCustomerPhone(c.phone || '');
                             setUnregisteredQrPhone(null);
+                            setIsQrOrderWithoutPhone(false);
+                            toast.success(`Member "${c.name}" berhasil dihubungkan ke pesanan!`, {
+                              position: 'top-center',
+                            });
                           }
                         } else {
                           const fallbackName = activeQrOrder?.customerNameSnapshot || 'Pelanggan';
@@ -1414,14 +1446,30 @@ export default function PosScreenPage() {
                           setCustomerPhone(fallbackPhone);
                           if (fallbackPhone) {
                             setUnregisteredQrPhone(normalizePhone(fallbackPhone));
+                            setIsQrOrderWithoutPhone(false);
+                          } else if (activeQrOrder) {
+                            setIsQrOrderWithoutPhone(true);
                           }
+                          toast('Pesanan dilanjutkan sebagai Guest (Bukan Member).', {
+                            icon: '👤',
+                            position: 'top-center',
+                          });
                         }
                       }}
                       onCreateOption={(inputValue) => {
-                        openCustomerModal(inputValue);
+                        const isDigits = /^[0-9+\-\s]+$/.test(inputValue.trim());
+                        if (isDigits) {
+                          openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', inputValue.trim(), '', 'name');
+                        } else {
+                          openCustomerModal(inputValue.trim(), '', '', 'phone');
+                        }
                       }}
                       formatCreateLabel={(inputValue) => `+ Daftarkan "${inputValue}" sebagai Member Baru`}
-                      placeholder="Cari member / ketik nama baru..."
+                      placeholder={
+                        isQrOrderWithoutPhone || (activeQrOrder && !customerPhone)
+                          ? "Cari member (Nama / No HP) atau pilih Guest..."
+                          : "Cari member / ketik nama baru..."
+                      }
                       noOptionsMessage={({ inputValue }) =>
                         inputValue ? (
                           <div className="py-2 px-1 text-center space-y-1.5">
@@ -1430,7 +1478,12 @@ export default function PosScreenPage() {
                               type="button"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                openCustomerModal(inputValue);
+                                const isDigits = /^[0-9+\-\s]+$/.test(inputValue.trim());
+                                if (isDigits) {
+                                  openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', inputValue.trim(), '', 'name');
+                                } else {
+                                  openCustomerModal(inputValue.trim(), '', '', 'phone');
+                                }
                               }}
                               className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
                             >
@@ -1443,11 +1496,40 @@ export default function PosScreenPage() {
                       }
                     />
 
-                    {/* Banner Rekomendasi Pendaftaran Member (Kondisi 2: Nomor HP belum terdaftar) */}
+                    {/* Banner Rekomendasi Pendaftaran Member (Kondisi 1: Pesanan QR tanpa nomor HP) */}
+                    {(isQrOrderWithoutPhone || (activeQrOrder && !customerPhone && !unregisteredQrPhone)) && !selectedCustomerId && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 text-amber-950 shadow-xs animate-in fade-in duration-200">
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm mt-0.5 leading-none shrink-0">💡</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] leading-snug font-medium text-amber-900">
+                              Pesanan QR <span className="font-bold text-amber-950">({customerName || 'Guest'})</span> belum terhubung member.
+                            </p>
+                            <p className="text-[10px] text-amber-800/80 mt-0.5">
+                              Tanyakan apakah pelanggan sudah memiliki member atau daftarkan member baru.
+                            </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', '', '', 'phone')}
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                + Daftarkan Member Baru
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Banner Rekomendasi Pendaftaran Member (Kondisi 2: Nomor HP dari QR belum terdaftar di DB) */}
                     {unregisteredQrPhone && !selectedCustomerId && (
                       <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 shadow-xs animate-in fade-in duration-200">
                         <div className="flex items-start gap-2">
-                          <span className="text-sm mt-0.5 leading-none">💡</span>
+                          <span className="text-sm mt-0.5 leading-none shrink-0">💡</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-[11px] leading-snug font-medium text-amber-900">
                               Nomor HP <span className="font-mono font-bold text-amber-950">{unregisteredQrPhone}</span> belum terdaftar sebagai member. Tawarkan pendaftaran member kepada pelanggan.
@@ -1455,7 +1537,7 @@ export default function PosScreenPage() {
                             <div className="mt-2 flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', unregisteredQrPhone)}
+                                onClick={() => openCustomerModal(customerName !== 'Pelanggan' ? customerName : '', unregisteredQrPhone, '', 'name')}
                                 className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -2226,12 +2308,12 @@ export default function PosScreenPage() {
                   Nama Pelanggan <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  ref={newCustNameInputRef}
                   type="text"
                   value={newCustName}
                   onChange={(e) => setNewCustName(e.target.value)}
                   placeholder="Contoh: Budi Santoso"
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  autoFocus
                   required
                 />
               </div>
@@ -2241,6 +2323,7 @@ export default function PosScreenPage() {
                   Nomor Telepon / WhatsApp <span className="text-slate-400 font-normal">(Opsional)</span>
                 </label>
                 <input
+                  ref={newCustPhoneInputRef}
                   type="tel"
                   value={newCustPhone}
                   onChange={(e) => setNewCustPhone(e.target.value)}
