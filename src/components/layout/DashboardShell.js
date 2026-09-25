@@ -57,7 +57,7 @@ export default function DashboardShell({ user, children }) {
     <BluetoothPrinterProvider>
       {/* Global toast provider untuk seluruh dashboard */}
       <Toaster
-        position="top-right"
+        position="top-center"
         toastOptions={{
           style: {
             background: '#ffffff',

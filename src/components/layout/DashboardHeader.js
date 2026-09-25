@@ -115,6 +115,7 @@ export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onTog
     if (pathname.startsWith('/dashboard/users')) return 'Administrasi / Manajemen Karyawan';
     if (pathname.startsWith('/dashboard/audit')) return 'Administrasi / System Audit Trail';
     if (pathname.startsWith('/dashboard/settings')) return 'Konfigurasi Toko';
+    if (pathname.startsWith('/dashboard/account')) return 'Pengaturan Akun';
     return 'Schaw POS';
   };
 
@@ -168,20 +169,27 @@ export default function DashboardHeader({ user, onMenuToggle, isCollapsed, onTog
         {/* ── Bluetooth Printer Status Badge ─────────────────────────── */}
         <BluetoothBadge onOpenModal={() => setIsBtModalOpen(true)} />
 
-        {/* User Info & Badge */}
-        <div className="flex items-center gap-2.5 pl-2">
+        {/* User Info & Badge (Link to Account Settings) */}
+        <Link
+          href="/dashboard/account"
+          id="btn-header-profile"
+          className="flex items-center gap-2.5 pl-2 group cursor-pointer hover:opacity-90 transition-opacity"
+          title="Buka Pengaturan Akun"
+        >
           <div className="hidden sm:flex flex-col items-end">
-            <span className="text-xs font-bold text-slate-900 leading-none">{user?.name ?? 'User'}</span>
+            <span className="text-xs font-bold text-slate-900 leading-none group-hover:text-emerald-700 transition-colors">
+              {user?.name ?? 'User'}
+            </span>
             <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-1 border border-emerald-200/60">
               {roleLabel}
             </span>
           </div>
 
           {/* Avatar with Initials */}
-          <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs ring-2 ring-emerald-100">
+          <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs ring-2 ring-emerald-100 group-hover:ring-emerald-300 transition-all">
             {initials}
           </div>
-        </div>
+        </Link>
 
         {/* Divider */}
         <div className="w-px h-6 bg-slate-200" />

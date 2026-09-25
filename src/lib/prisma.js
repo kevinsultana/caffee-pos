@@ -24,10 +24,18 @@ const prismaClientSingleton = () => {
 
 const globalForPrisma = globalThis;
 
-export const prisma = globalForPrisma.prisma ?? prismaClientSingleton();
+// Di environment development, jika PrismaClient pada globalThis dibuat sebelum skema baru (seperti expenseNote),
+// buat instance baru agar model baru terbaca tanpa harus merestart dev server secara manual.
+let activePrisma = globalForPrisma.prisma;
+if (activePrisma && !activePrisma.expenseNote) {
+  activePrisma = null;
+}
+
+export const prisma = activePrisma ?? prismaClientSingleton();
 
 export default prisma;
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
+

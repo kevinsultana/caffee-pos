@@ -19,7 +19,6 @@ import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterCont
 import StoreIdentityTab from './_components/StoreIdentityTab';
 import PrinterReceiptTab from './_components/PrinterReceiptTab';
 import SystemPreferencesTab from './_components/SystemPreferencesTab';
-import SecurityTab from './_components/SecurityTab';
 
 // ── Tab Navigation Config ─────────────────────────────────────────────────────
 const TABS = [
@@ -55,17 +54,6 @@ const TABS = [
       </svg>
     ),
     description: 'Pajak, service charge, pembulatan, shift',
-  },
-  {
-    id: 'security',
-    label: 'Keamanan Akun',
-    shortLabel: 'Keamanan',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-      </svg>
-    ),
-    description: 'Password & keamanan sesi kasir',
   },
 ];
 
@@ -353,7 +341,7 @@ export default function SettingsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Pengaturan Toko & POS</h1>
         <p className="text-xs text-slate-500 mt-1">
-          Konfigurasi identitas kafe, struk kasir, printer, aturan pajak, dan keamanan akun.
+          Konfigurasi identitas kafe, struk kasir, printer Bluetooth, dan preferensi sistem POS.
         </p>
       </div>
 
@@ -531,9 +519,6 @@ export default function SettingsPage() {
               isSaving={isSaving}
             />
           )}
-
-          {/* ── Tab: Keamanan Akun ── */}
-          {activeTab === 'security' && <SecurityTab />}
 
           {/* ── Save Button (shown only for saveable tabs) ── */}
           {SAVEABLE_TABS.includes(activeTab) && (

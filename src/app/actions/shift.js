@@ -145,6 +145,7 @@ function formatShiftForClient(shift) {
     actualCash: shift.actualCash != null ? Number(shift.actualCash) : null,
     difference: shift.difference != null ? Number(shift.difference) : null,
     depositedCash: shift.depositedCash != null ? Number(shift.depositedCash) : 0,
+    notes: shift.notes || null,
     openedAt: shift.openedAt ? new Date(shift.openedAt).toISOString() : null,
     closedAt: shift.closedAt ? new Date(shift.closedAt).toISOString() : null,
     createdAt: shift.createdAt ? new Date(shift.createdAt).toISOString() : null,
@@ -219,14 +220,18 @@ export async function openShift({ openingCash }) {
   }
 }
 
-export async function closeShift({ actualCash, depositedCash = 0, notes }) {
+/**
+ * Tutup shift kasir dengan ketentuan: HANYA ADA PILIHAN SETOR SEMUA (Setor Penuh).
+ * Seluruh uang fisik di laci (actualCash) disetor ke owner/brankas (depositedCash = actualCash),
+ * dan sisa uang di laci diset 0. Shift berikutnya wajib buka shift baru dengan modal awal baru.
+ */
+export async function closeShift({ shiftId, actualCash, notes } = {}) {
   try {
     const { user, storeId } = await getAuthenticatedUserAndStore();
 
     // ── Validasi ketat actualCash ─────────────────────────────────────────────
-    // Tolak null, undefined, string kosong, boolean, atau objek
     if (actualCash === null || actualCash === undefined || actualCash === '') {
-      return { error: 'Jumlah uang fisik aktual wajib diisi.' };
+      return { error: 'Jumlah uang fisik aktual di laci wajib diisi.' };
     }
     const actual = Number(actualCash);
     if (!Number.isFinite(actual)) {
@@ -235,50 +240,98 @@ export async function closeShift({ actualCash, depositedCash = 0, notes }) {
     if (actual < 0) {
       return { error: 'Jumlah uang fisik aktual tidak boleh negatif.' };
     }
-    // Batas wajar: maksimal Rp 1.000.000.000 per shift
     if (actual > 1_000_000_000) {
       return { error: 'Jumlah uang fisik aktual melebihi batas wajar (maks Rp 1.000.000.000).' };
     }
 
-    // ── Validasi ketat depositedCash ──────────────────────────────────────────
-    const deposited = depositedCash === null || depositedCash === undefined
-      ? 0
-      : Number(depositedCash);
-    if (!Number.isFinite(deposited)) {
-      return { error: 'Nominal uang disetor harus berupa angka yang valid.' };
-    }
-    if (deposited < 0) {
-      return { error: 'Nominal uang disetor tidak boleh negatif.' };
-    }
-    if (deposited > actual) {
-      return { error: 'Nominal uang disetor tidak boleh melebihi uang fisik aktual di laci.' };
+    // Cari shift yang akan ditutup: gunakan shiftId spesifik atau shift aktif milik kasir
+    let targetShift = null;
+    if (shiftId) {
+      targetShift = await prisma.shift.findFirst({
+        where: { id: shiftId, storeId },
+        include: {
+          payments: { where: { status: 'PAID' } },
+          cashMovements: true,
+        },
+      });
     }
 
-    const shiftRes = await getCurrentShift();
-    if (!shiftRes.data) {
+    if (!targetShift) {
+      targetShift = await prisma.shift.findFirst({
+        where: { userId: user.id, storeId, status: 'OPEN' },
+        include: {
+          payments: { where: { status: 'PAID' } },
+          cashMovements: true,
+        },
+      });
+    }
+
+    if (!targetShift) {
       return { error: 'Tidak ada shift aktif yang ditemukan untuk ditutup.' };
     }
 
-    const currentShift = shiftRes.data;
-    const expected = currentShift.expectedCash;
-    const difference = actual - expected;
+    if (targetShift.status === 'CLOSED') {
+      return { error: 'Shift ini sudah dalam keadaan ditutup.' };
+    }
+
+    // Perhitungan kalkulasi kas laci:
+    // expectedCash = startingCash + totalCashSales + totalCashIn - totalCashOut
+    const startingCash = Number(targetShift.openingCash || 0);
+    const totalCashSales = targetShift.payments
+      .filter((p) => p.method === 'CASH')
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalCashIn = targetShift.cashMovements
+      .filter((m) => m.type === 'CASH_IN')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+    const totalCashOut = targetShift.cashMovements
+      .filter((m) => m.type === 'CASH_OUT')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    const expectedCash = startingCash + totalCashSales + totalCashIn - totalCashOut;
+    const difference = actual - expectedCash;
+
+    // Alur Setor Semua: 100% uang fisik yang dihitung kasir disetor penuh
+    const depositedCash = actual;
+
+    // Validasi catatan jika ada selisih kas
+    const cleanNotes = typeof notes === 'string' ? notes.trim() : '';
+    if (difference !== 0 && !cleanNotes) {
+      return {
+        error: `Terdapat selisih kas ${difference > 0 ? 'lebih' : 'kurang'} sebesar ${formatRupiah(Math.abs(difference))}. Catatan penutupan wajib diisi untuk menjelaskan selisih.`,
+      };
+    }
 
     const closed = await prisma.shift.update({
-      where: { id: currentShift.id },
+      where: { id: targetShift.id },
       data: {
         status: 'CLOSED',
         closedAt: new Date(),
-        expectedCash: expected,
+        expectedCash,
         actualCash: actual,
-        difference: difference,
-        depositedCash: deposited,
+        difference,
+        depositedCash,
+        notes: cleanNotes || null,
       },
     });
+
+    // Catat log audit penutupan shift
+    await prisma.auditLog.create({
+      data: {
+        storeId,
+        userId: user.id,
+        action: 'CLOSE_SHIFT',
+        module: 'POS',
+        entityType: 'Shift',
+        entityId: targetShift.id,
+        changeSummary: `Kasir ${user.name} menutup shift. Fisik: ${formatRupiah(actual)}, Diharapkan: ${formatRupiah(expectedCash)}, Selisih: ${formatRupiah(difference)}, Disetor Penuh: ${formatRupiah(depositedCash)}${cleanNotes ? ` [Catatan: ${cleanNotes}]` : ''}`,
+      },
+    }).catch((e) => console.error('[closeShift AuditLog Error]', e));
 
     revalidatePath('/dashboard/pos');
     revalidatePath('/dashboard/pos/shift');
     revalidatePath('/dashboard/pos/manage-shifts');
     revalidatePath('/dashboard');
+
     return {
       success: true,
       data: formatShiftForClient(closed),
@@ -598,6 +651,7 @@ export async function getShiftDetail(shiftId) {
         difference,
         depositedCash,
         remainingInDrawer,
+        notes: shift.notes || null,
         transactionCount: shift.payments.length,
         payments: shift.payments.map((p) => ({
           id: p.id,

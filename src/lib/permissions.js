@@ -151,6 +151,13 @@ export const MENU_PERMISSIONS = [
     category: 'Laporan & Keuangan',
     defaultRoute: '/dashboard/transactions',
   },
+  {
+    code: 'MENU_EXPENSES',
+    label: 'Akses Catatan Pengeluaran',
+    description: 'Mencatat, melihat rekapitulasi, dan mengelola catatan pengeluaran toko.',
+    category: 'Laporan & Keuangan',
+    defaultRoute: '/dashboard/expenses',
+  },
 ];
 
 /**
@@ -177,6 +184,7 @@ export const ROUTE_PERMISSION_MAP = [
   { prefix: '/dashboard/users', permission: 'MENU_USERS' },
   { prefix: '/dashboard/audit', permission: 'MENU_AUDIT' },
   { prefix: '/dashboard/settings', permission: 'MENU_SETTINGS' },
+  { prefix: '/dashboard/expenses', permission: 'MENU_EXPENSES' },
   { prefix: '/dashboard/transactions', permission: 'MENU_ALL_TRANSACTIONS' },
   { prefix: '/dashboard', permission: 'MENU_DASHBOARD', exact: true },
 ];
@@ -211,6 +219,16 @@ export function hasPermission(user, requiredPermission) {
 
   // Backward-compatibility: Jika user/role sudah punya MENU_USERS, izinkan juga MENU_ROLES
   if (requiredPermission === 'MENU_ROLES' && permissions.includes('MENU_USERS')) {
+    return true;
+  }
+
+  // Backward-compatibility: Jika user/role punya MENU_DASHBOARD atau MENU_CASH_FLOW atau MENU_ALL_TRANSACTIONS, izinkan juga MENU_EXPENSES
+  if (
+    requiredPermission === 'MENU_EXPENSES' &&
+    (permissions.includes('MENU_DASHBOARD') ||
+      permissions.includes('MENU_CASH_FLOW') ||
+      permissions.includes('MENU_ALL_TRANSACTIONS'))
+  ) {
     return true;
   }
 

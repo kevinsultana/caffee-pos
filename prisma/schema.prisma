@@ -891,6 +891,7 @@ model Shift {
   actualCash    Decimal? @db.Decimal(18, 2)
   difference    Decimal? @db.Decimal(18, 2)
   depositedCash Decimal? @default(0) @db.Decimal(18, 2)
+  notes         String?
 
   openedAt DateTime  @default(now())
   closedAt DateTime?
@@ -1056,3 +1057,18 @@ model OrderPromotion {
   @@unique([orderId, sequenceNo])
   @@index([promotionId])
 }
+
+model ExpenseNote {
+  id        String   @id @default(cuid())
+  name      String
+  price     Decimal  @db.Decimal(18, 2)
+  pcs       Int      @default(1)
+  total     Decimal  @db.Decimal(18, 2)
+  date      DateTime @default(now())
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}
+

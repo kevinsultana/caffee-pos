@@ -282,14 +282,14 @@ export async function updateUser({
       await tx.auditLog.create({
         data: {
           storeId,
-          userId: currentOwner.id,
+          userId: currentAdmin.id,
           action: resetPassword ? 'RESET_PASSWORD' : 'UPDATE_USER',
           module: 'USER_MANAGEMENT',
           entityType: 'User',
           entityId: id,
           changeSummary: resetPassword
-            ? `Owner mereset password akun: ${u.name} (${u.username}). Wajib ganti password diaktifkan.`
-            : `Owner memperbarui data akun: ${u.name} (${u.username}). Role: ${u.role?.name}, Status: ${u.status}`,
+            ? `Admin (${currentAdmin.name}) mereset password akun: ${u.name} (${u.username}). Wajib ganti password diaktifkan.`
+            : `Admin (${currentAdmin.name}) memperbarui data akun: ${u.name} (${u.username}). Role: ${u.role?.name}, Status: ${u.status}`,
           beforeData: {
             name: targetUser.name,
             username: targetUser.username,
@@ -532,6 +532,22 @@ export async function adminResetPassword(userId, customPassword) {
     console.error('[adminResetPassword] Error:', error);
     return { error: error.message || 'Gagal mereset password karyawan.' };
   }
+}
+
+// ── Account Self-Management Actions (Wrappers) ────────────────────────────────
+export async function getCurrentUserProfile() {
+  const { getCurrentUserProfile: action } = await import('@/app/actions/account');
+  return action();
+}
+
+export async function updateOwnUsername(data) {
+  const { updateOwnUsername: action } = await import('@/app/actions/account');
+  return action(data);
+}
+
+export async function updateOwnPassword(data) {
+  const { updateOwnPassword: action } = await import('@/app/actions/account');
+  return action(data);
 }
 
 

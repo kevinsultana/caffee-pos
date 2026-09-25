@@ -612,6 +612,14 @@ export default function ManageShiftsPage() {
                           </span>
                         </div>
 
+                        {/* Catatan Penutupan Shift */}
+                        {shiftDetail.notes && (
+                          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1">
+                            <span className="font-bold text-amber-900 font-sans block">Catatan Penutupan Kasir:</span>
+                            <p className="text-amber-800 font-sans italic">{shiftDetail.notes}</p>
+                          </div>
+                        )}
+
                         {/* QRIS Separation Note */}
                         <div className="mt-3 p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs space-y-1">
                           <div className="flex justify-between text-blue-900 font-bold">
