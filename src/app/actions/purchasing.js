@@ -187,16 +187,26 @@ export async function createPurchase({ supplierId, purchasedAt, items }) {
       const invId = it.inventoryItemId;
       const unitId = it.purchaseUnitId;
       const qty = Number(it.quantity);
-      const price = Number(it.unitPrice);
       const factor = Number(it.conversionFactor) || 1;
 
-      if (!invId || !unitId || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
-        return { error: `Baris ke-${i + 1}: Kuantitas dan harga beli harus berupa angka positif.` };
+      // Ambil subtotal pasti yang diinput pengguna
+      const subtotal =
+        it.subtotal != null && !isNaN(Number(it.subtotal))
+          ? Math.round(Number(it.subtotal))
+          : Math.round(qty * (Number(it.unitPrice) || 0));
+
+      if (!invId || !unitId || isNaN(qty) || qty <= 0 || isNaN(subtotal) || subtotal < 0) {
+        return { error: `Baris ke-${i + 1}: Kuantitas dan total harga harus berupa angka positif.` };
       }
 
-      const subtotal = Math.round(qty * price * 100) / 100;
+      // Hitung unitPrice (harga per satuan beli) dengan presisi
+      const unitPrice = qty > 0 ? subtotal / qty : 0;
+
+      // Hitung jumlah dalam satuan dasar (base quantity)
       const baseQuantity = qty * factor;
-      const baseUnitCost = baseQuantity > 0 ? subtotal / baseQuantity : price;
+
+      // HPP / Biaya per base unit (misal per gram) disimpan presisi desimal
+      const baseUnitCost = baseQuantity > 0 ? subtotal / baseQuantity : unitPrice;
 
       calculatedTotal += subtotal;
 
@@ -204,7 +214,7 @@ export async function createPurchase({ supplierId, purchasedAt, items }) {
         inventoryItemId: invId,
         purchaseUnitId: unitId,
         quantity: qty,
-        unitPrice: price,
+        unitPrice,
         baseQuantity,
         baseUnitCost,
         subtotal,
@@ -275,16 +285,26 @@ export async function updatePurchase({ id, supplierId, purchasedAt, items }) {
       const invId = it.inventoryItemId;
       const unitId = it.purchaseUnitId;
       const qty = Number(it.quantity);
-      const price = Number(it.unitPrice);
       const factor = Number(it.conversionFactor) || 1;
 
-      if (!invId || !unitId || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
-        return { error: `Baris ke-${i + 1}: Kuantitas dan harga beli harus berupa angka positif.` };
+      // Ambil subtotal pasti yang diinput pengguna
+      const subtotal =
+        it.subtotal != null && !isNaN(Number(it.subtotal))
+          ? Math.round(Number(it.subtotal))
+          : Math.round(qty * (Number(it.unitPrice) || 0));
+
+      if (!invId || !unitId || isNaN(qty) || qty <= 0 || isNaN(subtotal) || subtotal < 0) {
+        return { error: `Baris ke-${i + 1}: Kuantitas dan total harga harus berupa angka positif.` };
       }
 
-      const subtotal = Math.round(qty * price * 100) / 100;
+      // Hitung unitPrice (harga per satuan beli) dengan presisi
+      const unitPrice = qty > 0 ? subtotal / qty : 0;
+
+      // Hitung jumlah dalam satuan dasar (base quantity)
       const baseQuantity = qty * factor;
-      const baseUnitCost = baseQuantity > 0 ? subtotal / baseQuantity : price;
+
+      // HPP / Biaya per base unit (misal per gram) disimpan presisi desimal
+      const baseUnitCost = baseQuantity > 0 ? subtotal / baseQuantity : unitPrice;
 
       calculatedTotal += subtotal;
 
@@ -292,7 +312,7 @@ export async function updatePurchase({ id, supplierId, purchasedAt, items }) {
         inventoryItemId: invId,
         purchaseUnitId: unitId,
         quantity: qty,
-        unitPrice: price,
+        unitPrice,
         baseQuantity,
         baseUnitCost,
         subtotal,

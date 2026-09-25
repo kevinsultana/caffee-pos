@@ -339,6 +339,11 @@ export async function getInventoryItems() {
         category: true,
         baseUnit: true,
         balance: true,
+        conversions: {
+          include: {
+            purchaseUnit: true,
+          },
+        },
         product: { select: { id: true, name: true } },
         variant: { select: { id: true, name: true, product: { select: { name: true } } } },
         _count: {
@@ -374,6 +379,18 @@ function serializeInventoryItem(item) {
           stockValue: Number(item.balance.stockValue),
         }
       : { quantity: 0, averageCost: 0, stockValue: 0 },
+    conversions: item.conversions?.map((c) => ({
+      id: c.id,
+      purchaseUnitId: c.purchaseUnitId,
+      conversionFactor: Number(c.conversionFactor),
+      purchaseUnit: c.purchaseUnit
+        ? {
+            id: c.purchaseUnit.id,
+            code: c.purchaseUnit.code,
+            name: c.purchaseUnit.name,
+          }
+        : null,
+    })) || [],
   };
 }
 

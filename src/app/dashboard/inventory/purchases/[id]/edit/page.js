@@ -144,44 +144,73 @@ export default function EditPurchasePage({ params }) {
     setNewSupplierAddress('');
   }
 
+  function getUnitOptionsForItem(item) {
+    if (!item) return [];
+    const list = [];
+    if (item.baseUnit) {
+      list.push({
+        value: item.baseUnitId,
+        code: item.baseUnit.code,
+        name: item.baseUnit.name,
+        factor: 1,
+        label: `${item.baseUnit.code} (${item.baseUnit.name}) — Satuan Dasar`,
+      });
+    }
+    if (item.conversions && Array.isArray(item.conversions)) {
+      item.conversions.forEach((c) => {
+        if (c.purchaseUnit) {
+          list.push({
+            value: c.purchaseUnitId,
+            code: c.purchaseUnit.code,
+            name: c.purchaseUnit.name,
+            factor: Number(c.conversionFactor),
+            label: `${c.purchaseUnit.code} (${c.purchaseUnit.name}) — 1 ${c.purchaseUnit.code} = ${c.conversionFactor} ${item.baseUnit?.code || ''}`,
+          });
+        }
+      });
+    }
+    return list;
+  }
+
   function handleItemChange(index, field, value) {
     const newItems = [...items];
     const row = { ...newItems[index], [field]: value };
 
+    // Saat bahan baku dipilih:
     if (field === 'inventoryItemId') {
       const selectedItem = inventoryItems.find((inv) => inv.id === value);
+      row.inventoryItemId = value;
       if (selectedItem) {
         row.purchaseUnitId = selectedItem.baseUnitId;
+        row.conversionFactor = 1;
+      } else {
+        row.purchaseUnitId = '';
         row.conversionFactor = 1;
       }
     }
 
+    // Saat satuan beli diganti:
     if (field === 'purchaseUnitId') {
       const selectedItem = inventoryItems.find(
         (inv) => inv.id === row.inventoryItemId
       );
-      const selectedUnit = units.find((u) => u.id === value);
+      const unitOptions = getUnitOptionsForItem(selectedItem);
+      const chosenUnit = unitOptions.find((u) => u.value === value);
 
-      if (selectedItem && selectedUnit) {
-        const baseCode = selectedItem.baseUnit?.code?.toLowerCase();
-        const purchaseCode = selectedUnit.code?.toLowerCase();
-
-        if (purchaseCode === 'kg' && baseCode === 'g') {
-          row.conversionFactor = 1000;
-        } else if (purchaseCode === 'l' && baseCode === 'ml') {
-          row.conversionFactor = 1000;
-        } else if (purchaseCode === baseCode) {
-          row.conversionFactor = 1;
-        }
+      row.purchaseUnitId = value;
+      if (chosenUnit) {
+        row.conversionFactor = chosenUnit.factor;
+      } else {
+        row.conversionFactor = 1;
       }
     }
 
-    // ── Logika baru: user input totalPrice, harga satuan dihitung otomatis ──
+    // ── Input totalPrice user menentukan subtotal pasti & unitPrice presisi ──
     const qty = Number(row.quantity) || 0;
-    const total = Number(row.totalPrice) || 0;
+    const total = Math.round(Number(row.totalPrice) || 0);
 
-    row.unitPrice = qty > 0 ? Math.round((total / qty) * 100) / 100 : 0;
-    row.subtotal = Math.round(total * 100) / 100;
+    row.subtotal = total;
+    row.unitPrice = qty > 0 ? total / qty : 0;
 
     newItems[index] = row;
     setItems(newItems);
@@ -378,103 +407,152 @@ export default function EditPurchasePage({ params }) {
           </div>
 
           <div className="space-y-3">
-            {items.map((row, idx) => (
-              <div
-                key={idx}
-                className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row items-end gap-3"
-              >
-                {/* Select Inventory Item */}
-                <div className="flex-1 w-full md:w-auto">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
-                    Bahan Baku #{idx + 1}
-                  </label>
-                  <SearchableSelect
-                    options={inventoryItems.map((inv) => ({
-                      value: inv.id,
-                      label: `${inv.name} (${inv.category?.name || 'Bahan'}) — Base: ${inv.baseUnit?.code || ''}`,
-                    }))}
-                    value={row.inventoryItemId}
-                    onChange={(val) => handleItemChange(idx, 'inventoryItemId', val)}
-                    disabled={isPending}
-                    placeholder="Pilih Bahan Baku..."
-                  />
-                </div>
+            {items.map((row, idx) => {
+              const selectedItem = inventoryItems.find(
+                (inv) => inv.id === row.inventoryItemId
+              );
+              const unitOptions = getUnitOptionsForItem(selectedItem);
+              const chosenUnit = unitOptions.find(
+                (u) => u.value === row.purchaseUnitId
+              );
+              const selectedUnitCode = chosenUnit?.code || selectedItem?.baseUnit?.code || '';
+              const baseUnitCode = selectedItem?.baseUnit?.code || '';
+              const qty = Number(row.quantity) || 0;
+              const total = Number(row.totalPrice) || 0;
+              const factor = Number(row.conversionFactor) || 1;
+              const baseQuantity = qty * factor;
+              const pricePerPkg = qty > 0 ? total / qty : 0;
+              const estHpp = baseQuantity > 0 ? total / baseQuantity : 0;
 
-                {/* Purchase Unit */}
-                <div className="w-full md:w-32">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
-                    Satuan Beli
-                  </label>
-                  <SearchableSelect
-                    options={units.map((u) => ({
-                      value: u.id,
-                      label: `${u.code} (${u.name})`,
-                    }))}
-                    value={row.purchaseUnitId}
-                    onChange={(val) => handleItemChange(idx, 'purchaseUnitId', val)}
-                    disabled={isPending}
-                    placeholder="Satuan..."
-                  />
-                </div>
+              return (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-3"
+                >
+                  <div className="flex flex-col md:flex-row items-end gap-3">
+                    {/* Select Inventory Item */}
+                    <div className="flex-1 w-full md:w-auto">
+                      <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                        Bahan Baku #{idx + 1}
+                      </label>
+                      <SearchableSelect
+                        options={inventoryItems.map((inv) => ({
+                          value: inv.id,
+                          label: `${inv.name} (${inv.category?.name || 'Bahan'}) — Base: ${inv.baseUnit?.code || ''}${inv.conversions?.length ? ` (${inv.conversions.length} konversi)` : ''}`,
+                        }))}
+                        value={row.inventoryItemId}
+                        onChange={(val) => handleItemChange(idx, 'inventoryItemId', val)}
+                        disabled={isPending}
+                        placeholder="Pilih Bahan Baku..."
+                      />
+                    </div>
 
-                {/* Quantity */}
-                <div className="w-full md:w-24">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
-                    Kuantitas
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0.0001"
-                    value={row.quantity}
-                    onChange={(e) =>
-                      handleItemChange(idx, 'quantity', e.target.value)
-                    }
-                    disabled={isPending}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
+                    {/* Purchase Unit */}
+                    <div className="w-full md:w-56">
+                      <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                        Satuan Beli
+                      </label>
+                      <SearchableSelect
+                        options={unitOptions}
+                        value={row.purchaseUnitId}
+                        onChange={(val) => handleItemChange(idx, 'purchaseUnitId', val)}
+                        disabled={isPending || !selectedItem || unitOptions.length <= 1}
+                        placeholder={!selectedItem ? 'Pilih bahan dulu...' : 'Pilih satuan...'}
+                      />
+                    </div>
 
-                {/* Harga Total (INPUT — user mengetik total harga baris ini) */}
-                <div className="w-full md:w-36">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
-                    Harga Total (Rp)
-                  </label>
-                  <CurrencyInput
-                    placeholder="0"
-                    value={row.totalPrice}
-                    onChange={(val) => handleItemChange(idx, 'totalPrice', val)}
-                    disabled={isPending}
-                    required
-                  />
-                </div>
+                    {/* Quantity */}
+                    <div className="w-full md:w-28">
+                      <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                        Kuantitas ({selectedUnitCode || 'Kemasan'})
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.0001"
+                        value={row.quantity}
+                        onChange={(e) =>
+                          handleItemChange(idx, 'quantity', e.target.value)
+                        }
+                        disabled={isPending}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        required
+                      />
+                    </div>
 
-                {/* Harga Satuan (AUTO — dihitung: Harga Total ÷ Kuantitas) */}
-                <div className="w-full md:w-32 text-right font-mono">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1 text-right">
-                    Harga Satuan
-                  </label>
-                  <p className="text-xs font-bold text-emerald-700 py-2" title="Dihitung otomatis: Harga Total ÷ Kuantitas">
-                    {formatRupiah(row.unitPrice)}
-                  </p>
-                </div>
+                    {/* Harga Total (INPUT — user mengetik total harga baris ini) */}
+                    <div className="w-full md:w-40">
+                      <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">
+                        Harga Total / Subtotal (Rp)
+                      </label>
+                      <CurrencyInput
+                        placeholder="0"
+                        value={row.totalPrice}
+                        onChange={(val) => handleItemChange(idx, 'totalPrice', val)}
+                        disabled={isPending}
+                        required
+                      />
+                    </div>
 
-                {/* Remove Button */}
-                <div className="pt-2 md:pt-0">
-                  <button
-                    type="button"
-                    onClick={() => removeItemRow(idx)}
-                    className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
-                    title="Hapus baris"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                    </svg>
-                  </button>
+                    {/* Remove Button */}
+                    <div className="pt-2 md:pt-0">
+                      <button
+                        type="button"
+                        onClick={() => removeItemRow(idx)}
+                        className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Hapus baris"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Helper Preview Info */}
+                  {selectedItem && (
+                    <div className="pt-2 border-t border-slate-200/70 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                        <span className="text-slate-500 font-normal">Harga per Kemasan:</span>
+                        <strong className="font-bold">
+                          {formatRupiah(pricePerPkg)}
+                        </strong>
+                        {selectedUnitCode && (
+                          <span className="text-slate-500 font-normal">/ {selectedUnitCode}</span>
+                        )}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-medium">
+                        <span className="text-slate-500 font-normal">Stok Masuk:</span>
+                        <strong className="font-bold font-mono">
+                          {baseQuantity.toLocaleString('id-ID')} {baseUnitCode}
+                        </strong>
+                        {factor > 1 && (
+                          <span className="text-sky-600 text-[10px] font-normal">
+                            ({qty} &times; {factor})
+                          </span>
+                        )}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-medium">
+                        <span className="text-slate-500 font-normal">Estimasi HPP:</span>
+                        <strong className="font-bold">
+                          {estHpp > 0 && estHpp < 1
+                            ? `Rp ${estHpp.toFixed(2)}`
+                            : `~${formatRupiah(Math.round(estHpp * 100) / 100)}`}
+                        </strong>
+                        {baseUnitCode && (
+                          <span className="text-slate-500 font-normal">/ {baseUnitCode}</span>
+                        )}
+                      </span>
+                      {unitOptions.length <= 1 && (
+                        <span className="text-[10px] text-slate-400 italic">
+                          (Satuan dasar tanpa konversi)
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* ── Tombol Tambah Baris — di antara tabel dan total ── */}
