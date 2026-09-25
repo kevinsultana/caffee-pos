@@ -15,7 +15,7 @@ import ThermalReceipt from '@/components/pos/ThermalReceipt';
 import { formatRupiah, formatDateTime, cn, normalizePhone } from '@/lib/utils';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import SearchableSelect from '@/components/ui/SearchableSelect';
-import { useBluetooth, buildReceiptBytes } from '@/contexts/BluetoothPrinterContext';
+import { useBluetooth, buildReceiptBytes, rasterizeImageUrl } from '@/contexts/BluetoothPrinterContext';
 import BluetoothModal from '@/components/bluetooth/BluetoothModal';
 import PromoModal from '@/components/pos/PromoModal';
 import CashOutModal from '@/components/pos/CashOutModal';
@@ -676,6 +676,15 @@ export default function PosScreenPage() {
       printerWidth: settings?.printerWidth || storeInfo?.printerWidth || 58,
     };
   }, [storeInfo, settings]);
+
+  // Pre-warm / Cache logo struk di background agar cetak struk langsung instan tanpa delay render
+  useEffect(() => {
+    const activeLogo = effectiveStore?.receiptLogoUrl || effectiveStore?.logoUrl;
+    if (activeLogo) {
+      const is80 = effectiveStore.printerWidth === 80;
+      rasterizeImageUrl(activeLogo, is80 ? 320 : 224, is80 ? 160 : 130).catch(() => {});
+    }
+  }, [effectiveStore]);
 
   const handlePrint = (orderToPrint, mode = 'CUSTOMER') => {
     if (!orderToPrint) {

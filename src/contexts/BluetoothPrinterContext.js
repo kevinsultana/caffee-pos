@@ -116,12 +116,32 @@ function fmtDt(dateVal) {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
+// ── In-Memory Cache untuk ESC/POS Raster Bytes ────────────────────────────────
+const rasterCache = new Map();
+
+/**
+ * Hapus cache raster logo jika logo toko diperbarui
+ */
+export function clearRasterCache() {
+  rasterCache.clear();
+}
+
 /**
  * Convert an image URL to ESC/POS raster bit image command (GS v 0).
  * Mode 0: GS v 0 0 xL xH yL yH d1...dk
+ *
+ * Dioptimalkan dengan:
+ * 1. In-memory caching (cetak kedua dan seterusnya 0ms, tidak download/render ulang).
+ * 2. Skala proporsional dengan batas lebar (maxDots) dan tinggi (maxH) agar ukuran byte hemat
+ *    sehingga transmisi BLE berlangsung dalam 1-2 detik, bukan puluhan detik.
  */
-export async function rasterizeImageUrl(imageUrl, maxDots = 384) {
+export async function rasterizeImageUrl(imageUrl, maxDots = 224, maxH = 130) {
   if (typeof window === 'undefined' || !imageUrl) return null;
+
+  const cacheKey = `${imageUrl}@${maxDots}x${maxH}`;
+  if (rasterCache.has(cacheKey)) {
+    return rasterCache.get(cacheKey);
+  }
 
   return new Promise((resolve) => {
     try {
@@ -129,12 +149,21 @@ export async function rasterizeImageUrl(imageUrl, maxDots = 384) {
       img.crossOrigin = 'anonymous';
       img.onload = () => {
         try {
-          let origW = img.naturalWidth || img.width;
-          let origH = img.naturalHeight || img.height;
+          const origW = img.naturalWidth || img.width;
+          const origH = img.naturalHeight || img.height;
           if (!origW || !origH) return resolve(null);
 
-          // Batasi lebar maksimum dan pastikan kelipatan 8 dots
-          let targetW = Math.min(origW, maxDots);
+          // 1. Skala proporsional agar muat dalam batas lebar (maxDots) dan tinggi (maxH)
+          let scale = 1.0;
+          if (origW > maxDots) {
+            scale = Math.min(scale, maxDots / origW);
+          }
+          if (maxH && (origH * scale) > maxH) {
+            scale = Math.min(scale, maxH / origH);
+          }
+
+          let targetW = Math.round(origW * scale);
+          // Lebar wajib kelipatan 8 dots untuk alignment bitwise ESC/POS
           targetW = Math.max(8, Math.floor(targetW / 8) * 8);
           let targetH = Math.round((origH * targetW) / origW);
           if (targetH <= 0) return resolve(null);
@@ -188,6 +217,8 @@ export async function rasterizeImageUrl(imageUrl, maxDots = 384) {
             }
           }
 
+          // Simpan ke in-memory cache
+          rasterCache.set(cacheKey, rasterBytes);
           resolve(rasterBytes);
         } catch (canvasErr) {
           console.warn('[rasterizeImageUrl] Canvas error:', canvasErr);
@@ -299,8 +330,10 @@ export async function buildReceiptBytes(order, store, mode = 'CUSTOMER') {
     const activeLogoUrl = store?.receiptLogoUrl || store?.logoUrl;
     if (store?.receiptShowLogo !== false && activeLogoUrl) {
       try {
-        const maxDots = (store?.printerWidth === 80) ? 384 : 256;
-        const logoBytes = await rasterizeImageUrl(activeLogoUrl, maxDots);
+        const is80 = (store?.printerWidth === 80);
+        const maxDots = is80 ? 320 : 224;
+        const maxH = is80 ? 160 : 130;
+        const logoBytes = await rasterizeImageUrl(activeLogoUrl, maxDots, maxH);
         if (logoBytes) {
           parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
           parts.push(logoBytes);
@@ -554,18 +587,21 @@ export function BluetoothPrinterProvider({ children }) {
     return fallback;
   }, []);
 
-  // ── internal: write bytes in 20-byte chunks ─────────────────────────────
+  // ── internal: write bytes in 20-byte chunks dengan optimasi delay ───────
   const writeBytes = useCallback(async (data) => {
     const ch = charRef.current;
     if (!ch) throw new Error('Printer belum terhubung.');
 
-    const CHUNK = 20;   // BLE default MTU — JANGAN ubah
-    const DELAY = 50;   // ms antar chunk
+    const CHUNK = 20;   // BLE standard MTU payload
+    // Optimasi delay: 12ms untuk writeWithoutResponse (sinkron dengan BLE connection interval),
+    // 5ms untuk writeValue (karena writeValue otomatis menunggu konfirmasi ACK dari printer)
+    const isNoResponse = Boolean(ch.properties.writeWithoutResponse);
+    const delayMs = isNoResponse ? 12 : 5;
 
     for (let offset = 0; offset < data.length; offset += CHUNK) {
       const chunk = data.slice(offset, offset + CHUNK);
       try {
-        if (ch.properties.writeWithoutResponse) {
+        if (isNoResponse) {
           await ch.writeValueWithoutResponse(chunk);
         } else {
           await ch.writeValue(chunk);
@@ -578,7 +614,9 @@ export function BluetoothPrinterProvider({ children }) {
           throw e;
         }
       }
-      await new Promise((r) => setTimeout(r, DELAY));
+      if (delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     }
   }, []);
 
@@ -732,6 +770,7 @@ export function BluetoothPrinterProvider({ children }) {
     buildReceiptBytes,
     buildQrCardBytes,
     setBtServiceUuid,
+    clearRasterCache,
   };
 
   return (
